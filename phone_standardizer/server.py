@@ -7,6 +7,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from phone_standardizer.audit import explain_phone
 from phone_standardizer.batch import batch_standardize_phones
 from phone_standardizer.registry import CountryDialRegistry, get_dial_plan
 from phone_standardizer.standardizer import standardize_phone
@@ -47,6 +48,14 @@ def create_app() -> FastAPI:
             default_country=req.default_country,
         )
         return res.to_dict()
+
+    @app.post("/v1/explain")
+    def explain_endpoint(req: PhoneStandardizeRequest) -> dict[str, Any]:
+        return explain_phone(
+            req.phone,
+            country=req.country,
+            default_country=req.default_country,
+        )
 
     @app.post("/v1/batch")
     def batch_endpoint(req: PhoneBatchRequest) -> dict[str, Any]:

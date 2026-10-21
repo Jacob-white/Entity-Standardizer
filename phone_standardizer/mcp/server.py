@@ -6,6 +6,7 @@ import json
 import sys
 from typing import Any
 
+from phone_standardizer.audit import explain_phone
 from phone_standardizer.registry import get_dial_plan
 from phone_standardizer.standardizer import mask_phone, standardize_phone
 
@@ -43,6 +44,19 @@ MCP_TOOLS: list[dict[str, Any]] = [
                 "phone": {"type": "string"},
                 "strategy": {"type": "string", "enum": ["partial", "redact", "hash"], "default": "partial"},
                 "country": {"type": "string"},
+            },
+            "required": ["phone"],
+        },
+    },
+    {
+        "name": "explain_phone",
+        "description": "Return a diagnostic and geographic intelligence report (locality, timezones, carrier MNO, TCPA calling window) for a phone number.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "phone": {"type": "string"},
+                "country": {"type": "string"},
+                "default_country": {"type": "string", "default": "US"},
             },
             "required": ["phone"],
         },
@@ -106,6 +120,17 @@ def handle_mcp_request(request: dict[str, Any]) -> dict[str, Any]:
                 "jsonrpc": "2.0",
                 "id": req_id,
                 "result": {"content": [{"type": "text", "text": json.dumps({"masked": masked})}]},
+            }
+        if tool_name == "explain_phone":
+            report = explain_phone(
+                args.get("phone"),
+                country=args.get("country"),
+                default_country=args.get("default_country", "US"),
+            )
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {"content": [{"type": "text", "text": json.dumps(report)}]},
             }
         return {
             "jsonrpc": "2.0",

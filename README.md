@@ -1,6 +1,6 @@
 # Phone Standardizer 📞
 
-[![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)](https://github.com/Jacob-white/Phone-Standardizer)
+[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/Jacob-white/Phone-Standardizer)
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen.svg)](https://github.com/Jacob-white/Phone-Standardizer)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen.svg)](https://github.com/Jacob-white/Phone-Standardizer)
 [![Python Version](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://python.org)

@@ -112,7 +112,14 @@ def evaluate_confidence_and_risk(
         score -= 0.30
 
     # Minor confidence deduction for aggressive legacy mobile healing
-    if "LEGACY_MEXICO_MOBILE_1_STRIPPED" in healing_actions or "ARGENTINA_MOBILE_15_HEALED" in healing_actions:
+    if any(
+        act in healing_actions
+        for act in (
+            "LEGACY_MEXICO_MOBILE_1_STRIPPED",
+            "ARGENTINA_MOBILE_15_HEALED",
+            "BRAZIL_MOBILE_9_INSERTED",
+        )
+    ):
         score -= 0.03
 
     score = max(0.0, min(1.0, round(score, 4)))
