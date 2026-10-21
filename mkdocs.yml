@@ -1,0 +1,11 @@
+site_name: Phone Standardizer
+site_description: Universal multi-national phone number standardization, ITU-T E.164/E.123/RFC 3966 formatting, and NANP attribution.
+site_url: https://github.com/Jacob-white/Phone-Standardizer
+repo_url: https://github.com/Jacob-white/Phone-Standardizer
+theme:
+  name: material
+nav:
+  - Home: README.md
+  - Quickstart: quickstart.md
+  - API Reference: api_reference.md
+  - Master Architecture Plan: GLOBAL_TELEPHONY_ARCHITECTURE_PLAN.md

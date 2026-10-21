@@ -1,0 +1,10 @@
+# Phone Standardizer
+
+> Standalone zero-dependency multi-national telephone number standardization, ITU-T E.164/E.123/RFC 3966 formatting, NANP territory/state resolution, line-type classification, and entity linkage library for Python (with optional Rust PyO3 acceleration, FastAPI server, and MCP server).
+
+## Key Files
+- [README.md](README.md): Overview, quickstart, and capabilities.
+- [docs/GLOBAL_TELEPHONY_ARCHITECTURE_PLAN.md](docs/GLOBAL_TELEPHONY_ARCHITECTURE_PLAN.md): Full master technical blueprint.
+- [docs/quickstart.md](docs/quickstart.md): 5-minute developer onboarding.
+- [docs/api_reference.md](docs/api_reference.md): Complete Python, CLI, HTTP, and MCP API reference.
+- [SECURITY.md](SECURITY.md): Security policy, IRSF fraud detection, and PII masking.

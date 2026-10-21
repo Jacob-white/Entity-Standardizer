@@ -1,0 +1,77 @@
+"""FastAPI HTTP Microservice for Phone Standardizer."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel, Field
+
+from phone_standardizer.batch import batch_standardize_phones
+from phone_standardizer.registry import CountryDialRegistry, get_dial_plan
+from phone_standardizer.standardizer import standardize_phone
+
+
+class PhoneStandardizeRequest(BaseModel):
+    """Request payload for /v1/standardize."""
+
+    phone: str = Field(..., description="Raw phone number string.")
+    country: str | None = Field(default=None, description="Optional ISO country hint.")
+    default_country: str = Field(default="US", description="Fallback ISO country code.")
+
+
+class PhoneBatchRequest(BaseModel):
+    """Request payload for /v1/batch."""
+
+    phones: list[str] = Field(..., max_length=1000, description="List of raw phone strings.")
+    default_country: str = Field(default="US", description="Fallback ISO country code.")
+
+
+def create_app() -> FastAPI:
+    """Create and configure the FastAPI application instance."""
+    app = FastAPI(
+        title="Phone Standardizer API",
+        version="1.0.0",
+        description="Universal multi-national phone standardization, ITU-T E.164/E.123 formatting, and NANP attribution service.",
+    )
+
+    @app.get("/health")
+    def health() -> dict[str, str]:
+        return {"status": "ok", "version": "1.0.0"}
+
+    @app.post("/v1/standardize")
+    def standardize_endpoint(req: PhoneStandardizeRequest) -> dict[str, Any]:
+        res = standardize_phone(
+            req.phone,
+            country=req.country,
+            default_country=req.default_country,
+        )
+        return res.to_dict()
+
+    @app.post("/v1/batch")
+    def batch_endpoint(req: PhoneBatchRequest) -> dict[str, Any]:
+        results = batch_standardize_phones(req.phones, default_country=req.default_country)
+        return {
+            "count": len(results),
+            "results": [r.to_dict() for r in results],
+        }
+
+    @app.get("/v1/countries/{identifier}")
+    def country_endpoint(identifier: str) -> dict[str, Any]:
+        plan = get_dial_plan(identifier)
+        if plan is None:
+            raise HTTPException(status_code=404, detail=f"Country '{identifier}' not found")
+        return plan.to_dict()
+
+    @app.get("/v1/countries")
+    def list_countries_endpoint() -> dict[str, Any]:
+        plans = CountryDialRegistry.all_plans()
+        return {
+            "count": len(plans),
+            "countries": [p.to_dict() for p in plans],
+        }
+
+    return app
+
+
+app = create_app()

@@ -1,0 +1,2 @@
+# Core runtime is zero-dependency pure Python.
+# Optional extras: pip install "phone-standardizer[server,arrow,mcp]"

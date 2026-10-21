@@ -1,0 +1,16 @@
+# Phone Standardizer — Full LLM Context
+
+Owned and maintained by **HobbyHabbit LLC** under the **MIT License**.
+
+## Core API (`phone_standardizer`)
+- `standardize_phone(raw_phone, country=None, default_country="US", address_context=None) -> StandardizedPhone`
+- `validate_phone(raw_phone, country=None, default_country="US") -> bool`
+- `format_e164(raw_phone, country=None, default_country="US") -> str | None`
+- `format_national(raw_phone, country=None, default_country="US") -> str | None`
+- `format_international(raw_phone, country=None, default_country="US") -> str | None`
+- `format_rfc3966(raw_phone, country=None, default_country="US") -> str | None`
+- `mask_phone(raw_phone, strategy="partial", country=None, default_country="US") -> str`
+- `batch_standardize_phones(records, default_country="US") -> list[StandardizedPhone]`
+- `stream_standardize_csv(input_path, output_path, phone_col="phone", country_col="country", default_country="US") -> int`
+- `stream_standardize_jsonl(input_path, output_path, phone_key="phone", country_key="country", default_country="US") -> int`
+- `get_dial_plan(identifier) -> CountryDialPlan | None`

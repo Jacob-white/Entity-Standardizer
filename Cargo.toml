@@ -1,0 +1,28 @@
+[package]
+name = "_phone_standardizer_rs"
+version = "1.0.0"
+edition = "2021"
+rust-version = "1.83"
+description = "Optional native Rust acceleration module for Phone Standardizer (E.164 normalization, vanity keypad folding, and dial prefix trie dispatch)."
+authors = ["HobbyHabbit LLC <support@hobbyhabbit.com>"]
+license = "MIT"
+repository = "https://github.com/Jacob-white/Phone-Standardizer"
+readme = "README.md"
+publish = false
+
+[lib]
+name = "_phone_standardizer_rs"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+pyo3 = "0.30"
+
+[features]
+default = []
+# maturin enables this for wheel builds; `cargo test` runs without it so the test binary can link libpython.
+extension-module = ["pyo3/extension-module"]
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 3

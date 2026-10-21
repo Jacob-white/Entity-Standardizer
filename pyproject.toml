@@ -1,0 +1,102 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "phone-standardizer"
+version = "1.0.0"
+description = "Universal multi-national phone number standardization, ITU-T E.164/E.123/RFC 3966 formatting, NANP carrier/state resolution, line-type classification, and high-throughput entity linkage."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [
+    { name = "HobbyHabbit LLC", email = "support@hobbyhabbit.com" }
+]
+maintainers = [
+    { name = "Jacob White", email = "jake@hobbyhabbit.com" }
+]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Communications :: Telephony",
+    "Topic :: Text Processing :: General",
+]
+dependencies = []
+
+[project.optional-dependencies]
+server = [
+    "fastapi>=0.100.0",
+    "uvicorn>=0.23.0",
+    "pydantic>=2.0.0",
+    "httpx>=0.24.0",
+]
+redis = [
+    "redis>=5.0",
+]
+otel = [
+    "opentelemetry-api>=1.20",
+]
+mcp = [
+    "mcp>=1.0.0",
+]
+arrow = [
+    "pyarrow>=14.0.0",
+    "polars>=0.20.0",
+    "duckdb>=0.10.0",
+    "numpy>=1.24",
+]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "ruff>=0.1.0",
+    "hypothesis>=6.100.0",
+]
+docs = [
+    "mkdocs>=1.6,<2",
+    "mkdocs-material>=9.5",
+    "mkdocstrings[python]>=0.25",
+]
+
+[project.scripts]
+phone-standardizer = "phone_standardizer.cli:main"
+phone-standardizer-mcp = "phone_standardizer.mcp.server:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["phone_standardizer*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+norecursedirs = [".claude", "node_modules", ".git", "build", "dist", "target"]
+python_files = ["test_*.py"]
+markers = [
+    "perf: absolute-throughput/memory SLA tests; run without coverage tracing (pytest -m perf)",
+]
+
+[tool.coverage.run]
+source = ["phone_standardizer"]
+branch = true
+
+[tool.coverage.report]
+fail_under = 100
+skip_empty = true
+
+[tool.ruff]
+line-length = 120
+extend-exclude = [".claude", "target", "node_modules"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"benchmarks/*.py" = ["E402"]
+
+[tool.maturin]
+features = ["extension-module"]
