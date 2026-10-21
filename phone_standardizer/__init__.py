@@ -3,9 +3,17 @@
 from __future__ import annotations
 
 from phone_standardizer._native_dispatch import (
+    extract_digits_dispatch,
+    fold_unicode_digits_dispatch,
     fold_vanity_digits_dispatch,
     get_engine_info,
     is_native_available,
+    standardize_batch_e164_dispatch,
+)
+from phone_standardizer.arrow import (
+    register_duckdb_udfs,
+    standardize_arrow,
+    standardize_polars,
 )
 from phone_standardizer.batch import (
     batch_standardize_phones,
@@ -61,8 +69,10 @@ __all__ = [
     "batch_standardize_phones",
     "decode_vanity_phone",
     "evaluate_confidence_and_risk",
+    "extract_digits_dispatch",
     "extract_extension",
     "fold_unicode_digits",
+    "fold_unicode_digits_dispatch",
     "fold_vanity_digits_dispatch",
     "format_e164",
     "format_international",
@@ -76,8 +86,12 @@ __all__ = [
     "is_native_available",
     "mask_phone",
     "normalize_country_iso2",
+    "register_duckdb_udfs",
     "resolve_nanp_npa",
+    "standardize_arrow",
+    "standardize_batch_e164_dispatch",
     "standardize_phone",
+    "standardize_polars",
     "stream_standardize_csv",
     "stream_standardize_jsonl",
     "validate_phone",
