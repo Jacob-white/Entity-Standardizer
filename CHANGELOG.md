@@ -2,6 +2,19 @@
 
 All notable changes to **Phone Standardizer** will be documented in this file.
 
+## [1.2.0] - 2026-10-21
+
+### Added
+- **Telephony Fuzzy Deduplication, Keypad/Transposition Distance & Contact Entity Resolution** (`phone_standardizer/dedup.py`):
+  - `compare_phones` & `PhoneComparisonResult`: Multi-dimensional telephony matcher detecting exact E.164 matches, PBX extension variants (`EXTENSION_VARIANT`), cross-context national equivalents (`NATIONAL_EQUIVALENT`), single adjacent digit swaps (`ADJACENT_TRANSPOSITION`), ITU-T E.161 physical dialpad typos (`KEYPAD_ADJACENT_TYPO`), and Damerau-Levenshtein distance.
+  - `generate_phone_blocking_keys`: Multi-pass deterministic blocking keys (`e164`, `nsn`, `tail7`, `cc_sorted`, `cc_head6`, `cc_area_tail4`) for scalable entity resolution and SQL blocking.
+  - `deduplicate_phones` & `PhoneCluster`: Disjoint-set contact clustering with deterministic Golden Phone Record survivorship.
+  - `cluster_contact_records`, `ContactCluster`, and `infer_country_from_postal_code`: Cross-portfolio entity resolution linking `Phone-Standardizer` (`phone_key` + fuzzy phone matching) with `Address-Standardizer` (`address_key` & postal codes).
+- **Service, MCP & CLI Entity Resolution Extensions**:
+  - FastAPI endpoints: `POST /v1/compare` and `POST /v1/deduplicate`.
+  - MCP tools: `compare_phones` and `deduplicate_phones`.
+  - CLI commands: `phone-standardizer compare` and `phone-standardizer dedup`.
+
 ## [1.1.0] - 2026-10-21
 
 ### Added

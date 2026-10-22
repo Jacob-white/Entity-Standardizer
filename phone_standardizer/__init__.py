@@ -40,6 +40,18 @@ from phone_standardizer.confidence import (
     has_sequential_subscriber_digits,
     is_fictitious_number,
 )
+from phone_standardizer.dedup import (
+    ContactCluster,
+    PhoneCluster,
+    PhoneComparisonResult,
+    are_keypad_adjacent,
+    cluster_contact_records,
+    compare_phones,
+    damerau_levenshtein_distance,
+    deduplicate_phones,
+    generate_phone_blocking_keys,
+    infer_country_from_postal_code,
+)
 from phone_standardizer.intelligence import (
     CallingWindowResult,
     evaluate_calling_window,
@@ -77,15 +89,18 @@ from phone_standardizer.standardizer import (
     validate_phone,
 )
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 __all__ = [
     "CallingWindowResult",
+    "ContactCluster",
     "CountryDialPlan",
     "CountryDialRegistry",
     "HealingAction",
     "LRUCache",
     "MultiTierCache",
+    "PhoneCluster",
+    "PhoneComparisonResult",
     "PhoneLineType",
     "PhoneRiskFlag",
     "PhoneRoutingTier",
@@ -93,10 +108,15 @@ __all__ = [
     "SQLiteCache",
     "StandardizedPhone",
     "__version__",
+    "are_keypad_adjacent",
     "batch_standardize_phones",
     "clear_cache",
+    "cluster_contact_records",
+    "compare_phones",
     "configure_cache",
+    "damerau_levenshtein_distance",
     "decode_vanity_phone",
+    "deduplicate_phones",
     "evaluate_calling_window",
     "evaluate_confidence_and_risk",
     "explain_phone",
@@ -110,12 +130,14 @@ __all__ = [
     "format_international",
     "format_national",
     "format_rfc3966",
+    "generate_phone_blocking_keys",
     "get_cache_stats",
     "get_default_cache",
     "get_dial_plan",
     "get_engine_info",
     "has_repeating_subscriber_digits",
     "has_sequential_subscriber_digits",
+    "infer_country_from_postal_code",
     "is_fictitious_number",
     "is_native_available",
     "make_cache_key",

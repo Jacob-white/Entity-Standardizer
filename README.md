@@ -1,6 +1,6 @@
 # Phone Standardizer 📞
 
-[![Version](https://img.shields.io/badge/version-1.1.0-blue.svg)](https://github.com/Jacob-white/Phone-Standardizer)
+[![Version](https://img.shields.io/badge/version-1.2.0-blue.svg)](https://github.com/Jacob-white/Phone-Standardizer)
 [![CI](https://img.shields.io/badge/CI-passing-brightgreen.svg)](https://github.com/Jacob-white/Phone-Standardizer)
 [![Coverage](https://img.shields.io/badge/coverage-100%25-brightgreen.svg)](https://github.com/Jacob-white/Phone-Standardizer)
 [![Python Version](https://img.shields.io/badge/python-3.11%2B-blue.svg)](https://python.org)
@@ -34,7 +34,7 @@ A standalone, zero-dependency multi-national telephone number standardization, I
    - Folds Full-Width CJK, Arabic-Indic, Eastern Arabic, and Devanagari numerals to ASCII.
 5. **ITU-T E.161 Vanity Decoding & Extension Extraction**: Converts alphanumeric vanity numbers (`1-800-FLOWERS` $\to$ `+18003569377`) while preserving `vanity_alias="1-800-FLOWERS"`, and cleanly separates extensions (`ext. 402`, `x402`, `#402`, `;ext=402`).
 6. **Fraud, IRSF & Synthetic Range Guardrails**: Detects fictitious ranges (`555-0100`..`0199`, UK Ofcom TV numbers), repeating/sequential bogus digits, and high-risk premium-rate ranges (`PREMIUM_RATE_IRSF_RISK`), assigning composite confidence scores and routing tiers (`AUTO_PASS`, `FUZZY_REVIEW`, `MANUAL_STEWARDSHIP`).
-7. **Native Portfolio Interoperability**: Accepts `Address-Standardizer` records (`address_context`) to disambiguate national phone numbers and provides `mask_phone()` privacy redaction compatible with `Query-Builder` CLAC policies.
+7. **Native Portfolio Interoperability & Fuzzy Entity Resolution**: Accepts `Address-Standardizer` records (`address_context`) and postal codes (`infer_country_from_postal_code`) to disambiguate national phone numbers, clusters noisy contact records with keypad/transposition distance (`compare_phones`, `deduplicate_phones`, `cluster_contact_records`), and provides `mask_phone()` privacy redaction compatible with `Query-Builder` CLAC policies.
 
 ---
 
