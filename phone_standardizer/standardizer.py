@@ -41,6 +41,15 @@ _PAREN_ZERO_TRUNK_RE = re.compile(r"\(\s*0\s*\)")
 _PLUS_BEFORE_DIGIT_RE = re.compile(r"^(?:[^\d+]*|\s*011\s*)\+")
 _CORRUPTED_NANP_HYPHEN_RE = re.compile(r"^\s*\d{3}\s*-\s*\d{3}\s*-")
 _US_AND_TERRITORIES: frozenset[str] = frozenset({"US", "PR", "VI", "GU", "MP", "AS", "UM"})
+_VALID_UK_NSN_PREFIXES: tuple[str, ...] = (
+    "1", "20", "23", "24", "28", "29", "30", "33", "34", "37",
+    "500", "55", "56", "70", "71", "72", "73", "74", "75", "76",
+    "77", "78", "79", "80", "84", "87", "90", "98",
+)
+_UK_DOMESTIC_11DIGIT_TRUNK_PREFIXES: tuple[str, ...] = (
+    "01", "020", "023", "024", "028", "029",
+    "071", "072", "073", "074", "075", "077", "078", "079",
+)
 
 
 def _extract_address_hint(address_context: Any) -> tuple[str | None, str | None]:
@@ -489,6 +498,19 @@ def standardize_phone(
             if len(nsn) == 12 and nsn.startswith("01"):
                 nsn = nsn[2:]
                 healing_actions.append(HealingAction.NATIONAL_TRUNK_STRIPPED)
+            elif (
+                12 <= len(nsn) <= 15
+                and extension is None
+                and not has_paren_zero
+                and working.strip().isdigit()
+                and nsn[0] in "23456789"
+                and nsn[3] in "23456789"
+                and (nsn[4:6] != "11" or nsn[:3] in NANP_TOLL_FREE_NPAS)
+                and resolve_nanp_npa(nsn[:3])[2]
+            ):
+                extension = nsn[10:]
+                nsn = nsn[:10]
+                healing_actions.append(HealingAction.EXTENSION_EXTRACTED)
             elif len(nsn) == 11:
                 if nsn.startswith("1"):
                     nsn = nsn[1:]
@@ -500,7 +522,19 @@ def standardize_phone(
                 elif nsn.startswith("0") and resolve_nanp_npa(nsn[1:4])[2]:
                     nsn = nsn[1:]
                     healing_actions.append(HealingAction.NATIONAL_TRUNK_STRIPPED)
-            if len(nsn) == 10:
+                elif (
+                    explicit_iso2 is None
+                    and working.strip().isdigit()
+                    and nsn.startswith(_UK_DOMESTIC_11DIGIT_TRUNK_PREFIXES)
+                ):
+                    nsn = nsn[1:]
+                    healing_actions.append(HealingAction.NATIONAL_TRUNK_STRIPPED)
+                    uk_plan, _, region_code, recognized_sub_area = (
+                        CountryDialRegistry.match_calling_code("44" + nsn, hint_iso2="GB")
+                    )
+                    assert uk_plan is not None
+                    plan = uk_plan
+            if plan.calling_code == "1" and len(nsn) == 10:
                 iso2_resolved, region_code, recognized_sub_area = resolve_nanp_npa(
                     nsn[:3], fallback_iso2=plan.iso2
                 )
@@ -561,14 +595,27 @@ def standardize_phone(
                 nsn = nsn[len(trunk):]
                 healing_actions.append(HealingAction.NATIONAL_TRUNK_STRIPPED)
 
-            # Re-verify UK Crown Dependencies if domestic 01534 / 01481 / 01624 used
+            # Re-verify UK Crown Dependencies if domestic 01534 / 01481 / 01624 used,
+            # or fall back to NANP if a bare 10-digit number without a '0' trunk is not a valid UK NSN prefix
             if plan.calling_code == "44":
-                matched_plan, _, resolved_region, _ = CountryDialRegistry.match_calling_code(
-                    "44" + nsn, hint_iso2=hint_iso2
-                )
-                assert matched_plan is not None
-                plan = matched_plan
-                region_code = resolved_region
+                if (
+                    not digits_raw.startswith(("0", "44"))
+                    and len(nsn) == 10
+                    and not nsn.startswith(_VALID_UK_NSN_PREFIXES)
+                    and nsn[3] in "23456789"
+                    and resolve_nanp_npa(nsn[:3])[2]
+                ):
+                    iso2_resolved, region_code, recognized_sub_area = resolve_nanp_npa(
+                        nsn[:3], fallback_iso2="US"
+                    )
+                    plan = CountryDialRegistry.get(iso2_resolved) or plan
+                else:
+                    matched_plan, _, resolved_region, _ = CountryDialRegistry.match_calling_code(
+                        "44" + nsn, hint_iso2=hint_iso2
+                    )
+                    assert matched_plan is not None
+                    plan = matched_plan
+                    region_code = resolved_region
 
         # Fallback bare international calling-code resolution when context_plan length does not match
         if not _is_valid_plan_or_legacy_length(plan, len(nsn)) or (

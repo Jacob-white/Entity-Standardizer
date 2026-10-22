@@ -136,78 +136,8 @@ fn is_time_range_rs(input: &str) -> bool {
     false
 }
 
-/// If input contains multiple complete phone numbers separated by ';', '/', '|', '&', or ',', return the primary (first) phone.
-fn split_primary_phone_rs(input: &str) -> &str {
-    let bytes = input.as_bytes();
-    let mut split_indices = Vec::new();
-    for (idx, &b) in bytes.iter().enumerate() {
-        if b == b';' || b == b'/' || b == b'&' || b == b'|' {
-            let after = input[idx + 1..].trim_start().to_ascii_lowercase();
-            if !after.starts_with("ext=") && !after.starts_with("isub=") {
-                split_indices.push(idx);
-            }
-        }
-    }
-    if let Some(&idx0) = split_indices.first() {
-        let part0 = &input[..idx0];
-        let part1 = if split_indices.len() >= 2 {
-            &input[idx0 + 1..split_indices[1]]
-        } else {
-            &input[idx0 + 1..]
-        };
-        let p1_trim = part1.trim();
-        let d0 = part0.chars().filter(|c| c.is_ascii_digit()).count();
-        let d1 = p1_trim.chars().filter(|c| c.is_ascii_digit()).count();
-        if d0 >= 7 && (d1 >= 7 || (d0 >= 10 && p1_trim.len() == 4 && d1 == 4)) {
-            return split_primary_phone_rs(part0.trim());
-        }
-    }
-    if input.contains(',') {
-        let mut comma_indices = Vec::new();
-        for (idx, &b) in bytes.iter().enumerate() {
-            if b == b',' {
-                comma_indices.push(idx);
-            }
-        }
-        for (i, &cidx) in comma_indices.iter().enumerate() {
-            let p0 = &input[..cidx];
-            let next_seg = if i + 1 < comma_indices.len() {
-                &input[cidx + 1..comma_indices[i + 1]]
-            } else {
-                &input[cidx + 1..]
-            };
-            let d0 = p0.chars().filter(|c| c.is_ascii_digit()).count();
-            let d1 = next_seg.chars().filter(|c| c.is_ascii_digit()).count();
-            if d0 >= 7 && d1 >= 7 {
-                return split_primary_phone_rs(p0.trim());
-            }
-        }
-    }
-    input
-}
-
-/// Strip a leading URI scheme ("tel:") or conversational label ("Phone 1: ", "Contact: ") before the phone number.
-fn strip_leading_label_rs(input: &str) -> &str {
-    let mut s = input.trim();
-    if let Some(colon_idx) = s.find(':') {
-        let prefix = &s[..colon_idx];
-        // Strip if it's "tel:" or a short alphabetic label where no '+' appears before ':'
-        if colon_idx <= 25
-            && !prefix.contains('+')
-            && prefix.starts_with(|c: char| c.is_ascii_alphabetic())
-        {
-            let after_colon = s[colon_idx + 1..].trim();
-            if !after_colon.is_empty() && after_colon.chars().any(|c| c.is_ascii_digit()) {
-                s = after_colon;
-            }
-        }
-    }
-    s
-}
-
-/// Strip a trailing extension (e.g. ";ext=402", " ext. 402", " x104", " #104", ",104", "p104", "w104") from a phone string.
-fn strip_extension_rs(input: &str) -> &str {
-    let primary = split_primary_phone_rs(input);
+/// Strip a trailing extension from a single already-split phone segment.
+fn strip_extension_single_rs(primary: &str) -> &str {
     let trimmed = primary
         .trim_end_matches(|c: char| matches!(c, '!' | '?' | ',' | ';' | '|' | ' ' | '\t' | '\n' | '\r'))
         .trim_start();
@@ -250,6 +180,155 @@ fn strip_extension_rs(input: &str) -> &str {
         }
     }
     trimmed
+}
+
+/// Return True if a multi-phone segment represents a clean 10- or 11-digit NANP candidate.
+fn is_clean_nanp_segment_rs(seg: &str) -> bool {
+    let cleaned = strip_extension_single_rs(seg);
+    let pure_digits: String = cleaned.chars().filter(|c| c.is_ascii_digit()).collect();
+    let digits: String = if pure_digits.len() < 10
+        && pure_digits.len() >= 3
+        && has_vanity_word_rs(cleaned)
+    {
+        if let Some(first_digit_idx) = cleaned.find(|c: char| c.is_ascii_digit()) {
+            fold_vanity_digits_rs(&cleaned[first_digit_idx..])
+                .chars()
+                .filter(|c| c.is_ascii_digit())
+                .collect()
+        } else {
+            pure_digits
+        }
+    } else if cleaned.chars().any(|c| c.is_ascii_alphabetic()) {
+        return false;
+    } else {
+        pure_digits
+    };
+    let db = digits.as_bytes();
+    if db.len() == 10 && matches!(db[0], b'2'..=b'9') && matches!(db[3], b'2'..=b'9') {
+        return true;
+    }
+    db.len() == 11 && db[0] == b'1' && matches!(db[1], b'2'..=b'9') && matches!(db[4], b'2'..=b'9')
+}
+
+/// If input contains multiple complete phone numbers separated by ';', '/', '|', '&', ',', or whitespace, return the primary phone.
+fn split_primary_phone_rs(input: &str) -> &str {
+    let bytes = input.as_bytes();
+    let mut split_indices = Vec::new();
+    for (idx, &b) in bytes.iter().enumerate() {
+        if b == b';' || b == b'/' || b == b'&' || b == b'|' {
+            let after = input[idx + 1..].trim_start().to_ascii_lowercase();
+            if !after.starts_with("ext=") && !after.starts_with("isub=") {
+                split_indices.push(idx);
+            }
+        }
+    }
+    if let Some(&idx0) = split_indices.first() {
+        let part0 = &input[..idx0];
+        let part1 = if split_indices.len() >= 2 {
+            &input[idx0 + 1..split_indices[1]]
+        } else {
+            &input[idx0 + 1..]
+        };
+        let p1_trim = part1.trim();
+        let d0 = part0.chars().filter(|c| c.is_ascii_digit()).count();
+        let d1 = p1_trim.chars().filter(|c| c.is_ascii_digit()).count();
+        if d0 >= 7 && (d1 >= 7 || (d0 >= 10 && p1_trim.len() == 4 && d1 == 4)) {
+            return split_primary_phone_rs(part0.trim());
+        }
+    }
+    if input.contains(',') {
+        let mut comma_indices = Vec::new();
+        for (idx, &b) in bytes.iter().enumerate() {
+            if b == b',' {
+                comma_indices.push(idx);
+            }
+        }
+        for (i, &cidx) in comma_indices.iter().enumerate() {
+            let p0 = &input[..cidx];
+            let next_seg = if i + 1 < comma_indices.len() {
+                &input[cidx + 1..comma_indices[i + 1]]
+            } else {
+                &input[cidx + 1..]
+            };
+            let d0 = p0.chars().filter(|c| c.is_ascii_digit()).count();
+            let a0 = p0.chars().filter(|c| c.is_ascii_alphabetic()).count();
+            let d1 = next_seg.chars().filter(|c| c.is_ascii_digit()).count();
+            if (d0 >= 7 || (d0 >= 3 && d0 + a0 >= 7 && a0 >= 3)) && d1 >= 7 {
+                let p0_sub = split_primary_phone_rs(p0.trim());
+                if !is_clean_nanp_segment_rs(p0_sub) {
+                    for j in i..comma_indices.len() {
+                        let start = comma_indices[j] + 1;
+                        let end = if j + 1 < comma_indices.len() {
+                            comma_indices[j + 1]
+                        } else {
+                            input.len()
+                        };
+                        let alt_sub = split_primary_phone_rs(input[start..end].trim());
+                        if is_clean_nanp_segment_rs(alt_sub) {
+                            return alt_sub;
+                        }
+                    }
+                }
+                return p0_sub;
+            }
+        }
+    }
+    let t = input.trim();
+    if !t.contains('+')
+        && t.chars().filter(|c| c.is_ascii_digit()).count() == 20
+        && t.chars()
+            .all(|c| c.is_ascii_digit() || matches!(c, ' ' | '-' | '.' | '(' | ')'))
+    {
+        let mut d_count = 0usize;
+        let mut tenth_end = 0usize;
+        let mut first_digit = b'0';
+        let mut eleventh_digit = b'0';
+        for (idx, ch) in t.char_indices() {
+            if ch.is_ascii_digit() {
+                d_count += 1;
+                if d_count == 1 {
+                    first_digit = ch as u8;
+                } else if d_count == 10 {
+                    tenth_end = idx + 1;
+                } else if d_count == 11 {
+                    eleventh_digit = ch as u8;
+                    break;
+                }
+            }
+        }
+        if matches!(first_digit, b'2'..=b'9')
+            && matches!(eleventh_digit, b'2'..=b'9')
+            && t[tenth_end..].starts_with(' ')
+        {
+            return t[..tenth_end].trim();
+        }
+    }
+    input
+}
+
+/// Strip a leading URI scheme ("tel:") or conversational label ("Phone 1: ", "Contact: ") before the phone number.
+fn strip_leading_label_rs(input: &str) -> &str {
+    let mut s = input.trim();
+    if let Some(colon_idx) = s.find(':') {
+        let prefix = &s[..colon_idx];
+        // Strip if it's "tel:" or a short alphabetic label where no '+' appears before ':'
+        if colon_idx <= 25
+            && !prefix.contains('+')
+            && prefix.starts_with(|c: char| c.is_ascii_alphabetic())
+        {
+            let after_colon = s[colon_idx + 1..].trim();
+            if !after_colon.is_empty() && after_colon.chars().any(|c| c.is_ascii_digit()) {
+                s = after_colon;
+            }
+        }
+    }
+    s
+}
+
+/// Strip a trailing extension (e.g. ";ext=402", " ext. 402", " x104", " #104", ",104", "p104", "w104") from a phone string.
+fn strip_extension_rs(input: &str) -> &str {
+    let primary = split_primary_phone_rs(input);
+    strip_extension_single_rs(primary)
 }
 
 /// Return True if input contains a run of at least 3 consecutive ASCII alphabetic characters.
@@ -453,6 +532,9 @@ mod tests {
                 "818,985,2000".to_string(),
                 "#2125551234".to_string(),
                 "2125551234FOOBAR".to_string(),
+                "1956468217,8307763662,9564682169".to_string(),
+                "212 937 8444 917 363 9568".to_string(),
+                "786 244-7346 786 458-8491".to_string(),
             ],
             "1",
         );
@@ -477,7 +559,7 @@ mod tests {
                 Some("+12149237666".to_string()),
                 Some("+18003667266".to_string()),
                 Some("+16032262004".to_string()),
-                None,
+                Some("+19097848831".to_string()),
                 Some("+17174362144".to_string()),
                 Some("+12125551234".to_string()),
                 Some("+14155552671".to_string()),
@@ -489,6 +571,9 @@ mod tests {
                 Some("+18189852000".to_string()),
                 Some("+12125551234".to_string()),
                 Some("+12125551234".to_string()),
+                Some("+18307763662".to_string()),
+                Some("+12129378444".to_string()),
+                Some("+17862447346".to_string()),
             ]
         );
     }
