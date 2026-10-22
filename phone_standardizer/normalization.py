@@ -44,7 +44,7 @@ _EXTENSION_RE = re.compile(
     r"|x\.?\s*[:\-#]?\s*"
     r"|#\s*"
     r")([0-9]{1,10})"
-    r"|(?<=\d)\s*(?:(?:x\.?|#)\s*[:\-#]?\s*([0-9]{1,10})|(?:[,;#]+|[pw]+)\s*([0-9]{1,10}))"
+    r"|(?<=\d)\s*(?:(?:ext\.?|xt\.?|x\.?|#)\s*[:\-#]?\s*([0-9]{1,10})|(?:[,;#]+|[pw]+)\s*([0-9]{1,10}))"
     r")\s*$",
     re.IGNORECASE,
 )
@@ -105,7 +105,8 @@ def split_primary_phone(text: str) -> tuple[str, bool]:
             or (sum(c.isdigit() for c in parts[0]) >= 10 and len(parts[1].strip()) == 4 and parts[1].strip().isdigit())
         )
     ):
-        return parts[0].strip(), True
+        p0, _ = split_primary_phone(parts[0])
+        return p0.strip(), True
 
     if "," in text:
         cparts = text.split(",")
@@ -115,7 +116,8 @@ def split_primary_phone(text: str) -> tuple[str, bool]:
             d0 = sum(c.isdigit() for c in p0)
             d1 = sum(c.isdigit() for c in p1)
             if d0 >= 7 and d1 >= 7:
-                return p0, True
+                p0_sub, _ = split_primary_phone(p0)
+                return p0_sub.strip(), True
 
     return text, False
 
@@ -130,6 +132,12 @@ def extract_extension(text: str) -> tuple[str, str | None]:
     if match:
         ext = next(g for g in match.groups() if g is not None)
         base = cleaned[:match.start()].strip()
+        full_match = match.group(0).rstrip()
+        delim = full_match[:-len(ext)].strip()
+        if "," in delim and not any(ch.isalpha() for ch in delim):
+            base_digits = sum(c.isdigit() for c in base)
+            if base_digits < 10 or "," in base:
+                return cleaned, None
         base = re.sub(r"[!?|,;\s]+$", "", base)
         return base, ext
     return cleaned, None

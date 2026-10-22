@@ -159,7 +159,7 @@ fn split_primary_phone_rs(input: &str) -> &str {
         let d0 = part0.chars().filter(|c| c.is_ascii_digit()).count();
         let d1 = p1_trim.chars().filter(|c| c.is_ascii_digit()).count();
         if d0 >= 7 && (d1 >= 7 || (d0 >= 10 && p1_trim.len() == 4 && d1 == 4)) {
-            return part0.trim();
+            return split_primary_phone_rs(part0.trim());
         }
     }
     if input.contains(',') {
@@ -179,7 +179,7 @@ fn split_primary_phone_rs(input: &str) -> &str {
             let d0 = p0.chars().filter(|c| c.is_ascii_digit()).count();
             let d1 = next_seg.chars().filter(|c| c.is_ascii_digit()).count();
             if d0 >= 7 && d1 >= 7 {
-                return p0.trim();
+                return split_primary_phone_rs(p0.trim());
             }
         }
     }
@@ -214,11 +214,11 @@ fn strip_extension_rs(input: &str) -> &str {
     let lower = trimmed.to_ascii_lowercase();
     for marker in [
         ";ext=", ";isub=", "(ext.", "(ext:", "(ext-", "(ext ", " ext.", " ext:", " ext-", " ext#",
-        " ext ", " extension", " ext", " xt.", " xt:", " xt-", " xt ", " xt", " x.", " x", "x.",
-        "x", "#", ",", "p", "w",
+        " ext ", " extension", " ext", " xt.", " xt:", " xt-", " xt ", " xt", " x.", " x",
+        "ext.", "ext", "xt.", "xt", "x.", "x", "#", ",", "p", "w",
     ] {
         if let Some(idx) = lower.rfind(marker) {
-            if matches!(marker, "x." | "x" | "," | "p" | "w") {
+            if matches!(marker, "ext." | "ext" | "xt." | "xt" | "x." | "x" | "#" | "," | "p" | "w") {
                 if idx == 0 || !lower.as_bytes()[idx - 1].is_ascii_digit() {
                     continue;
                 }
@@ -236,6 +236,13 @@ fn strip_extension_rs(input: &str) -> &str {
                 && tail_clean.len() <= max_ext_len
                 && tail_clean.chars().all(|c| c.is_ascii_digit())
             {
+                if marker == "," {
+                    let base = &trimmed[..idx];
+                    let base_digits = base.chars().filter(|c| c.is_ascii_digit()).count();
+                    if base_digits < 10 || base.contains(',') {
+                        continue;
+                    }
+                }
                 return trimmed[..idx]
                     .trim_end_matches(|c: char| matches!(c, '!' | '?' | ',' | ';' | '|' | ' ' | '\t' | '\n' | '\r'))
                     .trim();
@@ -274,10 +281,39 @@ pub fn standardize_batch_e164_rs(
             let no_ext = strip_extension_rs(&folded);
             let no_label = strip_leading_label_rs(no_ext);
             let no_paren_zero = no_label.replace("(0)", "").replace("( 0 )", "");
-            let trimmed = no_paren_zero.trim();
+            let mut trimmed = no_paren_zero.trim();
 
             if is_time_range_rs(trimmed) {
                 return None;
+            }
+
+            // Mirror Python decode_vanity_phone trailing alpha guard:
+            // if 10 pure digits precede a 3+ letter alphabetic run, strip the trailing portion.
+            let mut digits_before_alpha = 0usize;
+            let mut alpha_run = 0usize;
+            let mut run_start_idx = 0usize;
+            let mut truncate_idx = None;
+            for (idx, ch) in trimmed.char_indices() {
+                if ch.is_ascii_digit() {
+                    digits_before_alpha += 1;
+                    alpha_run = 0;
+                } else if ch.is_ascii_alphabetic() {
+                    if alpha_run == 0 {
+                        run_start_idx = idx;
+                    }
+                    alpha_run += 1;
+                    if alpha_run >= 3 && digits_before_alpha >= 10 {
+                        truncate_idx = Some(run_start_idx);
+                        break;
+                    }
+                } else {
+                    alpha_run = 0;
+                }
+            }
+            if let Some(t_idx) = truncate_idx {
+                trimmed = trimmed[..t_idx].trim_end_matches(|c: char| {
+                    matches!(c, ' ' | '\t' | '-' | '.' | '/' | ',' | ';' | ':' | '(' | '[' | '{' | '#')
+                });
             }
 
             // Check if '+' appears before the first ASCII digit
@@ -325,6 +361,7 @@ pub fn standardize_batch_e164_rs(
                 if digits.len() == 11 && digits.starts_with('1') {
                     return Some(format!("+{digits}"));
                 }
+                return None;
             } else if digits.starts_with('0') && digits.len() >= 8 {
                 let stripped_trunk = &digits[1..];
                 let combined = format!("{default_calling_code}{stripped_trunk}");
@@ -404,6 +441,18 @@ mod tests {
                 "2149237666,5122220140ext7733,6309242400".to_string(),
                 "800.366.7266 | ext. 3211".to_string(),
                 "6032262004#233,6179472393".to_string(),
+                "1800TAXSKI,9097848831".to_string(),
+                "7174362144ext25025,7176676902".to_string(),
+                "2125551234ext101".to_string(),
+                "4155552671ext9999".to_string(),
+                "2125551234xt101".to_string(),
+                "5853254140,5854358032;2125551234".to_string(),
+                "5853254140,5854358032/2125551234".to_string(),
+                "5853254140,5854358032|2125551234".to_string(),
+                "1,800,555,1212".to_string(),
+                "818,985,2000".to_string(),
+                "#2125551234".to_string(),
+                "2125551234FOOBAR".to_string(),
             ],
             "1",
         );
@@ -428,6 +477,18 @@ mod tests {
                 Some("+12149237666".to_string()),
                 Some("+18003667266".to_string()),
                 Some("+16032262004".to_string()),
+                None,
+                Some("+17174362144".to_string()),
+                Some("+12125551234".to_string()),
+                Some("+14155552671".to_string()),
+                Some("+12125551234".to_string()),
+                Some("+15853254140".to_string()),
+                Some("+15853254140".to_string()),
+                Some("+15853254140".to_string()),
+                Some("+18005551212".to_string()),
+                Some("+18189852000".to_string()),
+                Some("+12125551234".to_string()),
+                Some("+12125551234".to_string()),
             ]
         );
     }

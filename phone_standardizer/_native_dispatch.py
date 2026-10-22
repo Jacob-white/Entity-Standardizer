@@ -163,6 +163,8 @@ def standardize_batch_e164_dispatch(
             if len(digits) == 11 and digits.startswith("1"):
                 results.append(f"+{digits}")
                 continue
+            results.append(None)
+            continue
         elif digits.startswith("0") and len(digits) >= 8:
             digits = digits[1:]
         combined = f"{default_calling_code}{digits}"

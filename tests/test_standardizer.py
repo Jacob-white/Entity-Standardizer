@@ -816,4 +816,34 @@ def test_milestone3_drive_dataset_remediations() -> None:
     # extract_extension edge cases
     assert extract_extension("2125551234")[1] is None
     assert extract_extension("2125551234 |")[0] == "2125551234"
+    assert extract_extension("2125551234ext101") == ("2125551234", "101")
+    assert extract_extension("2125551234xt999") == ("2125551234", "999")
+    assert extract_extension("818,985,2000") == ("818,985,2000", None)
+    assert extract_extension("1,800,555,1212,345") == ("1,800,555,1212,345", None)
+    assert extract_extension("1,800,555,1212") == ("1,800,555,1212", None)
+    assert extract_extension("212-555-1234, 104") == ("212-555-1234", "104")
+    assert extract_extension("212-555-1234, ext. 104") == ("212-555-1234", "104")
+    assert extract_extension("2125551234#101") == ("2125551234", "101")
+
+    # Milestone 3 engine hardening unit tests
+    assert split_primary_phone("5853254140,5854358032;2125551234") == ("5853254140", True)
+    assert split_primary_phone("5853254140,5854358032,2125551234") == ("5853254140", True)
+
+    p_grp1 = standardize_phone("1,800,555,1212", country="US")
+    assert p_grp1.is_valid is True and p_grp1.e164 == "+18005551212" and p_grp1.extension is None
+    p_grp2 = standardize_phone("818,985,2000", country="US")
+    assert p_grp2.is_valid is True and p_grp2.e164 == "+18189852000" and p_grp2.extension is None
+    p_abut1 = standardize_phone("2125551234ext101", country="US")
+    assert p_abut1.is_valid is True and p_abut1.e164 == "+12125551234" and p_abut1.extension == "101"
+    p_abut2 = standardize_phone("4155552671ext9999", country="US")
+    assert p_abut2.is_valid is True and p_abut2.e164 == "+14155552671" and p_abut2.extension == "9999"
+    p_hash_lead = standardize_phone("#2125551234", country="US")
+    assert p_hash_lead.is_valid is True and p_hash_lead.e164 == "+12125551234"
+    p_multi_semi = standardize_phone("5853254140,5854358032;2125551234", country="US")
+    assert p_multi_semi.is_valid is True and p_multi_semi.e164 == "+15853254140"
+    p_taxski = standardize_phone("1800TAXSKI,9097848831", country="US")
+    assert p_taxski.is_valid is False
+    p_tight_ext = standardize_phone("7174362144ext25025,7176676902", country="US")
+    assert p_tight_ext.is_valid is True and p_tight_ext.e164 == "+17174362144" and p_tight_ext.extension == "25025"
+
 
