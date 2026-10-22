@@ -70,6 +70,10 @@ def test_tcpa_calling_window_evaluation() -> None:
     assert win_utc.timezones == ("UTC",)
     assert win_utc.is_callable_now is True
 
+    # Unknown timezone name exercises the ZoneInfoNotFoundError fallback offset table
+    win_fallback = evaluate_calling_window(("Invalid/Zone_Name",), utc_dt=dt_day)
+    assert win_fallback.is_callable_now is True
+
 
 def test_brazil_legacy_mobile_and_free_text_extraction() -> None:
     # Brazil legacy 10-digit mobile (11 + 88765432 -> +5511988765432)

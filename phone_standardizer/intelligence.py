@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from zoneinfo import ZoneInfo
+from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 # US State & Territory -> IANA Timezones
 US_STATE_TIMEZONES: dict[str, tuple[str, ...]] = {
@@ -276,6 +276,102 @@ def resolve_carrier_hint(country_iso2: str | None, nsn: str | None) -> str | Non
     return None
 
 
+def _resolve_tzinfo(tz_name: str) -> timezone | ZoneInfo:
+    """Resolve an IANA timezone name to ZoneInfo, falling back to fixed UTC offset if OS tzdata is absent."""
+    try:
+        return ZoneInfo(tz_name)
+    except ZoneInfoNotFoundError:
+        offset_hours = _FALLBACK_TZ_OFFSETS.get(tz_name, 0)
+        return timezone(timedelta(hours=offset_hours))
+
+
+_FALLBACK_TZ_OFFSETS: dict[str, int] = {
+    "America/New_York": -5,
+    "America/Detroit": -5,
+    "America/Indiana/Indianapolis": -5,
+    "America/Toronto": -5,
+    "America/Montreal": -5,
+    "America/Jamaica": -5,
+    "America/Nassau": -5,
+    "America/Bogota": -5,
+    "America/Lima": -5,
+    "America/Puerto_Rico": -4,
+    "America/St_Thomas": -4,
+    "America/Santo_Domingo": -4,
+    "America/Barbados": -4,
+    "America/Port_of_Spain": -4,
+    "America/Halifax": -4,
+    "America/Moncton": -4,
+    "Atlantic/Bermuda": -4,
+    "America/Santiago": -4,
+    "America/Argentina/Buenos_Aires": -3,
+    "America/Sao_Paulo": -3,
+    "America/St_Johns": -3,
+    "America/Chicago": -6,
+    "America/Winnipeg": -6,
+    "America/Regina": -6,
+    "America/Mexico_City": -6,
+    "America/Denver": -7,
+    "America/Phoenix": -7,
+    "America/Boise": -7,
+    "America/Edmonton": -7,
+    "America/El_Paso": -7,
+    "America/Whitehorse": -7,
+    "America/Los_Angeles": -8,
+    "America/Vancouver": -8,
+    "America/Anchorage": -9,
+    "Pacific/Honolulu": -10,
+    "Pacific/Pago_Pago": -11,
+    "Europe/London": 0,
+    "Europe/Jersey": 0,
+    "Europe/Guernsey": 0,
+    "Europe/Isle_of_Man": 0,
+    "Europe/Dublin": 0,
+    "Europe/Lisbon": 0,
+    "Europe/Paris": 1,
+    "Europe/Berlin": 1,
+    "Europe/Madrid": 1,
+    "Europe/Rome": 1,
+    "Europe/Amsterdam": 1,
+    "Europe/Brussels": 1,
+    "Europe/Zurich": 1,
+    "Europe/Vienna": 1,
+    "Europe/Stockholm": 1,
+    "Europe/Oslo": 1,
+    "Europe/Copenhagen": 1,
+    "Europe/Warsaw": 1,
+    "Europe/Prague": 1,
+    "Europe/Budapest": 1,
+    "Africa/Lagos": 1,
+    "Europe/Helsinki": 2,
+    "Europe/Athens": 2,
+    "Europe/Bucharest": 2,
+    "Europe/Kyiv": 2,
+    "Asia/Jerusalem": 2,
+    "Africa/Johannesburg": 2,
+    "Africa/Cairo": 2,
+    "Europe/Moscow": 3,
+    "Europe/Istanbul": 3,
+    "Asia/Riyadh": 3,
+    "Africa/Nairobi": 3,
+    "Asia/Dubai": 4,
+    "Asia/Kolkata": 5,
+    "Asia/Singapore": 8,
+    "Asia/Hong_Kong": 8,
+    "Asia/Taipei": 8,
+    "Asia/Shanghai": 8,
+    "Australia/Perth": 8,
+    "Asia/Tokyo": 9,
+    "Asia/Seoul": 9,
+    "Pacific/Guam": 10,
+    "Pacific/Saipan": 10,
+    "Australia/Sydney": 10,
+    "Australia/Melbourne": 10,
+    "Pacific/Auckland": 12,
+    "UTC": 0,
+}
+
+
 def evaluate_calling_window(
     timezones: tuple[str, ...],
     utc_dt: datetime | None = None,
@@ -297,7 +393,7 @@ def evaluate_calling_window(
     all_allowed = True
 
     for tz_name in tz_list:
-        local_dt = now_utc.astimezone(ZoneInfo(tz_name))
+        local_dt = now_utc.astimezone(_resolve_tzinfo(tz_name))
         hr = local_dt.hour
         local_hours.append(hr)
         if not (allowed_start_hour <= hr < allowed_end_hour):
