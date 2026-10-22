@@ -1,0 +1,720 @@
+{
+  "timestamp": "2026-10-22T17:12:10Z",
+  "benchmark_version": "1.0.0",
+  "system_info": {
+    "engine": "rust_pyo3",
+    "native_available": true
+  },
+  "datasets": {
+    "AdvizorPro_Firm_20261019.csv": {
+      "file_name": "AdvizorPro_Firm_20261019.csv",
+      "file_path": "/home/jwhite/Phone-Standardizer/.drive_datasets/AP_20261019/AdvizorPro_Firm_20261019.csv",
+      "file_size_bytes": 31284355,
+      "row_count": 46621,
+      "detected_phone_columns": [
+        "Phone"
+      ],
+      "detected_context_columns": {
+        "country": "Country",
+        "state": "State",
+        "postal_code": "Zip",
+        "city": "City",
+        "address": "Address"
+      },
+      "column_metrics": {
+        "Phone": {
+          "column_name": "Phone",
+          "total_rows": 46621,
+          "non_empty_rows": 46511,
+          "valid_count": 46443,
+          "valid_rate": 0.9985,
+          "auto_pass_count": 46144,
+          "fuzzy_review_count": 297,
+          "manual_stewardship_count": 70,
+          "healing_action_counts": {
+            "REDUNDANT_INTL_TRUNK_STRIPPED": 312,
+            "IDD_EXIT_PREFIX_STRIPPED": 247,
+            "NATIONAL_TRUNK_STRIPPED": 46,
+            "COUNTRY_INFERRED_FROM_CONTEXT": 2
+          },
+          "risk_flag_counts": {
+            "ADDRESS_COUNTRY_MISMATCH": 279,
+            "INVALID_LENGTH": 59,
+            "PREMIUM_RATE_IRSF_RISK": 6,
+            "INVALID_EXCHANGE": 5,
+            "INVALID_AREA_CODE": 4,
+            "REPEATING_DIGITS": 3,
+            "UNASSIGNED_CALLING_CODE": 1,
+            "SEQUENTIAL_DIGITS": 1
+          },
+          "line_type_counts": {
+            "FIXED_LINE_OR_MOBILE": 41970,
+            "FIXED_LINE": 2504,
+            "TOLL_FREE": 1351,
+            "MOBILE": 604,
+            "UNKNOWN": 60,
+            "VOIP": 13,
+            "PREMIUM_RATE": 6,
+            "SHARED_COST": 2,
+            "PERSONAL_NUMBER": 1
+          },
+          "country_distribution": {
+            "US": 42652,
+            "GB": 872,
+            "HK": 336,
+            "CA": 335,
+            "SG": 221,
+            "IL": 135,
+            "CH": 130,
+            "KY": 129,
+            "PR": 128,
+            "CN": 119
+          },
+          "single_record_rec_sec": 27465.61,
+          "batch_py_rec_sec": 136934.11,
+          "batch_rs_rec_sec": 789779.89,
+          "rust_speedup_factor": 5.77,
+          "parity_evaluated": 46511,
+          "parity_matches": 46511,
+          "parity_rate": 1.0,
+          "parity_divergences": [],
+          "taxonomy": {
+            "actionable_gaps": {
+              "ACTIONABLE_DIAL_PLAN_OR_METADATA_GAP": {
+                "count": 59,
+                "description": "Number structure rejected by current national dial-plan tables or validation regex",
+                "examples": [
+                  "32455113280",
+                  "011417189030",
+                  "014415426330",
+                  "+40 20 7072 3100",
+                  "1762199943",
+                  "3058980672",
+                  "6581188934",
+                  "34681953053",
+                  "2142656597",
+                  "48538366555"
+                ]
+              },
+              "ACTIONABLE_LOCAL_NANP_7_DIGIT": {
+                "count": 1,
+                "description": "7-digit local subscriber number lacking NPA area code",
+                "examples": [
+                  "735-8882"
+                ]
+              },
+              "ACTIONABLE_COUNTRY_OR_TRUNK_GAP": {
+                "count": 1,
+                "description": "Leading zero trunk indicates international number lacking country prefix or context",
+                "examples": [
+                  "01-703-47-8020"
+                ]
+              }
+            },
+            "garbage_placeholders": {
+              "GARBAGE_EXCESSIVE_DIGITS": {
+                "count": 3,
+                "description": "Excessive digits (> 15) exceeding ITU-T E.164 maximum capacity",
+                "examples": [
+                  "212 937 8444 917 363 9568",
+                  "786 244-7346 786 458-8491",
+                  "0044 0207 76286000"
+                ]
+              },
+              "GARBAGE_ALL_ZEROS_OR_ONES": {
+                "count": 3,
+                "description": "All identical repeated placeholder digits (e.g. 000-000-0000, 999-999-9999)",
+                "examples": [
+                  "0000000000",
+                  "00000000"
+                ]
+              },
+              "GARBAGE_INSUFFICIENT_DIGITS": {
+                "count": 1,
+                "description": "Fewer than 7 digits without emergency or short-code classification",
+                "examples": [
+                  "815-281"
+                ]
+              }
+            },
+            "review_risks": {
+              "REVIEW_COUNTRY_MISMATCH": {
+                "count": 274,
+                "description": "Number country calling code contradicts provided address country context",
+                "examples": [
+                  "4163641145",
+                  "+852-52696072",
+                  "+86-138-1038-7878",
+                  "5484884899",
+                  "4154328880",
+                  "+82-2-6951-4429",
+                  "2895051822",
+                  "86 21 60257000",
+                  "+33 6 40 62 79 58",
+                  "+86 10 5120 8178"
+                ]
+              },
+              "REVIEW_PREMIUM_IRSF_RISK": {
+                "count": 6,
+                "description": "Valid premium-rate or toll fraud IRSF high-risk number",
+                "examples": [
+                  "9172022007",
+                  "+35315669800",
+                  "+353 1 566 8194",
+                  "+353 1 536 14 00",
+                  "35315743755",
+                  "+353 (01) 582 7463"
+                ]
+              },
+              "REVIEW_FUZZY": {
+                "count": 19,
+                "description": "Valid phone requiring data stewardship review",
+                "examples": [
+                  "2309303800",
+                  "4522961611",
+                  "3222823995",
+                  "6523316419",
+                  "+44 20 7888 8888",
+                  "7525839984",
+                  "3879892549",
+                  "2304673000",
+                  "9262130924",
+                  "6484951703"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "AdvizorPro_Firm_Offices_20261019.csv": {
+      "file_name": "AdvizorPro_Firm_Offices_20261019.csv",
+      "file_path": "/home/jwhite/Phone-Standardizer/.drive_datasets/AP_20261019/AdvizorPro_Firm_Offices_20261019.csv",
+      "file_size_bytes": 18994868,
+      "row_count": 220504,
+      "detected_phone_columns": [],
+      "detected_context_columns": {
+        "country": "Country",
+        "state": "State",
+        "postal_code": "Zip",
+        "city": "City",
+        "address": null
+      },
+      "column_metrics": {}
+    },
+    "AdvizorPro_Office_Person_20261019.csv": {
+      "file_name": "AdvizorPro_Office_Person_20261019.csv",
+      "file_path": "/home/jwhite/Phone-Standardizer/.drive_datasets/AP_20261019/AdvizorPro_Office_Person_20261019.csv",
+      "file_size_bytes": 51418375,
+      "row_count": 933161,
+      "detected_phone_columns": [],
+      "detected_context_columns": {
+        "country": null,
+        "state": null,
+        "postal_code": null,
+        "city": null,
+        "address": null
+      },
+      "column_metrics": {}
+    },
+    "AdvizorPro_Person_20261019.csv": {
+      "file_name": "AdvizorPro_Person_20261019.csv",
+      "file_path": "/home/jwhite/Phone-Standardizer/.drive_datasets/AP_20261019/AdvizorPro_Person_20261019.csv",
+      "file_size_bytes": 1046548338,
+      "row_count": 804981,
+      "detected_phone_columns": [
+        "Phone",
+        "Firm Phone"
+      ],
+      "detected_context_columns": {
+        "country": "Country",
+        "state": "State",
+        "postal_code": "Zip",
+        "city": "City",
+        "address": "Address"
+      },
+      "column_metrics": {
+        "Phone": {
+          "column_name": "Phone",
+          "total_rows": 804981,
+          "non_empty_rows": 559943,
+          "valid_count": 410720,
+          "valid_rate": 0.7335,
+          "auto_pass_count": 409845,
+          "fuzzy_review_count": 870,
+          "manual_stewardship_count": 149228,
+          "healing_action_counts": {
+            "COUNTRY_INFERRED_FROM_CONTEXT": 232561,
+            "NATIONAL_TRUNK_STRIPPED": 904,
+            "REDUNDANT_INTL_TRUNK_STRIPPED": 262,
+            "EXTENSION_EXTRACTED": 101,
+            "IDD_EXIT_PREFIX_STRIPPED": 6,
+            "UNICODE_DIGITS_FOLDED": 4
+          },
+          "risk_flag_counts": {
+            "INVALID_LENGTH": 149151,
+            "ADDRESS_COUNTRY_MISMATCH": 793,
+            "INVALID_AREA_CODE": 59,
+            "INVALID_EXCHANGE": 35,
+            "SEQUENTIAL_DIGITS": 16,
+            "REPEATING_DIGITS": 13,
+            "UNASSIGNED_CALLING_CODE": 2,
+            "PREMIUM_RATE_IRSF_RISK": 2
+          },
+          "line_type_counts": {
+            "FIXED_LINE_OR_MOBILE": 409681,
+            "UNKNOWN": 149153,
+            "FIXED_LINE": 569,
+            "TOLL_FREE": 448,
+            "MOBILE": 86,
+            "EMERGENCY": 2,
+            "PREMIUM_RATE": 2,
+            "PERSONAL_NUMBER": 1,
+            "SHARED_COST": 1
+          },
+          "country_distribution": {
+            "US": 558217,
+            "CA": 624,
+            "GB": 392,
+            "PR": 303,
+            "IN": 30,
+            "KY": 30,
+            "DE": 28,
+            "CH": 25,
+            "HK": 24,
+            "CN": 22
+          },
+          "single_record_rec_sec": 21780.2,
+          "batch_py_rec_sec": 99395.71,
+          "batch_rs_rec_sec": 705851.75,
+          "rust_speedup_factor": 7.1,
+          "parity_evaluated": 559943,
+          "parity_matches": 559933,
+          "parity_rate": 0.999982,
+          "parity_divergences": [
+            {
+              "row_index": 72391,
+              "raw_input": "2149237666,5122220140ext7733,6309242400",
+              "py_output": "+12149237666",
+              "rs_output": null
+            },
+            {
+              "row_index": 215737,
+              "raw_input": "817-410-8200 ext. 9135,8178909135",
+              "py_output": "+18174108200",
+              "rs_output": null
+            },
+            {
+              "row_index": 291127,
+              "raw_input": "8603998202 ext 120,8607293798",
+              "py_output": "+18603998202",
+              "rs_output": null
+            },
+            {
+              "row_index": 352361,
+              "raw_input": "419-873-8500 \u2013 EXT. 1052,4793728004",
+              "py_output": "+14198738500",
+              "rs_output": null
+            },
+            {
+              "row_index": 356140,
+              "raw_input": "(631) 306-0853 ext. 201,6313060853",
+              "py_output": "+16313060853",
+              "rs_output": null
+            },
+            {
+              "row_index": 362926,
+              "raw_input": "678.871.2222 ext.107,678.871.2223",
+              "py_output": "+16788712222",
+              "rs_output": null
+            },
+            {
+              "row_index": 446948,
+              "raw_input": "419-873-8500 \u2013 EXT. 1012,4192605526",
+              "py_output": "+14198738500",
+              "rs_output": null
+            },
+            {
+              "row_index": 468029,
+              "raw_input": "(973) 265-2005 ext. 200,2012454532,9732652005",
+              "py_output": "+19732652005",
+              "rs_output": null
+            },
+            {
+              "row_index": 488511,
+              "raw_input": "(716) 854-5400 Ext. 204,7168545400",
+              "py_output": "+17168545400",
+              "rs_output": null
+            },
+            {
+              "row_index": 785795,
+              "raw_input": "(901) 737-3883 ext. 114,2815468865",
+              "py_output": "+19017373883",
+              "rs_output": null
+            }
+          ],
+          "taxonomy": {
+            "actionable_gaps": {
+              "ACTIONABLE_COUNTRY_OR_TRUNK_GAP": {
+                "count": 97,
+                "description": "Leading zero trunk indicates international number lacking country prefix or context",
+                "examples": [
+                  "0284597439",
+                  "02078458534",
+                  "02038249955",
+                  "02038186718",
+                  "01244662810",
+                  "01483802010",
+                  "01618283111",
+                  "01619756700",
+                  "01244539595",
+                  "0862385503"
+                ]
+              },
+              "ACTIONABLE_DIAL_PLAN_OR_METADATA_GAP": {
+                "count": 427,
+                "description": "Number structure rejected by current national dial-plan tables or validation regex",
+                "examples": [
+                  "61383198111",
+                  "5166711099380",
+                  "41442178372",
+                  "35226470325",
+                  "74952349692",
+                  "61282720588",
+                  "3303455000331",
+                  "41584455509",
+                  "46705845556",
+                  "51675939001007"
+                ]
+              },
+              "ACTIONABLE_EXTENSION_FORMAT_GAP": {
+                "count": 46,
+                "description": "Unrecognized extension syntax or trailing delimiter",
+                "examples": [
+                  "6032262004#233,6179472393",
+                  "5126717526,5126717526#101,5127919553",
+                  "2819144223,3462952334#102,8324731292",
+                  "8003737600#2822,8155907319",
+                  "3054488882#236,9546558172",
+                  "5084436091#302,5084436092,7812586054",
+                  "7575304075#229,7575304970,7575604970",
+                  "3179751411,6592380010#103,9018707080",
+                  "5163583825,8646053970#703,8649214556",
+                  "3142058777,8063314899#107,8066792476"
+                ]
+              },
+              "ACTIONABLE_RUST_PYTHON_PARITY_GAP": {
+                "count": 10,
+                "description": "Discrepancy between compiled Rust PyO3 and pure Python batch output",
+                "examples": [
+                  "2149237666,5122220140ext7733,6309242400",
+                  "817-410-8200 ext. 9135,8178909135",
+                  "8603998202 ext 120,8607293798",
+                  "419-873-8500 \u2013 EXT. 1052,4793728004",
+                  "(631) 306-0853 ext. 201,6313060853",
+                  "678.871.2222 ext.107,678.871.2223",
+                  "419-873-8500 \u2013 EXT. 1012,4192605526",
+                  "(973) 265-2005 ext. 200,2012454532,9732652005",
+                  "(716) 854-5400 Ext. 204,7168545400",
+                  "(901) 737-3883 ext. 114,2815468865"
+                ]
+              },
+              "ACTIONABLE_VANITY_GAP": {
+                "count": 7,
+                "description": "Contains alphanumeric vanity letters not successfully folded",
+                "examples": [
+                  "1800TAXSKI,9097848831",
+                  "2543193848,817-410-8200 ext. 9139,8174108200",
+                  "800.366.7266 | ext. 3211,9165020574",
+                  "7174362144ext25025,7176676902",
+                  "4088230984,800.366.7266 ext. 3131",
+                  "6056105314,800.711.2027 ext. 10128",
+                  "4692159835,972-529-3888 ext 406"
+                ]
+              },
+              "ACTIONABLE_LOCAL_NANP_7_DIGIT": {
+                "count": 1,
+                "description": "7-digit local subscriber number lacking NPA area code",
+                "examples": [
+                  "7358882"
+                ]
+              }
+            },
+            "garbage_placeholders": {
+              "GARBAGE_EXCESSIVE_DIGITS": {
+                "count": 148594,
+                "description": "Excessive digits (> 15) exceeding ITU-T E.164 maximum capacity",
+                "examples": [
+                  "5853254140,5854358032",
+                  "6308128546,8479950247",
+                  "7323073124,7326904323",
+                  "8022238541,9177169915",
+                  "5614722700,6318068276",
+                  "3049910998,9999999999",
+                  "5072187707,6512450123",
+                  "4102566411,4104041178",
+                  "4047603041,4047903060",
+                  "3202142902,7853040404"
+                ]
+              },
+              "GARBAGE_SEQUENTIAL_OR_TEST": {
+                "count": 28,
+                "description": "Ascending or descending sequential test pattern",
+                "examples": [
+                  "5551234567",
+                  "1234567890",
+                  "8601234567",
+                  "7601234567",
+                  "00012345688",
+                  "5087353126,5123456789",
+                  "11234567890",
+                  "4257092345,6785497068",
+                  "46812345678",
+                  "5123456789,5126943950"
+                ]
+              },
+              "GARBAGE_INSUFFICIENT_DIGITS": {
+                "count": 22,
+                "description": "Fewer than 7 digits without emergency or short-code classification",
+                "examples": [
+                  "701",
+                  "507645",
+                  "1877",
+                  "1866",
+                  "9119",
+                  "1833",
+                  "833",
+                  "4372",
+                  "800",
+                  "2123"
+                ]
+              },
+              "GARBAGE_ALL_ZEROS_OR_ONES": {
+                "count": 1,
+                "description": "All identical repeated placeholder digits (e.g. 000-000-0000, 999-999-9999)",
+                "examples": [
+                  "0000000000"
+                ]
+              }
+            },
+            "review_risks": {
+              "REVIEW_COUNTRY_MISMATCH": {
+                "count": 788,
+                "description": "Number country calling code contradicts provided address country context",
+                "examples": [
+                  "4401483688787",
+                  "14169785703",
+                  "91553288851008",
+                  "650348623412",
+                  "5197848618",
+                  "4052063036",
+                  "3145761166226",
+                  "6043753599",
+                  "6473281123",
+                  "442078726300"
+                ]
+              },
+              "REVIEW_FUZZY": {
+                "count": 85,
+                "description": "Valid phone requiring data stewardship review",
+                "examples": [
+                  "5255016207",
+                  "3388756345",
+                  "9573600206",
+                  "9619130001",
+                  "5567999010",
+                  "4522392256",
+                  "3629665682",
+                  "7415412812",
+                  "4548892203",
+                  "7568153456"
+                ]
+              },
+              "REVIEW_PREMIUM_IRSF_RISK": {
+                "count": 2,
+                "description": "Valid premium-rate or toll fraud IRSF high-risk number",
+                "examples": [
+                  "9174497969",
+                  "9144138173"
+                ]
+              }
+            }
+          }
+        },
+        "Firm Phone": {
+          "column_name": "Firm Phone",
+          "total_rows": 804981,
+          "non_empty_rows": 803661,
+          "valid_count": 803533,
+          "valid_rate": 0.9998,
+          "auto_pass_count": 802833,
+          "fuzzy_review_count": 685,
+          "manual_stewardship_count": 143,
+          "healing_action_counts": {
+            "REDUNDANT_INTL_TRUNK_STRIPPED": 1205,
+            "IDD_EXIT_PREFIX_STRIPPED": 937,
+            "NATIONAL_TRUNK_STRIPPED": 186,
+            "COUNTRY_INFERRED_FROM_CONTEXT": 7
+          },
+          "risk_flag_counts": {
+            "ADDRESS_COUNTRY_MISMATCH": 639,
+            "INVALID_LENGTH": 118,
+            "PREMIUM_RATE_IRSF_RISK": 17,
+            "SEQUENTIAL_DIGITS": 10,
+            "REPEATING_DIGITS": 8,
+            "INVALID_EXCHANGE": 6,
+            "INVALID_AREA_CODE": 4,
+            "UNASSIGNED_CALLING_CODE": 1
+          },
+          "line_type_counts": {
+            "FIXED_LINE_OR_MOBILE": 604663,
+            "TOLL_FREE": 188265,
+            "FIXED_LINE": 9148,
+            "MOBILE": 1393,
+            "UNKNOWN": 119,
+            "VOIP": 34,
+            "SHARED_COST": 19,
+            "PREMIUM_RATE": 17,
+            "PERSONAL_NUMBER": 3
+          },
+          "country_distribution": {
+            "US": 789639,
+            "GB": 3555,
+            "CA": 2379,
+            "HK": 876,
+            "SG": 624,
+            "CH": 538,
+            "PR": 442,
+            "LU": 408,
+            "IN": 389,
+            "AU": 366
+          },
+          "single_record_rec_sec": 110101.4,
+          "batch_py_rec_sec": 136615.63,
+          "batch_rs_rec_sec": 811538.51,
+          "rust_speedup_factor": 5.94,
+          "parity_evaluated": 803661,
+          "parity_matches": 803661,
+          "parity_rate": 1.0,
+          "parity_divergences": [],
+          "taxonomy": {
+            "actionable_gaps": {
+              "ACTIONABLE_DIAL_PLAN_OR_METADATA_GAP": {
+                "count": 116,
+                "description": "Number structure rejected by current national dial-plan tables or validation regex",
+                "examples": [
+                  "+41 285 10 85",
+                  "41792184838",
+                  "6502153673",
+                  "9176127710",
+                  "4239332722",
+                  "3055033044",
+                  "34681953053",
+                  "3023425079",
+                  "(71) 632-6565",
+                  "2025397323"
+                ]
+              },
+              "ACTIONABLE_LOCAL_NANP_7_DIGIT": {
+                "count": 2,
+                "description": "7-digit local subscriber number lacking NPA area code",
+                "examples": [
+                  "735-8882"
+                ]
+              },
+              "ACTIONABLE_COUNTRY_OR_TRUNK_GAP": {
+                "count": 1,
+                "description": "Leading zero trunk indicates international number lacking country prefix or context",
+                "examples": [
+                  "01-703-47-8020"
+                ]
+              }
+            },
+            "garbage_placeholders": {
+              "GARBAGE_EXCESSIVE_DIGITS": {
+                "count": 4,
+                "description": "Excessive digits (> 15) exceeding ITU-T E.164 maximum capacity",
+                "examples": [
+                  "786 244-7346 786 458-8491",
+                  "212 937 8444 917 363 9568"
+                ]
+              },
+              "GARBAGE_ALL_ZEROS_OR_ONES": {
+                "count": 4,
+                "description": "All identical repeated placeholder digits (e.g. 000-000-0000, 999-999-9999)",
+                "examples": [
+                  "00000000",
+                  "0000000000"
+                ]
+              },
+              "GARBAGE_INSUFFICIENT_DIGITS": {
+                "count": 1,
+                "description": "Fewer than 7 digits without emergency or short-code classification",
+                "examples": [
+                  "815-281"
+                ]
+              }
+            },
+            "review_risks": {
+              "REVIEW_COUNTRY_MISMATCH": {
+                "count": 635,
+                "description": "Number country calling code contradicts provided address country context",
+                "examples": [
+                  "2128587000",
+                  "+44 (0)20 7818 1818",
+                  "4056735066",
+                  "4038809549",
+                  "972-9-9718100",
+                  "9292578058",
+                  "3124613918",
+                  "44 20 7015 8905",
+                  "+44 20 4570 2067",
+                  "+55 (11) 5180-3311"
+                ]
+              },
+              "REVIEW_FUZZY": {
+                "count": 48,
+                "description": "Valid phone requiring data stewardship review",
+                "examples": [
+                  "4858867168",
+                  "6484951703",
+                  "3812515800",
+                  "+44 20 7888 8888",
+                  "5123456789",
+                  "8466353951",
+                  "2304673000",
+                  "4522961611",
+                  "1141 58 283 71 11",
+                  "3222823995"
+                ]
+              },
+              "REVIEW_PREMIUM_IRSF_RISK": {
+                "count": 17,
+                "description": "Valid premium-rate or toll fraud IRSF high-risk number",
+                "examples": [
+                  "+35315669800",
+                  "+353 1 566 8194",
+                  "+353 1 536 14 00",
+                  "+353 (01) 582 7463",
+                  "9172022007",
+                  "35315743755"
+                ]
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "summary": {
+    "total_datasets": 4,
+    "total_rows_evaluated": 2005267,
+    "total_phone_inputs": 1410115,
+    "total_valid": 1260696,
+    "overall_valid_rate": 0.894,
+    "total_auto_pass": 1258822,
+    "total_fuzzy_review": 1852,
+    "total_manual_stewardship": 149441,
+    "rust_python_parity_rate": 0.999993
+  }
+}

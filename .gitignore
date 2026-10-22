@@ -60,3 +60,9 @@ sdks/dotnet/**/obj/
 
 # Docs
 site/
+
+# Local datasets
+.drive_datasets/
+
+# Agent metadata
+.agents/
