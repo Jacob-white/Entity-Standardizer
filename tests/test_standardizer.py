@@ -842,8 +842,42 @@ def test_milestone3_drive_dataset_remediations() -> None:
     p_multi_semi = standardize_phone("5853254140,5854358032;2125551234", country="US")
     assert p_multi_semi.is_valid is True and p_multi_semi.e164 == "+15853254140"
     p_taxski = standardize_phone("1800TAXSKI,9097848831", country="US")
-    assert p_taxski.is_valid is False
+    assert p_taxski.is_valid is True and p_taxski.e164 == "+19097848831"
     p_tight_ext = standardize_phone("7174362144ext25025,7176676902", country="US")
     assert p_tight_ext.is_valid is True and p_tight_ext.e164 == "+17174362144" and p_tight_ext.extension == "25025"
+
+    # Additional phone cleaning improvements (concatenated NANP extensions, multi-phone fallback, space double NANP, UK trunks & cross-country guard)
+    p_concat_ext1 = standardize_phone("5166711099380", country="US")
+    assert p_concat_ext1.is_valid is True and p_concat_ext1.e164 == "+15166711099" and p_concat_ext1.extension == "380"
+    p_concat_ext2 = standardize_phone("91553288851008", address_context={"country": "US", "state": "TX"})
+    assert p_concat_ext2.is_valid is True and p_concat_ext2.e164 == "+19155328885" and p_concat_ext2.extension == "1008"
+    p_concat_ext3 = standardize_phone("3145761166226", address_context={"country": "US", "state": "MO"})
+    assert p_concat_ext3.is_valid is True and p_concat_ext3.e164 == "+13145761166" and p_concat_ext3.extension == "226"
+
+    p_fallback1 = standardize_phone("1956468217,8307763662,9564682169")
+    assert p_fallback1.is_valid is True and p_fallback1.e164 == "+18307763662"
+    p_fallback2 = standardize_phone("2129448501#t.310,5164485499")
+    assert p_fallback2.is_valid is True and p_fallback2.e164 == "+15164485499"
+    p_fallback_vanity_primary = standardize_phone("1-800-FLOWERS,2125551234")
+    assert p_fallback_vanity_primary.is_valid is True and p_fallback_vanity_primary.e164 == "+18003569377"
+    p_fallback_all_bad = standardize_phone("1956468217,1800426375")
+    assert p_fallback_all_bad.is_valid is False
+
+    p_space_dbl1 = standardize_phone("212 937 8444 917 363 9568")
+    assert p_space_dbl1.is_valid is True and p_space_dbl1.e164 == "+12129378444"
+    p_space_dbl2 = standardize_phone("786 244-7346 786 458-8491")
+    assert p_space_dbl2.is_valid is True and p_space_dbl2.e164 == "+17862447346"
+
+    p_uk_11trunk = standardize_phone("01244662810")
+    assert p_uk_11trunk.is_valid is True and p_uk_11trunk.e164 == "+441244662810" and p_uk_11trunk.country_iso2 == "GB"
+    p_uk_mob_trunk = standardize_phone("07970202432")
+    assert p_uk_mob_trunk.is_valid is True and p_uk_mob_trunk.e164 == "+447970202432" and p_uk_mob_trunk.country_iso2 == "GB"
+
+    p_us_in_london1 = standardize_phone("9178229100", address_context={"postal_code": "EC4N"})
+    assert p_us_in_london1.is_valid is True and p_us_in_london1.e164 == "+19178229100" and p_us_in_london1.country_iso2 == "US"
+    p_us_in_london2 = standardize_phone("2128587000", country="GB")
+    assert p_us_in_london2.is_valid is True and p_us_in_london2.e164 == "+12128587000" and p_us_in_london2.country_iso2 == "US"
+    p_uk_bare_44 = standardize_phone("4401483688787", country="US")
+    assert p_uk_bare_44.is_valid is True and p_uk_bare_44.e164 == "+441483688787" and p_uk_bare_44.country_iso2 == "GB"
 
 

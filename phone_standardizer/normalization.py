@@ -69,6 +69,9 @@ _MULTI_PHONE_SEMI_SLASH_RE = re.compile(
     r"\s*(?:;|/|\||&)\s*(?!(?:ext|isub)=)",
     re.IGNORECASE,
 )
+_SPACE_DOUBLE_NANP_RE = re.compile(
+    r"^\s*(\(?[2-9]\d{2}\)?[\s.\-]?\d{3}[\s.\-]?\d{4})\s+(\(?[2-9]\d{2}\)?[\s.\-]?\d{3}[\s.\-]?\d{4})\s*$"
+)
 
 
 def _fold_unicode_digits_py(text: str) -> tuple[str, bool]:
@@ -94,8 +97,27 @@ def strip_leading_label(text: str) -> str:
     return _LEADING_LABEL_RE.sub("", text).strip()
 
 
+def _is_clean_nanp_segment(seg: str) -> bool:
+    """Return True if a multi-phone segment represents a clean 10- or 11-digit NANP candidate."""
+    cleaned = _TRAILING_NOTE_RE.sub("", seg).strip()
+    cleaned = re.sub(r"[!?|,;\s]+$", "", cleaned)
+    m = _EXTENSION_RE.search(cleaned)
+    if m:
+        cleaned = cleaned[:m.start()].strip()
+    pure_digits = "".join(c for c in cleaned if c.isdigit())
+    if len(pure_digits) < 10 and len(pure_digits) >= 3 and _VANITY_CANDIDATE_RE.search(cleaned):
+        digits = "".join(c for c in _fold_vanity_digits_py(cleaned) if c.isdigit())
+    elif any(ch.isalpha() for ch in cleaned):
+        return False
+    else:
+        digits = pure_digits
+    if len(digits) == 10 and digits[0] in "23456789" and digits[3] in "23456789":
+        return True
+    return len(digits) == 11 and digits[0] == "1" and digits[1] in "23456789" and digits[4] in "23456789"
+
+
 def split_primary_phone(text: str) -> tuple[str, bool]:
-    """If text contains multiple complete phone numbers separated by ';', '/', '|', '&', or ',', return (primary_phone, was_split)."""
+    """If text contains multiple complete phone numbers separated by ';', '/', '|', '&', ',', or whitespace, return (primary_phone, was_split)."""
     parts = _MULTI_PHONE_SEMI_SLASH_RE.split(text)
     if (
         len(parts) >= 2
@@ -114,10 +136,20 @@ def split_primary_phone(text: str) -> tuple[str, bool]:
             p0 = ",".join(cparts[:i]).strip()
             p1 = cparts[i].strip()
             d0 = sum(c.isdigit() for c in p0)
+            a0 = sum(c.isalpha() for c in p0)
             d1 = sum(c.isdigit() for c in p1)
-            if d0 >= 7 and d1 >= 7:
+            if (d0 >= 7 or (d0 >= 3 and d0 + a0 >= 7 and a0 >= 3)) and d1 >= 7:
                 p0_sub, _ = split_primary_phone(p0)
+                if not _is_clean_nanp_segment(p0_sub):
+                    for alt_raw in cparts[i:]:
+                        alt_sub, _ = split_primary_phone(alt_raw.strip())
+                        if _is_clean_nanp_segment(alt_sub):
+                            return alt_sub.strip(), True
                 return p0_sub.strip(), True
+
+    m_space = _SPACE_DOUBLE_NANP_RE.match(text)
+    if m_space:
+        return m_space.group(1).strip(), True
 
     return text, False
 
