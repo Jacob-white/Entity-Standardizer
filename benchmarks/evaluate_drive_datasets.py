@@ -50,7 +50,21 @@ import phone_standardizer._native_dispatch as nd  # noqa: E402
 # -----------------------------------------------------------------------------
 
 _PHONE_COL_EXCLUDE = re.compile(
-    r"(?:_type|_carrier|_flag|_valid|_status|_id|_verified|_opt_in|_consent|_count|_desc|_ts)$",
+    r"(?:[\s_-]+(?:type|carrier|flag|valid|status|id|verified|opt_in|opt-in|consent|count|desc|ts)|(?:_type|_carrier|_flag|_valid|_status|_id|_verified|_opt_in|_consent|_count|_desc|_ts))$",
+    re.IGNORECASE,
+)
+
+_DATE_PATTERNS = re.compile(
+    r"^\d{4}[-/]\d{1,2}[-/]\d{1,2}|^\d{1,2}[-/]\d{1,2}[-/]\d{2,4}",
+)
+
+_NON_PHONE_COL = re.compile(
+    r"(?:date|time|url|link|email|mail|name|desc|note|comment|title|crd|addr|street|city|state|zip|country|custodian|exam|license|aum|revenue|rep|employee)",
+    re.IGNORECASE,
+)
+
+_PHONE_PATTERN = re.compile(
+    r"^\+?[0-9\s\(\)\-\.\/]{7,25}(?:(?:x|ext|#)\s*\d+)?$",
     re.IGNORECASE,
 )
 
@@ -214,6 +228,9 @@ def detect_columns(
             continue
 
         # Data-level fallback sampling
+        if _NON_PHONE_COL.search(col) or col in context_cols.values():
+            continue
+
         dtype = df.schema.get(col)
         if dtype in (pl.String, pl.Utf8, pl.Object):
             sample_values = (
@@ -226,9 +243,12 @@ def detect_columns(
                 phone_like_hits = 0
                 for val in sample_values:
                     v_str = str(val).strip()
-                    digits = sum(c.isdigit() for c in v_str)
-                    if 7 <= digits <= 15 and any(c in v_str for c in ("-", "(", ")", "+", " ")):
-                        phone_like_hits += 1
+                    if _DATE_PATTERNS.match(v_str):
+                        continue
+                    if _PHONE_PATTERN.match(v_str):
+                        digits = sum(c.isdigit() for c in v_str)
+                        if 7 <= digits <= 15:
+                            phone_like_hits += 1
                 if phone_like_hits / len(sample_values) >= 0.35:
                     phone_cols.append(col)
 
@@ -682,10 +702,16 @@ def evaluate_dataset_file(
         )
 
         for col in phone_cols:
+            col_context = dict(context_cols)
+            if "firm" in col.lower():
+                for k, v in context_cols.items():
+                    firm_candidate = f"Firm {v}" if v else None
+                    if firm_candidate and firm_candidate in df.columns:
+                        col_context[k] = firm_candidate
             col_metrics = evaluate_column(
                 df,
                 phone_col=col,
-                context_cols=context_cols,
+                context_cols=col_context,
                 batch_size=batch_size,
             )
             dataset_metrics.column_metrics[col] = col_metrics
