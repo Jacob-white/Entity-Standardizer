@@ -165,13 +165,21 @@ class ColumnEvaluationMetrics:
 class DatasetEvaluationMetrics:
     """Evaluation summary for a dataset file."""
 
-    file_name: str
-    file_path: str
-    file_size_bytes: int
-    row_count: int
-    detected_phone_columns: list[str]
-    detected_context_columns: dict[str, str | None]
+    file_name: str = ""
+    file_path: str = ""
+    file_size_bytes: int = 0
+    row_count: int = 0
+    detected_phone_columns: list[str] = field(default_factory=list)
+    detected_context_columns: dict[str, str | None] = field(default_factory=dict)
     column_metrics: dict[str, ColumnEvaluationMetrics] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        if self.file_path:
+            self.file_path = str(self.file_path)
+            if not self.file_name:
+                self.file_name = Path(self.file_path).name
+        elif self.file_name and not self.file_path:
+            self.file_path = self.file_name
 
 
 # -----------------------------------------------------------------------------
@@ -564,50 +572,135 @@ def evaluate_dataset_file(
     max_rows: int | None = None,
 ) -> DatasetEvaluationMetrics:
     """Load and evaluate all phone columns in a dataset file."""
-    file_size = file_path.stat().st_size
+    try:
+        file_size = file_path.stat().st_size
+    except Exception as exc:
+        print(f"  [!] Warning: Could not access {file_path.name}: {exc}. Skipping.")
+        return DatasetEvaluationMetrics(
+            file_name=file_path.name,
+            file_path=str(file_path),
+            file_size_bytes=0,
+            row_count=0,
+        )
+
+    if file_size == 0:
+        print(f"  [!] Warning: Skipping 0-byte file: {file_path.name}")
+        return DatasetEvaluationMetrics(
+            file_name=file_path.name,
+            file_path=str(file_path),
+            file_size_bytes=0,
+            row_count=0,
+        )
+
     suffix = file_path.suffix.lower()
 
-    # Load dataset via Polars
-    if suffix in (".parquet", ".pq"):
-        df = pl.read_parquet(file_path, n_rows=max_rows)
-    elif suffix in (".tsv", ".tab") or file_path.name.endswith(".tsv.gz"):
-        df = pl.read_csv(
-            file_path,
-            separator="\t",
-            n_rows=max_rows,
-            ignore_errors=True,
-            infer_schema_length=1000,
-        )
-    elif suffix in (".jsonl", ".ndjson") or file_path.name.endswith(".jsonl.gz"):
-        df = pl.read_ndjson(file_path, n_rows=max_rows, ignore_errors=True)
-    else:  # CSV default
-        df = pl.read_csv(
-            file_path,
-            n_rows=max_rows,
-            ignore_errors=True,
-            infer_schema_length=1000,
+    try:
+        # Load dataset via Polars
+        if suffix in (".parquet", ".pq"):
+            df = pl.read_parquet(file_path, n_rows=max_rows)
+        elif suffix in (".tsv", ".tab") or file_path.name.endswith(".tsv.gz"):
+            try:
+                df = pl.read_csv(
+                    file_path,
+                    separator="\t",
+                    n_rows=max_rows,
+                    ignore_errors=True,
+                    truncate_ragged_lines=True,
+                    encoding="utf8-lossy",
+                    infer_schema_length=1000,
+                )
+            except Exception:
+                if file_path.name.endswith(".gz"):
+                    import gzip
+
+                    with gzip.open(file_path, "rb") as f:
+                        raw_data = f.read()
+                else:
+                    with file_path.open("rb") as f:
+                        raw_data = f.read()
+                clean_bytes = raw_data.decode("utf-8", errors="replace").encode("utf-8")
+                df = pl.read_csv(
+                    clean_bytes,
+                    separator="\t",
+                    n_rows=max_rows,
+                    ignore_errors=True,
+                    truncate_ragged_lines=True,
+                    encoding="utf8-lossy",
+                    infer_schema_length=1000,
+                )
+        elif suffix in (".jsonl", ".ndjson") or file_path.name.endswith(".jsonl.gz"):
+            try:
+                df = pl.read_ndjson(file_path, n_rows=max_rows, ignore_errors=True)
+            except Exception:
+                if file_path.name.endswith(".gz"):
+                    import gzip
+
+                    with gzip.open(file_path, "rb") as f:
+                        raw_data = f.read()
+                else:
+                    with file_path.open("rb") as f:
+                        raw_data = f.read()
+                clean_bytes = raw_data.decode("utf-8", errors="replace").encode("utf-8")
+                df = pl.read_ndjson(clean_bytes, n_rows=max_rows, ignore_errors=True)
+        else:  # CSV default
+            try:
+                df = pl.read_csv(
+                    file_path,
+                    n_rows=max_rows,
+                    ignore_errors=True,
+                    truncate_ragged_lines=True,
+                    encoding="utf8-lossy",
+                    infer_schema_length=1000,
+                )
+            except Exception:
+                if file_path.name.endswith(".gz"):
+                    import gzip
+
+                    with gzip.open(file_path, "rb") as f:
+                        raw_data = f.read()
+                else:
+                    with file_path.open("rb") as f:
+                        raw_data = f.read()
+                clean_bytes = raw_data.decode("utf-8", errors="replace").encode("utf-8")
+                df = pl.read_csv(
+                    clean_bytes,
+                    n_rows=max_rows,
+                    ignore_errors=True,
+                    truncate_ragged_lines=True,
+                    encoding="utf8-lossy",
+                    infer_schema_length=1000,
+                )
+
+        phone_cols, context_cols = detect_columns(df)
+        dataset_metrics = DatasetEvaluationMetrics(
+            file_name=file_path.name,
+            file_path=str(file_path),
+            file_size_bytes=file_size,
+            row_count=len(df),
+            detected_phone_columns=phone_cols,
+            detected_context_columns=context_cols,
         )
 
-    phone_cols, context_cols = detect_columns(df)
-    dataset_metrics = DatasetEvaluationMetrics(
-        file_name=file_path.name,
-        file_path=str(file_path),
-        file_size_bytes=file_size,
-        row_count=len(df),
-        detected_phone_columns=phone_cols,
-        detected_context_columns=context_cols,
-    )
+        for col in phone_cols:
+            col_metrics = evaluate_column(
+                df,
+                phone_col=col,
+                context_cols=context_cols,
+                batch_size=batch_size,
+            )
+            dataset_metrics.column_metrics[col] = col_metrics
 
-    for col in phone_cols:
-        col_metrics = evaluate_column(
-            df,
-            phone_col=col,
-            context_cols=context_cols,
-            batch_size=batch_size,
+        return dataset_metrics
+
+    except Exception as exc:
+        print(f"  [!] Warning: Failed to evaluate {file_path.name}: {exc}. Skipping.")
+        return DatasetEvaluationMetrics(
+            file_name=file_path.name,
+            file_path=str(file_path),
+            file_size_bytes=file_size,
+            row_count=0,
         )
-        dataset_metrics.column_metrics[col] = col_metrics
 
-    return dataset_metrics
 
 
 # -----------------------------------------------------------------------------
@@ -961,11 +1054,24 @@ def main() -> int:
 
     for file_path in dataset_files:
         print(f"\nProcessing {file_path.name}...")
-        eval_metrics = evaluate_dataset_file(
-            file_path,
-            batch_size=args.batch_size,
-            max_rows=args.max_rows,
-        )
+        try:
+            eval_metrics = evaluate_dataset_file(
+                file_path,
+                batch_size=args.batch_size,
+                max_rows=args.max_rows,
+            )
+        except Exception as exc:
+            print(f"  [!] Warning: Unexpected error evaluating {file_path.name}: {exc}. Skipping.")
+            try:
+                f_size = file_path.stat().st_size
+            except Exception:
+                f_size = 0
+            eval_metrics = DatasetEvaluationMetrics(
+                file_name=file_path.name,
+                file_path=str(file_path),
+                file_size_bytes=f_size,
+                row_count=0,
+            )
 
         # Convert to dictionary
         d_dict = asdict(eval_metrics)
