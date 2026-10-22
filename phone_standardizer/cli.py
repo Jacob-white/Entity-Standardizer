@@ -8,6 +8,7 @@ import sys
 from typing import Sequence
 
 from phone_standardizer.batch import stream_standardize_csv
+from phone_standardizer.dedup import compare_phones, deduplicate_phones
 from phone_standardizer.registry import get_dial_plan
 from phone_standardizer.standardizer import standardize_phone
 
@@ -38,6 +39,19 @@ def build_parser() -> argparse.ArgumentParser:
     batch_cmd.add_argument("--country-col", default="country", help="Optional column containing country hints.")
     batch_cmd.add_argument("--default-country", default="US", help="Fallback ISO country (default: US).")
 
+    # compare command
+    cmp_cmd = sub.add_parser("compare", help="Compare two phone numbers for exact or fuzzy similarity.")
+    cmp_cmd.add_argument("phone_a", help="First raw phone number.")
+    cmp_cmd.add_argument("phone_b", help="Second raw phone number.")
+    cmp_cmd.add_argument("-c", "--country", default=None, help="Optional ISO country hint.")
+    cmp_cmd.add_argument("-t", "--threshold", type=float, default=0.88, help="Fuzzy threshold (default: 0.88).")
+
+    # dedup command
+    dedup_cmd = sub.add_parser("dedup", help="Cluster and deduplicate phone numbers into Golden Phone Records.")
+    dedup_cmd.add_argument("phones", nargs="+", help="Raw phone strings to deduplicate.")
+    dedup_cmd.add_argument("-c", "--country", default=None, help="Optional ISO country hint.")
+    dedup_cmd.add_argument("-t", "--threshold", type=float, default=0.88, help="Fuzzy threshold (default: 0.88).")
+
     return parser
 
 
@@ -61,6 +75,25 @@ def main(argv: Sequence[str] | None = None) -> int:
             sys.stderr.write(f"Error: Unknown country identifier '{args.identifier}'\n")
             return 1
         sys.stdout.write(json.dumps(plan.to_dict(), indent=2) + "\n")
+        return 0
+
+    if args.command == "compare":
+        cmp_res = compare_phones(
+            args.phone_a,
+            args.phone_b,
+            country=args.country,
+            fuzzy_threshold=args.threshold,
+        )
+        sys.stdout.write(json.dumps(cmp_res.to_dict(), indent=2) + "\n")
+        return 0
+
+    if args.command == "dedup":
+        clusters = deduplicate_phones(
+            args.phones,
+            country=args.country,
+            fuzzy_threshold=args.threshold,
+        )
+        sys.stdout.write(json.dumps([c.to_dict() for c in clusters], indent=2) + "\n")
         return 0
 
     # args.command == "batch"

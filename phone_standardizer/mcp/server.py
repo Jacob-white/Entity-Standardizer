@@ -7,6 +7,7 @@ import sys
 from typing import Any
 
 from phone_standardizer.audit import explain_phone
+from phone_standardizer.dedup import compare_phones, deduplicate_phones
 from phone_standardizer.registry import get_dial_plan
 from phone_standardizer.standardizer import mask_phone, standardize_phone
 
@@ -59,6 +60,33 @@ MCP_TOOLS: list[dict[str, Any]] = [
                 "default_country": {"type": "string", "default": "US"},
             },
             "required": ["phone"],
+        },
+    },
+    {
+        "name": "compare_phones",
+        "description": "Compare two telephone numbers using E.164 equivalence, extension awareness, and keypad/transposition edit distance.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "phone_a": {"type": "string"},
+                "phone_b": {"type": "string"},
+                "country": {"type": "string"},
+                "fuzzy_threshold": {"type": "number", "default": 0.88},
+            },
+            "required": ["phone_a", "phone_b"],
+        },
+    },
+    {
+        "name": "deduplicate_phones",
+        "description": "Cluster and deduplicate a list of telephone numbers into Golden Phone Records.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "phones": {"type": "array", "items": {"type": "string"}},
+                "country": {"type": "string"},
+                "fuzzy_threshold": {"type": "number", "default": 0.88},
+            },
+            "required": ["phones"],
         },
     },
 ]
@@ -131,6 +159,36 @@ def handle_mcp_request(request: dict[str, Any]) -> dict[str, Any]:
                 "jsonrpc": "2.0",
                 "id": req_id,
                 "result": {"content": [{"type": "text", "text": json.dumps(report)}]},
+            }
+        if tool_name == "compare_phones":
+            cmp_res = compare_phones(
+                args.get("phone_a", ""),
+                args.get("phone_b", ""),
+                country=args.get("country"),
+                fuzzy_threshold=float(args.get("fuzzy_threshold", 0.88)),
+            )
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {"content": [{"type": "text", "text": json.dumps(cmp_res.to_dict())}]},
+            }
+        if tool_name == "deduplicate_phones":
+            clusters = deduplicate_phones(
+                args.get("phones") or [],
+                country=args.get("country"),
+                fuzzy_threshold=float(args.get("fuzzy_threshold", 0.88)),
+            )
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": json.dumps([c.to_dict() for c in clusters]),
+                        }
+                    ]
+                },
             }
         return {
             "jsonrpc": "2.0",

@@ -288,5 +288,6 @@ Computes a deterministic confidence score $C \in [0.0, 1.0]$ and maps to:
 | **M2** | Normalization, Vanity, Extensions & Trunk Healing | `normalization.py`, `standardizer.py` | **Active (v1.0.0)** |
 | **M3** | Fraud/Bogus Detection & Confidence Routing | `confidence.py` | **Active (v1.0.0)** |
 | **M4** | Batch Streaming, CLI, FastAPI Server & MCP | `batch.py`, `cli.py`, `server.py`, `mcp/` | **Active (v1.0.0)** |
-| **M5** | Native Rust PyO3 Extension & Polyglot SDKs | `src/lib.rs`, `_native_dispatch.py`, `sdks/` | **Active (v1.0.0)** |
-| **M6** | 100% Coverage Verification & CI/CD Pipelines | `tests/`, `.github/workflows/ci.yml` | **Active (v1.0.0)** |
+| **M5** | Native Rust PyO3 Extension, Arrow/DuckDB & SDKs | `src/lib.rs`, `arrow.py`, `_native_dispatch.py`, `sdks/` | **Active (v1.1.0)** |
+| **M6** | Sub-National Intelligence, Multi-Tier Cache & Audit Ledger | `intelligence.py`, `cache.py`, `audit.py` | **Active (v1.1.0)** |
+| **M7** | Fuzzy Telephony Deduplication & Contact Entity Resolution | `dedup.py`, `/v1/compare`, `/v1/deduplicate` | **Active (v1.2.0)** |
