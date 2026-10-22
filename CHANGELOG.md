@@ -2,6 +2,19 @@
 
 All notable changes to **Phone Standardizer** will be documented in this file.
 
+## [1.1.0] - 2026-10-21
+
+### Added
+- **Sub-National Geographic, Timezone & Carrier MNO Intelligence** (`phone_standardizer/intelligence.py`):
+  - `resolve_timezones`: Maps all 50 US states, DC, Canadian provinces, and global ISO countries to IANA timezones (`America/Los_Angeles`, `Europe/London`, `Asia/Tokyo`, etc.).
+  - `resolve_locality`: Metro area & city gazetteer for major NANP and international area codes.
+  - `resolve_carrier_hint`: International Mobile Network Operator (MNO) prefix attribution.
+  - `evaluate_calling_window`: Conservative multi-timezone TCPA/DNC local quiet-hours evaluator (`08:00–21:00` local time).
+- **Multi-Tier Caching Engine** (`phone_standardizer/cache.py`): Thread-safe L1 `LRUCache` + persistent L2 `SQLiteCache` (WAL mode) with `MultiTierCache`, `configure_cache`, `get_cache_stats`, and `clear_cache`.
+- **Stewardship Audit Ledger & Explainability** (`phone_standardizer/audit.py`): `explain_phone()` diagnostic report, `/v1/explain` HTTP endpoint, `explain_phone` MCP tool, and SQLite-backed `PhoneStewardshipLedger`.
+- **Brazil Legacy 8-to-9 Digit Mobile Healer & Free-Text Bulk Extractor**: `HealingAction.BRAZIL_MOBILE_9_INSERTED` and `extract_phones_from_text()`.
+- **Columnar Arrow/Polars/DuckDB UDFs & Multi-Platform SDKs**: `phone_standardizer/arrow.py`, `src/lib.rs` batch E.164 acceleration, and TypeScript/React, Go, and .NET client SDKs.
+
 ## [1.0.0] - 2026-10-21
 
 ### Added

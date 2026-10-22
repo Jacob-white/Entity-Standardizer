@@ -384,6 +384,11 @@ def standardize_phone(
         nsn = "9" + nsn[:2] + nsn[4:]
         healing_actions.append(HealingAction.ARGENTINA_MOBILE_15_HEALED)
 
+    # Brazil (+55): heal legacy 10-digit mobile numbers (2-digit DDD + 8-digit mobile starting with 6-9) by inserting '9'
+    if plan.iso2 == "BR" and len(nsn) == 10 and nsn[2] in "6789":
+        nsn = nsn[:2] + "9" + nsn[2:]
+        healing_actions.append(HealingAction.BRAZIL_MOBILE_9_INSERTED)
+
     # Check cross-field mismatch if explicit/address country hint conflicts with resolved calling code
     if (
         hint_iso2
@@ -541,3 +546,28 @@ def mask_phone(
         masked_nsn = ("*" * max(0, len(nsn) - 4)) + nsn[-4:]
         return f"+{res.country_calling_code}{masked_nsn}"
     return ("*" * max(0, len(target) - 4)) + target[-4:]
+
+
+# Candidate phone number regex for free-text extraction
+_FREE_TEXT_PHONE_CANDIDATE_RE = re.compile(
+    r"(?:\+\d{1,3}[\s.\-]?)?(?:\(\d{1,4}\)[\s.\-]?|\d{1,4}[\s.\-])\d{2,4}[\s.\-]\d{3,5}(?:\s*(?:ext\.?|x|#)\s*\d{1,6})?",
+    re.IGNORECASE,
+)
+
+
+def extract_phones_from_text(
+    text: str | None,
+    default_country: str = "US",
+) -> list[StandardizedPhone]:
+    """Extract and standardize all valid telephone numbers embedded in unstructured text."""
+    if not text:
+        return []
+    seen_keys: set[str] = set()
+    extracted: list[StandardizedPhone] = []
+    for match in _FREE_TEXT_PHONE_CANDIDATE_RE.finditer(text):
+        candidate = match.group(0).strip()
+        rec = standardize_phone(candidate, default_country=default_country)
+        if rec.is_valid and rec.phone_ext_key and rec.phone_ext_key not in seen_keys:
+            seen_keys.add(rec.phone_ext_key)
+            extracted.append(rec)
+    return extracted

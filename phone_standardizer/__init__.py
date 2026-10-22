@@ -15,16 +15,37 @@ from phone_standardizer.arrow import (
     standardize_arrow,
     standardize_polars,
 )
+from phone_standardizer.audit import (
+    PhoneStewardshipLedger,
+    explain_phone,
+)
 from phone_standardizer.batch import (
     batch_standardize_phones,
     stream_standardize_csv,
     stream_standardize_jsonl,
+)
+from phone_standardizer.cache import (
+    LRUCache,
+    MultiTierCache,
+    SQLiteCache,
+    clear_cache,
+    configure_cache,
+    get_cache_stats,
+    get_default_cache,
+    make_cache_key,
 )
 from phone_standardizer.confidence import (
     evaluate_confidence_and_risk,
     has_repeating_subscriber_digits,
     has_sequential_subscriber_digits,
     is_fictitious_number,
+)
+from phone_standardizer.intelligence import (
+    CallingWindowResult,
+    evaluate_calling_window,
+    resolve_carrier_hint,
+    resolve_locality,
+    resolve_timezones,
 )
 from phone_standardizer.models import (
     CountryDialPlan,
@@ -46,6 +67,7 @@ from phone_standardizer.registry import (
     normalize_country_iso2,
 )
 from phone_standardizer.standardizer import (
+    extract_phones_from_text,
     format_e164,
     format_international,
     format_national,
@@ -55,22 +77,32 @@ from phone_standardizer.standardizer import (
     validate_phone,
 )
 
-__version__ = "1.0.0"
+__version__ = "1.1.0"
 
 __all__ = [
+    "CallingWindowResult",
     "CountryDialPlan",
     "CountryDialRegistry",
     "HealingAction",
+    "LRUCache",
+    "MultiTierCache",
     "PhoneLineType",
     "PhoneRiskFlag",
     "PhoneRoutingTier",
+    "PhoneStewardshipLedger",
+    "SQLiteCache",
     "StandardizedPhone",
     "__version__",
     "batch_standardize_phones",
+    "clear_cache",
+    "configure_cache",
     "decode_vanity_phone",
+    "evaluate_calling_window",
     "evaluate_confidence_and_risk",
+    "explain_phone",
     "extract_digits_dispatch",
     "extract_extension",
+    "extract_phones_from_text",
     "fold_unicode_digits",
     "fold_unicode_digits_dispatch",
     "fold_vanity_digits_dispatch",
@@ -78,16 +110,22 @@ __all__ = [
     "format_international",
     "format_national",
     "format_rfc3966",
+    "get_cache_stats",
+    "get_default_cache",
     "get_dial_plan",
     "get_engine_info",
     "has_repeating_subscriber_digits",
     "has_sequential_subscriber_digits",
     "is_fictitious_number",
     "is_native_available",
+    "make_cache_key",
     "mask_phone",
     "normalize_country_iso2",
     "register_duckdb_udfs",
+    "resolve_carrier_hint",
+    "resolve_locality",
     "resolve_nanp_npa",
+    "resolve_timezones",
     "standardize_arrow",
     "standardize_batch_e164_dispatch",
     "standardize_phone",
