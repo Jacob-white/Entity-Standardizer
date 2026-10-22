@@ -699,3 +699,121 @@ def test_phase6_global_remediations_and_edge_cases() -> None:
     extracted = extract_phones_from_text("2026-04-21T14:30:00-04:00 call (415) 555-2671")
     assert [m.e164 for m in extracted] == ["+14155552671"]
 
+
+def test_milestone3_drive_dataset_remediations() -> None:
+    from phone_standardizer.normalization import extract_extension, split_primary_phone
+
+    # 1. Multi-number comma splitting without space
+    p_multi = standardize_phone("5853254140,5854358032")
+    assert p_multi.e164 == "+15853254140"
+    assert p_multi.is_valid is True
+    assert HealingAction.MULTI_NUMBER_PRIMARY_SELECTED in p_multi.healing_actions
+
+    # Multi-number comma splitting with extension and third number
+    p_multi_ext = standardize_phone("2149237666,5122220140ext7733,6309242400")
+    assert p_multi_ext.e164 == "+12149237666"
+    assert HealingAction.MULTI_NUMBER_PRIMARY_SELECTED in p_multi_ext.healing_actions
+
+    # Multi-number with extension on primary
+    p_primary_ext = standardize_phone("817-410-8200 ext. 9135,8178909135")
+    assert p_primary_ext.e164 == "+18174108200"
+    assert p_primary_ext.extension == "9135"
+    assert HealingAction.MULTI_NUMBER_PRIMARY_SELECTED in p_primary_ext.healing_actions
+    assert HealingAction.EXTENSION_EXTRACTED in p_primary_ext.healing_actions
+
+    # Pipe delimiter before extension
+    p_pipe_ext = standardize_phone("800.366.7266 | ext. 3211")
+    assert p_pipe_ext.e164 == "+18003667266"
+    assert p_pipe_ext.extension == "3211"
+
+    # In-line '#' extension syntax up to 10 digits
+    p_hash_ext = standardize_phone("6032262004#233,6179472393")
+    assert p_hash_ext.e164 == "+16032262004"
+    assert p_hash_ext.extension == "233"
+
+    p_hash_single = standardize_phone("5126717526#101")
+    assert p_hash_single.e164 == "+15126717526"
+    assert p_hash_single.extension == "101"
+
+    # Vanity candidate without space before letters
+    p_vanity = standardize_phone("(844)PLAN4IT")
+    assert p_vanity.e164 == "+18447526448"
+    assert p_vanity.vanity_alias == "(844)PLAN4IT"
+
+    # Domestic '01' and '0' trunk healing for NANP
+    p_01_nanp = standardize_phone("01-703-47-8020")
+    assert p_01_nanp.e164 == "+17034780200"
+    assert HealingAction.NATIONAL_TRUNK_STRIPPED in p_01_nanp.healing_actions
+
+    p_01_12digit = standardize_phone("01-415-555-2671")
+    assert p_01_12digit.e164 == "+14155552671"
+    assert HealingAction.NATIONAL_TRUNK_STRIPPED in p_01_12digit.healing_actions
+
+    p_0_11digit = standardize_phone("0-415-555-2671")
+    assert p_0_11digit.e164 == "+14155552671"
+    assert HealingAction.NATIONAL_TRUNK_STRIPPED in p_0_11digit.healing_actions
+
+    p_0_invalid_npa = standardize_phone("0-999-555-2671")
+    assert p_0_invalid_npa.is_valid is False
+    assert PhoneRiskFlag.INVALID_LENGTH in p_0_invalid_npa.risk_flags
+
+    # 11-digit non-NANP international dialing code resolution
+    p_be = standardize_phone("32455113280")
+    assert p_be.e164 == "+32455113280"
+    assert p_be.country_iso2 == "BE"
+
+    p_ch = standardize_phone("41442178372")
+    assert p_ch.e164 == "+41442178372"
+    assert p_ch.country_iso2 == "CH"
+
+    p_au = standardize_phone("61383198111")
+    assert p_au.e164 == "+61383198111"
+    assert p_au.country_iso2 == "AU"
+
+    # Switzerland legacy lengths (7, 8 digits)
+    p_ch_leg7 = standardize_phone("+41 22 123 456")
+    assert p_ch_leg7.country_iso2 == "CH"
+    p_ch_leg8 = standardize_phone("+41 22 123 4567")
+    assert p_ch_leg8.e164 == "+41221234567"
+    assert p_ch_leg8.country_iso2 == "CH"
+
+    # Address context with UK outcodes and Crown Dependencies / Overseas Territories
+    p_gb_w1f = standardize_phone("020 7845 8534", address_context={"postal_code": "W1F 8"})
+    assert p_gb_w1f.e164 == "+442078458534"
+    assert p_gb_w1f.country_iso2 == "GB"
+
+    p_gb_ec1a = standardize_phone("020 3824 9955", address_context={"postal_code": "EC1A"})
+    assert p_gb_ec1a.e164 == "+442038249955"
+    assert p_gb_ec1a.country_iso2 == "GB"
+
+    p_je = standardize_phone("01534 123456", address_context={"postal_code": "JE2 3RP"})
+    assert p_je.e164 == "+441534123456"
+    assert p_je.country_iso2 == "JE"
+
+    p_gg = standardize_phone("01481 123456", address_context={"postal_code": "GY1 1AA"})
+    assert p_gg.e164 == "+441481123456"
+    assert p_gg.country_iso2 == "GG"
+
+    p_im = standardize_phone("01624 123456", address_context={"postal_code": "IM1 2PQ"})
+    assert p_im.e164 == "+441624123456"
+    assert p_im.country_iso2 == "IM"
+
+    p_ky = standardize_phone("345-949-1234", address_context={"postal_code": "KY1-1102"})
+    assert p_ky.e164 == "+13459491234"
+    assert p_ky.country_iso2 == "KY"
+
+    p_bm = standardize_phone("441-295-1234", address_context={"postal_code": "HM 08"})
+    assert p_bm.e164 == "+14412951234"
+    assert p_bm.country_iso2 == "BM"
+
+    # split_primary_phone edge cases
+    assert split_primary_phone("2125551234") == ("2125551234", False)
+    assert split_primary_phone("123;456") == ("123;456", False)
+    assert split_primary_phone("2125551234 | 2125555678") == ("2125551234", True)
+    assert split_primary_phone("2125551234, 123") == ("2125551234, 123", False)
+    assert split_primary_phone("2125551234, 104, 2125555678") == ("2125551234, 104", True)
+
+    # extract_extension edge cases
+    assert extract_extension("2125551234")[1] is None
+    assert extract_extension("2125551234 |")[0] == "2125551234"
+

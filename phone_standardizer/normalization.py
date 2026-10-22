@@ -39,12 +39,12 @@ _EXTENSION_RE = re.compile(
     r"(?:"
     r";(?:ext|isub)=([0-9]{1,10})"
     r"|\(\s*(?:ext\.?|extension|xt\.?|int\.?|interno|ramal|poste|dw|durchwahl|доб\.?|内線|x\.?|#)\s*[:\-#]?\s*([0-9]{1,10})\s*\)"
-    r"|(?:,|\s)+(?:"
+    r"|(?:[|,;\s]+)(?:"
     r"(?:ext\.?|extension|xt\.?|int\.?|interno|ramal|poste|dw|durchwahl|доб\.?|内線)\s*[:\-#]?\s*"
     r"|x\.?\s*[:\-#]?\s*"
     r"|#\s*"
     r")([0-9]{1,10})"
-    r"|(?<=\d)\s*(?:x\.?\s*[:\-#]?\s*([0-9]{1,10})|(?:[,;#]+|[pw]+)\s*([0-9]{1,7}))"
+    r"|(?<=\d)\s*(?:(?:x\.?|#)\s*[:\-#]?\s*([0-9]{1,10})|(?:[,;#]+|[pw]+)\s*([0-9]{1,10}))"
     r")\s*$",
     re.IGNORECASE,
 )
@@ -61,11 +61,14 @@ _TRAILING_NOTE_RE = re.compile(r"\s*\([A-Za-z\s.,'\-]{2,}\)\s*$")
 
 # Vanity token pattern: digits/prefix followed by separator and 3-11 alphanumeric vanity letters/digits
 _VANITY_CANDIDATE_RE = re.compile(
-    r"(\+?[0-9()\s.,\-]{3,16}[-\s.,])([A-Za-z0-9]*[A-Za-z]{3,8}[A-Za-z0-9]*(?:[-\s][A-Za-z0-9]{2,6})?)"
+    r"(\+?[0-9()\s.,\-]{3,16}[-\s.,]?)(?=[A-Za-z])([A-Za-z0-9]*[A-Za-z]{3,8}[A-Za-z0-9]*(?:[-\s][A-Za-z0-9]{2,6})?)"
 )
 
 _TIME_RANGE_RE = re.compile(r"\b\d{1,2}:\d{2}\s*(?:AM|PM)\b", re.IGNORECASE)
-_MULTI_PHONE_SEMI_SLASH_RE = re.compile(r"\s*(?:;|/|&)\s*(?!(?:ext|isub)=)", re.IGNORECASE)
+_MULTI_PHONE_SEMI_SLASH_RE = re.compile(
+    r"\s*(?:;|/|\||&)\s*(?!(?:ext|isub)=)",
+    re.IGNORECASE,
+)
 
 
 def _fold_unicode_digits_py(text: str) -> tuple[str, bool]:
@@ -91,8 +94,8 @@ def strip_leading_label(text: str) -> str:
     return _LEADING_LABEL_RE.sub("", text).strip()
 
 
-def split_primary_phone(text: str) -> str:
-    """If text contains multiple complete phone numbers separated by ';', '/', '&', or ', ', return the primary (first) phone."""
+def split_primary_phone(text: str) -> tuple[str, bool]:
+    """If text contains multiple complete phone numbers separated by ';', '/', '|', '&', or ',', return (primary_phone, was_split)."""
     parts = _MULTI_PHONE_SEMI_SLASH_RE.split(text)
     if (
         len(parts) >= 2
@@ -102,24 +105,32 @@ def split_primary_phone(text: str) -> str:
             or (sum(c.isdigit() for c in parts[0]) >= 10 and len(parts[1].strip()) == 4 and parts[1].strip().isdigit())
         )
     ):
-        return parts[0].strip()
-    if ", " in text:
-        cparts = text.split(", ")
-        if len(cparts) >= 2 and sum(c.isdigit() for c in cparts[0]) >= 8 and sum(c.isdigit() for c in cparts[1]) >= 8:
-            return cparts[0].strip()
-    return text
+        return parts[0].strip(), True
+
+    if "," in text:
+        cparts = text.split(",")
+        for i in range(1, len(cparts)):
+            p0 = ",".join(cparts[:i]).strip()
+            p1 = cparts[i].strip()
+            d0 = sum(c.isdigit() for c in p0)
+            d1 = sum(c.isdigit() for c in p1)
+            if d0 >= 7 and d1 >= 7:
+                return p0, True
+
+    return text, False
 
 
 def extract_extension(text: str) -> tuple[str, str | None]:
     """Extract a trailing numeric extension and return (base_text, extension)."""
-    primary = split_primary_phone(text)
+    primary, _ = split_primary_phone(text)
     # Strip trailing non-digit comments first if they follow an extension or base number
     cleaned = _TRAILING_NOTE_RE.sub("", primary).strip()
-    cleaned = re.sub(r"[!?,;\s]+$", "", cleaned)
+    cleaned = re.sub(r"[!?|,;\s]+$", "", cleaned)
     match = _EXTENSION_RE.search(cleaned)
     if match:
         ext = next(g for g in match.groups() if g is not None)
         base = cleaned[:match.start()].strip()
+        base = re.sub(r"[!?|,;\s]+$", "", base)
         return base, ext
     return cleaned, None
 

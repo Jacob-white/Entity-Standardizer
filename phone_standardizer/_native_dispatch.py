@@ -14,6 +14,7 @@ from phone_standardizer.normalization import (
     _fold_vanity_digits_py,
     decode_vanity_phone,
     extract_extension,
+    split_primary_phone,
 )
 
 
@@ -140,7 +141,8 @@ def standardize_batch_e164_dispatch(
     results: list[str | None] = []
     for raw in inputs:
         folded, _ = _fold_unicode_digits_py(raw)
-        no_ext, _ = extract_extension(folded)
+        primary, _ = split_primary_phone(folded)
+        no_ext, _ = extract_extension(primary)
         if _TIME_RANGE_RE.search(no_ext):
             results.append(None)
             continue

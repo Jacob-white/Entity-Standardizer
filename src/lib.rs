@@ -136,12 +136,12 @@ fn is_time_range_rs(input: &str) -> bool {
     false
 }
 
-/// If input contains multiple complete phone numbers separated by ';', '/', or ', ', return the primary (first) phone.
+/// If input contains multiple complete phone numbers separated by ';', '/', '|', '&', or ',', return the primary (first) phone.
 fn split_primary_phone_rs(input: &str) -> &str {
     let bytes = input.as_bytes();
     let mut split_indices = Vec::new();
     for (idx, &b) in bytes.iter().enumerate() {
-        if b == b';' || b == b'/' || b == b'&' {
+        if b == b';' || b == b'/' || b == b'&' || b == b'|' {
             let after = input[idx + 1..].trim_start().to_ascii_lowercase();
             if !after.starts_with("ext=") && !after.starts_with("isub=") {
                 split_indices.push(idx);
@@ -162,13 +162,24 @@ fn split_primary_phone_rs(input: &str) -> &str {
             return part0.trim();
         }
     }
-    if input.contains(", ") {
-        let mut cparts = input.split(", ");
-        if let (Some(c0), Some(c1)) = (cparts.next(), cparts.next()) {
-            let d0 = c0.chars().filter(|c| c.is_ascii_digit()).count();
-            let d1 = c1.chars().filter(|c| c.is_ascii_digit()).count();
-            if d0 >= 8 && d1 >= 8 {
-                return c0.trim();
+    if input.contains(',') {
+        let mut comma_indices = Vec::new();
+        for (idx, &b) in bytes.iter().enumerate() {
+            if b == b',' {
+                comma_indices.push(idx);
+            }
+        }
+        for (i, &cidx) in comma_indices.iter().enumerate() {
+            let p0 = &input[..cidx];
+            let next_seg = if i + 1 < comma_indices.len() {
+                &input[cidx + 1..comma_indices[i + 1]]
+            } else {
+                &input[cidx + 1..]
+            };
+            let d0 = p0.chars().filter(|c| c.is_ascii_digit()).count();
+            let d1 = next_seg.chars().filter(|c| c.is_ascii_digit()).count();
+            if d0 >= 7 && d1 >= 7 {
+                return p0.trim();
             }
         }
     }
@@ -198,7 +209,7 @@ fn strip_leading_label_rs(input: &str) -> &str {
 fn strip_extension_rs(input: &str) -> &str {
     let primary = split_primary_phone_rs(input);
     let trimmed = primary
-        .trim_end_matches(|c: char| matches!(c, '!' | '?' | ',' | ';' | ' ' | '\t' | '\n' | '\r'))
+        .trim_end_matches(|c: char| matches!(c, '!' | '?' | ',' | ';' | '|' | ' ' | '\t' | '\n' | '\r'))
         .trim_start();
     let lower = trimmed.to_ascii_lowercase();
     for marker in [
@@ -225,7 +236,9 @@ fn strip_extension_rs(input: &str) -> &str {
                 && tail_clean.len() <= max_ext_len
                 && tail_clean.chars().all(|c| c.is_ascii_digit())
             {
-                return trimmed[..idx].trim();
+                return trimmed[..idx]
+                    .trim_end_matches(|c: char| matches!(c, '!' | '?' | ',' | ';' | '|' | ' ' | '\t' | '\n' | '\r'))
+                    .trim();
             }
         }
     }
@@ -387,6 +400,10 @@ mod tests {
                 "818,985,2OOO         ,,,,,,".to_string(),
                 "212-555-1234 / 212-555-5678".to_string(),
                 "212-555-1234, 212-555-5678".to_string(),
+                "5853254140,5854358032".to_string(),
+                "2149237666,5122220140ext7733,6309242400".to_string(),
+                "800.366.7266 | ext. 3211".to_string(),
+                "6032262004#233,6179472393".to_string(),
             ],
             "1",
         );
@@ -407,6 +424,10 @@ mod tests {
                 Some("+18189852666".to_string()),
                 Some("+12125551234".to_string()),
                 Some("+12125551234".to_string()),
+                Some("+15853254140".to_string()),
+                Some("+12149237666".to_string()),
+                Some("+18003667266".to_string()),
+                Some("+16032262004".to_string()),
             ]
         );
     }

@@ -29,9 +29,14 @@ _CA_POSTAL_RE = re.compile(
     re.IGNORECASE,
 )
 _GB_POSTAL_RE = re.compile(
-    r"^[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2}$",
+    r"^[A-Z]{1,2}\d[A-Z\d]?(?:\s*\d(?:[A-Z]{2})?)?$",
     re.IGNORECASE,
 )
+_JE_POSTAL_RE = re.compile(r"^JE\d", re.IGNORECASE)
+_GY_POSTAL_RE = re.compile(r"^GY\d", re.IGNORECASE)
+_IM_POSTAL_RE = re.compile(r"^IM\d", re.IGNORECASE)
+_BM_POSTAL_RE = re.compile(r"^[0-9]?[A-Z]{2}\s?(?:\d{2}|[A-Z]{2})$", re.IGNORECASE)
+_KY_POSTAL_RE = re.compile(r"^KY\d-", re.IGNORECASE)
 _JP_POSTAL_RE = re.compile(r"^(?:〒\s*)?\d{3}-\d{4}$")
 _BR_POSTAL_RE = re.compile(r"^\d{5}-\d{3}$")
 _NL_POSTAL_RE = re.compile(r"^\d{4}\s?[A-Z]{2}$", re.IGNORECASE)
@@ -50,8 +55,18 @@ def infer_country_from_postal_code(postal_code: str | None) -> str | None:
     cleaned = str(postal_code).strip()
     if _CA_POSTAL_RE.match(cleaned):
         return "CA"
+    if _JE_POSTAL_RE.match(cleaned):
+        return "JE"
+    if _GY_POSTAL_RE.match(cleaned):
+        return "GG"
+    if _IM_POSTAL_RE.match(cleaned):
+        return "IM"
+    if _KY_POSTAL_RE.match(cleaned):
+        return "KY"
     if _GB_POSTAL_RE.match(cleaned):
         return "GB"
+    if _BM_POSTAL_RE.match(cleaned):
+        return "BM"
     if _JP_POSTAL_RE.match(cleaned):
         return "JP"
     if _BR_POSTAL_RE.match(cleaned):

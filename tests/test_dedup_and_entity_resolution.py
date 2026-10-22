@@ -27,6 +27,13 @@ def test_postal_code_country_inference() -> None:
     assert infer_country_from_postal_code("   ") is None
     assert infer_country_from_postal_code("M5V 2T6") == "CA"
     assert infer_country_from_postal_code("SW1A 1AA") == "GB"
+    assert infer_country_from_postal_code("W1F 8") == "GB"
+    assert infer_country_from_postal_code("EC1A") == "GB"
+    assert infer_country_from_postal_code("JE2 3RP") == "JE"
+    assert infer_country_from_postal_code("GY1 1AA") == "GG"
+    assert infer_country_from_postal_code("IM1 2PQ") == "IM"
+    assert infer_country_from_postal_code("KY1-1102") == "KY"
+    assert infer_country_from_postal_code("HM 08") == "BM"
     assert infer_country_from_postal_code("100-0001") == "JP"
     assert infer_country_from_postal_code("01310-100") == "BR"
     assert infer_country_from_postal_code("1012 AB") == "NL"

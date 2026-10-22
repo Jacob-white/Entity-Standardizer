@@ -28,6 +28,7 @@ from phone_standardizer.normalization import (
     decode_vanity_phone,
     extract_extension,
     fold_unicode_digits,
+    split_primary_phone,
 )
 from phone_standardizer.registry import (
     CountryDialRegistry,
@@ -264,6 +265,8 @@ def _is_valid_plan_or_legacy_length(plan: CountryDialPlan, length: int) -> bool:
     """Return True if length is in plan.nsn_lengths or is a healable regional legacy length."""
     if length in plan.nsn_lengths:
         return True
+    if plan.iso2 == "CH" and length in (7, 8):
+        return True
     if plan.iso2 == "AR" and length in (12, 13):
         return True
     if plan.iso2 == "MX" and length in (11, 12, 13):
@@ -326,12 +329,17 @@ def standardize_phone(
     if unicode_folded:
         healing_actions.append(HealingAction.UNICODE_DIGITS_FOLDED)
 
-    # 2. Extract trailing extension before vanity decoding
+    # 2. Split multi-number candidate strings before extension extraction
+    working, was_split = split_primary_phone(working)
+    if was_split:
+        healing_actions.append(HealingAction.MULTI_NUMBER_PRIMARY_SELECTED)
+
+    # 3. Extract trailing extension before vanity decoding
     working, extension = extract_extension(working)
     if extension:
         healing_actions.append(HealingAction.EXTENSION_EXTRACTED)
 
-    # 3. Decode alphanumeric vanity letters (e.g. 1-800-FLOWERS)
+    # 4. Decode alphanumeric vanity letters (e.g. 1-800-FLOWERS)
     working, vanity_alias = decode_vanity_phone(working)
     if vanity_alias:
         healing_actions.append(HealingAction.VANITY_KEYPAD_DECODED)
@@ -478,9 +486,20 @@ def standardize_phone(
         else:
             nsn = digits_raw
         if plan.calling_code == "1":
-            if len(nsn) == 11 and nsn.startswith("1"):
-                nsn = nsn[1:]
+            if len(nsn) == 12 and nsn.startswith("01"):
+                nsn = nsn[2:]
                 healing_actions.append(HealingAction.NATIONAL_TRUNK_STRIPPED)
+            elif len(nsn) == 11:
+                if nsn.startswith("1"):
+                    nsn = nsn[1:]
+                    healing_actions.append(HealingAction.NATIONAL_TRUNK_STRIPPED)
+                elif nsn.startswith("01") and resolve_nanp_npa(nsn[2:5])[2]:
+                    # Heals off-by-one shifted leading zero '01-703-47-8020' -> '7034780200'
+                    nsn = nsn[2:] + "0"
+                    healing_actions.append(HealingAction.NATIONAL_TRUNK_STRIPPED)
+                elif nsn.startswith("0") and resolve_nanp_npa(nsn[1:4])[2]:
+                    nsn = nsn[1:]
+                    healing_actions.append(HealingAction.NATIONAL_TRUNK_STRIPPED)
             if len(nsn) == 10:
                 iso2_resolved, region_code, recognized_sub_area = resolve_nanp_npa(
                     nsn[:3], fallback_iso2=plan.iso2
@@ -579,6 +598,11 @@ def standardize_phone(
                     and (
                         cc_sep
                         or (len(digits_raw) >= 12 and not _CORRUPTED_NANP_HYPHEN_RE.match(working))
+                        or (
+                            len(digits_raw) == 11
+                            and not digits_raw.startswith("1")
+                            and not _CORRUPTED_NANP_HYPHEN_RE.match(working)
+                        )
                         or (hint_iso2 is None and not resolve_nanp_npa(digits_raw[:3])[2])
                     )
                 ):
