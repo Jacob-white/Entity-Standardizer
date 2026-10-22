@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from phone_standardizer._native_dispatch import (
+    damerau_levenshtein_distance_dispatch,
     extract_digits_dispatch,
     fold_unicode_digits_dispatch,
     fold_vanity_digits_dispatch,
@@ -72,6 +73,7 @@ from phone_standardizer.normalization import (
     decode_vanity_phone,
     extract_extension,
     fold_unicode_digits,
+    strip_leading_label,
 )
 from phone_standardizer.registry import (
     CountryDialRegistry,
@@ -89,7 +91,7 @@ from phone_standardizer.standardizer import (
     validate_phone,
 )
 
-__version__ = "1.2.0"
+__version__ = "1.4.0"
 
 __all__ = [
     "CallingWindowResult",
@@ -115,6 +117,7 @@ __all__ = [
     "compare_phones",
     "configure_cache",
     "damerau_levenshtein_distance",
+    "damerau_levenshtein_distance_dispatch",
     "decode_vanity_phone",
     "deduplicate_phones",
     "evaluate_calling_window",
@@ -154,5 +157,6 @@ __all__ = [
     "standardize_polars",
     "stream_standardize_csv",
     "stream_standardize_jsonl",
+    "strip_leading_label",
     "validate_phone",
 ]

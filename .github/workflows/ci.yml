@@ -46,6 +46,15 @@ jobs:
           python-version: "3.12"
       - name: Rust unit tests
         run: cargo test --locked
+      - name: Build and verify PyO3 native extension
+        run: |
+          pip install maturin -r requirements-dev.txt
+          pip install -e ".[server,mcp,arrow]"
+          maturin build --release --locked --out dist
+          python -m zipfile -e dist/*.whl native_x
+          cp -r native_x/_phone_standardizer_rs "$(python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')/"
+          python -c "import phone_standardizer as ps; assert ps.is_native_available(), 'Native extension not loaded'"
+          pytest
 
   sdks:
     runs-on: ubuntu-latest

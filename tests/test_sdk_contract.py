@@ -50,23 +50,61 @@ def _dotnet_class_fields(class_name: str) -> set[str]:
 
 
 def test_sdk_models_match_python_contracts() -> None:
+    from phone_standardizer.audit import explain_phone
+    from phone_standardizer.dedup import PhoneCluster, PhoneComparisonResult
+    from phone_standardizer.server import PhoneCompareRequest, PhoneDeduplicateRequest
+
     expected_phone_fields = {f.name for f in dataclasses.fields(StandardizedPhone)}
     expected_plan_fields = {f.name for f in dataclasses.fields(CountryDialPlan)}
+    expected_cmp_fields = {f.name for f in dataclasses.fields(PhoneComparisonResult)}
+    expected_cluster_fields = {f.name for f in dataclasses.fields(PhoneCluster)}
     expected_req_fields = set(PhoneStandardizeRequest.model_fields.keys())
     expected_batch_fields = set(PhoneBatchRequest.model_fields.keys())
+    expected_cmp_req_fields = set(PhoneCompareRequest.model_fields.keys())
+    expected_dedup_req_fields = set(PhoneDeduplicateRequest.model_fields.keys())
+
+    sample_explain = explain_phone("+1 (415) 555-2671")
+    expected_explain_report_fields = set(sample_explain.keys())
+    expected_intelligence_fields = set(sample_explain["intelligence"].keys())
+    expected_explanation_fields = set(sample_explain["explanation"].keys())
 
     # TypeScript
     assert _ts_interface_fields("StandardizedPhone") == expected_phone_fields
     assert _ts_interface_fields("CountryDialPlan") == expected_plan_fields
+    assert _ts_interface_fields("PhoneComparisonResult") == expected_cmp_fields
+    assert _ts_interface_fields("PhoneCluster") == expected_cluster_fields
     assert _ts_interface_fields("PhoneStandardizeRequest") == expected_req_fields
     assert _ts_interface_fields("PhoneBatchRequest") == expected_batch_fields
+    assert _ts_interface_fields("PhoneCompareRequest") == expected_cmp_req_fields
+    assert _ts_interface_fields("PhoneDeduplicateRequest") == expected_dedup_req_fields
+    assert _ts_interface_fields("PhoneExplainReport") == expected_explain_report_fields
+    assert _ts_interface_fields("PhoneIntelligence") == expected_intelligence_fields
+    assert _ts_interface_fields("PhoneExplanation") == expected_explanation_fields
 
     # Go
     assert _go_struct_fields("StandardizedPhone") == expected_phone_fields
+    assert _go_struct_fields("CountryDialPlan") == expected_plan_fields
+    assert _go_struct_fields("PhoneComparisonResult") == expected_cmp_fields
+    assert _go_struct_fields("PhoneCluster") == expected_cluster_fields
     assert _go_struct_fields("PhoneStandardizeRequest") == expected_req_fields
     assert _go_struct_fields("PhoneBatchRequest") == expected_batch_fields
+    assert _go_struct_fields("PhoneCompareRequest") == expected_cmp_req_fields
+    assert _go_struct_fields("PhoneDeduplicateRequest") == expected_dedup_req_fields
+    assert _go_struct_fields("PhoneExplainReport") == expected_explain_report_fields
+    assert _go_struct_fields("PhoneIntelligence") == expected_intelligence_fields
+    assert _go_struct_fields("PhoneExplanation") == expected_explanation_fields
 
     # .NET
     assert _dotnet_class_fields("StandardizedPhone") == expected_phone_fields
+    assert _dotnet_class_fields("CountryDialPlan") == expected_plan_fields
+    assert _dotnet_class_fields("PhoneComparisonResult") == expected_cmp_fields
+    assert _dotnet_class_fields("PhoneCluster") == expected_cluster_fields
     assert _dotnet_class_fields("PhoneStandardizeRequest") == expected_req_fields
     assert _dotnet_class_fields("PhoneBatchRequest") == expected_batch_fields
+    assert _dotnet_class_fields("PhoneCompareRequest") == expected_cmp_req_fields
+    assert _dotnet_class_fields("PhoneDeduplicateRequest") == expected_dedup_req_fields
+    assert _dotnet_class_fields("PhoneExplainReport") == expected_explain_report_fields
+    assert _dotnet_class_fields("PhoneIntelligence") == expected_intelligence_fields
+    assert _dotnet_class_fields("PhoneExplanation") == expected_explanation_fields
+
+

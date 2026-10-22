@@ -66,6 +66,7 @@ class PhoneStewardshipLedger:
         self.db_path = str(db_path)
         self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self._lock = threading.Lock()
+        self._closed = False
         with self._lock:
             self._conn.execute(
                 """
@@ -145,3 +146,17 @@ class PhoneStewardshipLedger:
             )
             self._conn.commit()
             return cur.rowcount > 0
+
+    def close(self) -> None:
+        """Close the underlying SQLite connection."""
+        with self._lock:
+            if not self._closed:
+                self._conn.close()
+                self._closed = True
+
+    def __enter__(self) -> PhoneStewardshipLedger:
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        self.close()
+

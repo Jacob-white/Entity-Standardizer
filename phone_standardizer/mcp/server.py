@@ -38,12 +38,16 @@ MCP_TOOLS: list[dict[str, Any]] = [
     },
     {
         "name": "mask_phone",
-        "description": "Mask a phone number using partial (+1******2671), redact, or hash strategies.",
+        "description": "Mask a phone number using partial (+1******2671), partial_phone, last4, redact, null, hash, sha256, or md5 strategies.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "phone": {"type": "string"},
-                "strategy": {"type": "string", "enum": ["partial", "redact", "hash"], "default": "partial"},
+                "strategy": {
+                    "type": "string",
+                    "enum": ["partial", "partial_phone", "last4", "redact", "null", "hash", "sha256", "md5"],
+                    "default": "partial",
+                },
                 "country": {"type": "string"},
             },
             "required": ["phone"],
@@ -104,7 +108,7 @@ def handle_mcp_request(request: dict[str, Any]) -> dict[str, Any]:
             "id": req_id,
             "result": {
                 "protocolVersion": "2024-11-05",
-                "serverInfo": {"name": "phone-standardizer-mcp", "version": "1.0.0"},
+                "serverInfo": {"name": "phone-standardizer-mcp", "version": "1.4.0"},
                 "capabilities": {"tools": {}},
             },
         }

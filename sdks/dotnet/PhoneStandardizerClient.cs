@@ -22,11 +22,67 @@ public sealed class PhoneStandardizerClient
         PhoneStandardizeRequest request,
         CancellationToken cancellationToken = default)
     {
-        var json = JsonSerializer.Serialize(request);
-        using var content = new StringContent(json, Encoding.UTF8, "application/json");
-        using var resp = await _http.PostAsync($"{_baseUrl}/v1/standardize", content, cancellationToken).ConfigureAwait(false);
+        return await PostJsonAsync<PhoneStandardizeRequest, StandardizedPhone>("/v1/standardize", request, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<PhoneBatchResponse?> BatchAsync(
+        PhoneBatchRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        return await PostJsonAsync<PhoneBatchRequest, PhoneBatchResponse>("/v1/batch", request, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<PhoneExplainReport?> ExplainAsync(
+        PhoneStandardizeRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        return await PostJsonAsync<PhoneStandardizeRequest, PhoneExplainReport>("/v1/explain", request, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<PhoneComparisonResult?> CompareAsync(
+        PhoneCompareRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        return await PostJsonAsync<PhoneCompareRequest, PhoneComparisonResult>("/v1/compare", request, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<PhoneDeduplicateResponse?> DeduplicateAsync(
+        PhoneDeduplicateRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        return await PostJsonAsync<PhoneDeduplicateRequest, PhoneDeduplicateResponse>("/v1/deduplicate", request, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<CountryDialPlan?> GetCountryAsync(
+        string identifier,
+        CancellationToken cancellationToken = default)
+    {
+        var encoded = Uri.EscapeDataString(identifier);
+        using var resp = await _http.GetAsync($"{_baseUrl}/v1/countries/{encoded}", cancellationToken).ConfigureAwait(false);
         resp.EnsureSuccessStatusCode();
         var body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
-        return JsonSerializer.Deserialize<StandardizedPhone>(body);
+        return JsonSerializer.Deserialize<CountryDialPlan>(body);
+    }
+
+    public async Task<ListCountriesResponse?> ListCountriesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        using var resp = await _http.GetAsync($"{_baseUrl}/v1/countries", cancellationToken).ConfigureAwait(false);
+        resp.EnsureSuccessStatusCode();
+        var body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+        return JsonSerializer.Deserialize<ListCountriesResponse>(body);
+    }
+
+    private async Task<TResponse?> PostJsonAsync<TRequest, TResponse>(
+        string path,
+        TRequest request,
+        CancellationToken cancellationToken)
+    {
+        var json = JsonSerializer.Serialize(request);
+        using var content = new StringContent(json, Encoding.UTF8, "application/json");
+        using var resp = await _http.PostAsync($"{_baseUrl}{path}", content, cancellationToken).ConfigureAwait(false);
+        resp.EnsureSuccessStatusCode();
+        var body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+        return JsonSerializer.Deserialize<TResponse>(body);
     }
 }

@@ -31,6 +31,19 @@ export interface PhoneBatchRequest {
   default_country?: string;
 }
 
+export interface PhoneCompareRequest {
+  phone_a: string;
+  phone_b: string;
+  country?: string | null;
+  fuzzy_threshold?: number;
+}
+
+export interface PhoneDeduplicateRequest {
+  phones: string[];
+  country?: string | null;
+  fuzzy_threshold?: number;
+}
+
 export interface StandardizedPhone {
   raw_input: string;
   e164: string | null;
@@ -56,6 +69,52 @@ export interface StandardizedPhone {
   routing_tier: PhoneRoutingTier;
   risk_flags: string[];
   healing_actions: string[];
+}
+
+export interface PhoneComparisonResult {
+  phone_a: StandardizedPhone;
+  phone_b: StandardizedPhone;
+  is_exact_match: boolean;
+  is_extension_variant: boolean;
+  is_fuzzy_match: boolean;
+  similarity_score: number;
+  match_type: string;
+  edit_distance: number;
+  transposition_detected: boolean;
+  keypad_adjacent_typo: boolean;
+  explanation: string;
+}
+
+export interface PhoneCluster {
+  cluster_id: string;
+  golden_phone: StandardizedPhone;
+  members: StandardizedPhone[];
+  raw_inputs: string[];
+  match_types: string[];
+}
+
+export interface PhoneIntelligence {
+  locality: string | null;
+  timezones: string[];
+  carrier_hint: string | null;
+  is_callable_now: boolean;
+  local_hours: number[];
+}
+
+export interface PhoneExplanation {
+  healing_steps_count: number;
+  healing_actions: string[];
+  risk_flags_count: number;
+  risk_flags: string[];
+  confidence: number;
+  routing_tier: PhoneRoutingTier;
+  requires_human_review: boolean;
+}
+
+export interface PhoneExplainReport {
+  record: StandardizedPhone;
+  intelligence: PhoneIntelligence;
+  explanation: PhoneExplanation;
 }
 
 export interface CountryDialPlan {

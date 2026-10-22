@@ -98,3 +98,211 @@ public sealed class StandardizedPhone
     [JsonPropertyName("healing_actions")]
     public List<string> HealingActions { get; set; } = new();
 }
+
+public sealed class PhoneBatchResponse
+{
+    [JsonPropertyName("count")]
+    public int Count { get; set; }
+
+    [JsonPropertyName("results")]
+    public List<StandardizedPhone> Results { get; set; } = new();
+}
+
+public sealed class PhoneCompareRequest
+{
+    [JsonPropertyName("phone_a")]
+    public string PhoneA { get; set; } = "";
+
+    [JsonPropertyName("phone_b")]
+    public string PhoneB { get; set; } = "";
+
+    [JsonPropertyName("country")]
+    public string? Country { get; set; }
+
+    [JsonPropertyName("fuzzy_threshold")]
+    public double FuzzyThreshold { get; set; } = 0.88;
+}
+
+public sealed class PhoneComparisonResult
+{
+    [JsonPropertyName("phone_a")]
+    public StandardizedPhone? PhoneA { get; set; }
+
+    [JsonPropertyName("phone_b")]
+    public StandardizedPhone? PhoneB { get; set; }
+
+    [JsonPropertyName("is_exact_match")]
+    public bool IsExactMatch { get; set; }
+
+    [JsonPropertyName("is_extension_variant")]
+    public bool IsExtensionVariant { get; set; }
+
+    [JsonPropertyName("is_fuzzy_match")]
+    public bool IsFuzzyMatch { get; set; }
+
+    [JsonPropertyName("similarity_score")]
+    public double SimilarityScore { get; set; }
+
+    [JsonPropertyName("match_type")]
+    public string MatchType { get; set; } = "";
+
+    [JsonPropertyName("edit_distance")]
+    public int EditDistance { get; set; }
+
+    [JsonPropertyName("transposition_detected")]
+    public bool TranspositionDetected { get; set; }
+
+    [JsonPropertyName("keypad_adjacent_typo")]
+    public bool KeypadAdjacentTypo { get; set; }
+
+    [JsonPropertyName("explanation")]
+    public string Explanation { get; set; } = "";
+}
+
+public sealed class PhoneDeduplicateRequest
+{
+    [JsonPropertyName("phones")]
+    public List<string> Phones { get; set; } = new();
+
+    [JsonPropertyName("country")]
+    public string? Country { get; set; }
+
+    [JsonPropertyName("fuzzy_threshold")]
+    public double FuzzyThreshold { get; set; } = 0.88;
+}
+
+public sealed class PhoneCluster
+{
+    [JsonPropertyName("cluster_id")]
+    public string ClusterId { get; set; } = "";
+
+    [JsonPropertyName("golden_phone")]
+    public StandardizedPhone? GoldenPhone { get; set; }
+
+    [JsonPropertyName("members")]
+    public List<StandardizedPhone> Members { get; set; } = new();
+
+    [JsonPropertyName("raw_inputs")]
+    public List<string> RawInputs { get; set; } = new();
+
+    [JsonPropertyName("match_types")]
+    public List<string> MatchTypes { get; set; } = new();
+}
+
+public sealed class PhoneDeduplicateResponse
+{
+    [JsonPropertyName("cluster_count")]
+    public int ClusterCount { get; set; }
+
+    [JsonPropertyName("clusters")]
+    public List<PhoneCluster> Clusters { get; set; } = new();
+}
+
+public sealed class CountryDialPlan
+{
+    [JsonPropertyName("iso2")]
+    public string Iso2 { get; set; } = "";
+
+    [JsonPropertyName("iso3")]
+    public string Iso3 { get; set; } = "";
+
+    [JsonPropertyName("numeric")]
+    public string Numeric { get; set; } = "";
+
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = "";
+
+    [JsonPropertyName("calling_code")]
+    public string CallingCode { get; set; } = "";
+
+    [JsonPropertyName("idd_prefix")]
+    public string IddPrefix { get; set; } = "";
+
+    [JsonPropertyName("national_trunk_prefix")]
+    public string? NationalTrunkPrefix { get; set; }
+
+    [JsonPropertyName("nsn_lengths")]
+    public List<int> NsnLengths { get; set; } = new();
+
+    [JsonPropertyName("mobile_prefixes")]
+    public List<string> MobilePrefixes { get; set; } = new();
+
+    [JsonPropertyName("toll_free_prefixes")]
+    public List<string> TollFreePrefixes { get; set; } = new();
+
+    [JsonPropertyName("premium_prefixes")]
+    public List<string> PremiumPrefixes { get; set; } = new();
+
+    [JsonPropertyName("voip_prefixes")]
+    public List<string> VoipPrefixes { get; set; } = new();
+
+    [JsonPropertyName("shared_cost_prefixes")]
+    public List<string> SharedCostPrefixes { get; set; } = new();
+
+    [JsonPropertyName("region")]
+    public string Region { get; set; } = "";
+}
+
+public sealed class ListCountriesResponse
+{
+    [JsonPropertyName("count")]
+    public int Count { get; set; }
+
+    [JsonPropertyName("countries")]
+    public List<CountryDialPlan> Countries { get; set; } = new();
+}
+
+public sealed class PhoneIntelligence
+{
+    [JsonPropertyName("locality")]
+    public string? Locality { get; set; }
+
+    [JsonPropertyName("timezones")]
+    public List<string> Timezones { get; set; } = new();
+
+    [JsonPropertyName("carrier_hint")]
+    public string? CarrierHint { get; set; }
+
+    [JsonPropertyName("is_callable_now")]
+    public bool IsCallableNow { get; set; }
+
+    [JsonPropertyName("local_hours")]
+    public List<int> LocalHours { get; set; } = new();
+}
+
+public sealed class PhoneExplanation
+{
+    [JsonPropertyName("healing_steps_count")]
+    public int HealingStepsCount { get; set; }
+
+    [JsonPropertyName("healing_actions")]
+    public List<string> HealingActions { get; set; } = new();
+
+    [JsonPropertyName("risk_flags_count")]
+    public int RiskFlagsCount { get; set; }
+
+    [JsonPropertyName("risk_flags")]
+    public List<string> RiskFlags { get; set; } = new();
+
+    [JsonPropertyName("confidence")]
+    public double Confidence { get; set; }
+
+    [JsonPropertyName("routing_tier")]
+    public string RoutingTier { get; set; } = "MANUAL_STEWARDSHIP";
+
+    [JsonPropertyName("requires_human_review")]
+    public bool RequiresHumanReview { get; set; }
+}
+
+public sealed class PhoneExplainReport
+{
+    [JsonPropertyName("record")]
+    public StandardizedPhone? Record { get; set; }
+
+    [JsonPropertyName("intelligence")]
+    public PhoneIntelligence? Intelligence { get; set; }
+
+    [JsonPropertyName("explanation")]
+    public PhoneExplanation? Explanation { get; set; }
+}
+

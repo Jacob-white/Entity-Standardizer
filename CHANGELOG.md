@@ -2,6 +2,50 @@
 
 All notable changes to **Phone Standardizer** will be documented in this file.
 
+## [1.4.0] - 2026-10-22
+
+### Added & Fixed
+- **Dataset-Driven International Healing & Multi-Phone Extraction** (`phone_standardizer/standardizer.py`, `phone_standardizer/normalization.py`):
+  - Bare international calling-code healing & anti-doubling: eliminated all 177 doubled calling-code corruptions (`+6565...`, `+352352...`, `+4949...`, `+4343...`, `+6464...`, `+4646...`) while preserving valid 8-digit Singapore `65xx xxxx` landlines and 10-digit Italian `39x xxx xxxx` mobiles.
+  - Safe foreign `"011"` IDD exit stripping when `digits_raw` begins with `"011" + context_plan.calling_code` and `"011 +"` redundant prefix stripping.
+  - Primary phone extraction (`split_primary_phone`) for `;`, `/`, and `, ` multi-phone strings (`"212-555-1234 / 212-555-5678"`), embedded-digit vanity phone decoding (`"(844) PLAN4IT"`), and clock time-range rejection (`"8:00AM - 6:00PM"`).
+  - Argentina (`+54`) 13-digit `+54 9 <area> 15 <subscr>` mobile healing and Brazil (`+55`) `0 + 2-digit carrier code` (`021`, `015`) long-distance prefix stripping.
+  - US territory (`PR`, `VI`, `GU`, `AS`, `MP`) `ADDRESS_COUNTRY_MISMATCH` exemption when `country="US"` and NANP Toll-Free `N11` exchange support (`800-211-xxxx`, `800-911-xxxx`).
+- **`libphonenumber` `PhoneNumberMetadata.xml` & `ShortNumberMetadata.xml` Full Parity** (`phone_standardizer/registry_data.py`, `phone_standardizer/registry.py`, `phone_standardizer/nanp.py`):
+  - Synchronized `nsn_lengths`, `national_trunk_prefix`, and line-type prefixes (`mobile`, `toll_free`, `premium_rate`, `shared_cost`, `voip`, `personal_number`, `pager`, `uan`, `voicemail`) across all 249 ISO-3166-1 dial plans + supplemental territories (`AC`, `TA`, `XK`), achieving **100.00% (`1,132 / 1,132`)** validity, ISO-2, and line-type accuracy against `PhoneNumberMetadata.xml` and **100.00% (`240 / 240`)** emergency code recognition against `ShortNumberMetadata.xml`.
+  - Added 5 NANP overlay NPAs (`227` MD, `235` MO, `748` CO, `257` BC, `273` ON) for **439 / 439 (100%)** NANPA area-code parity and sub-area routing for `+39` (`VA`), `+47` (`SJ`), `+61` (`CX`, `CC`), `+358` (`AX`), `+212` (`EH`), `+262` (`YT`), `+599` (`BQ`), and `+290` (`TA`).
+- **$O(N)$ Exact-E.164 Deduplication Pre-Grouping & Switchboard Guard** (`phone_standardizer/dedup.py`):
+  - Pre-grouped identical `(e164, extension)` records before pairwise bucket indexing in `deduplicate_phones()` and `cluster_contact_records()`, accelerating 22,398-record `dtcc_raw_mfs` deduplication by **58x** (`5,420 ms` -> `92.9 ms`).
+  - Guarded corporate switchboard blocks ending in `00`/`000` (`800-526-6300` vs `800-526-6500`) against uncorroborated single-digit fuzzy merges, respected `fuzzy_threshold` on `EXTENSION_VARIANT`, and labeled `dist == 1` length edits as `SINGLE_DIGIT_EDIT`.
+- **Rust/Python 100% Batch Parity & Shared Library Auto-Loading** (`src/lib.rs`, `phone_standardizer/_native_dispatch.py`):
+  - Synchronized `standardize_batch_e164_rs` with Python's `standardize_batch_e164_dispatch`, achieving **47,270 / 47,270 (100.00%)** parity on `production.firm_master`, and added automatic `target/release/lib_phone_standardizer_rs.so` fallback loading.
+
+## [1.3.0] - 2026-10-22
+
+### Added & Fixed
+- **Lexical, Regional Healing & E.123 Formatting Fixes** (`phone_standardizer/normalization.py`, `standardizer.py`, `nanp.py`):
+  - Arbitrary leading label stripping (`strip_leading_label`) for CRM/contact labels (`"Contact: +44..."`, `"WhatsApp: +49..."`, `"Call: ..."`).
+  - Vanity keypad decoder (`decode_vanity_phone`) guard that strips trailing annotations (`"ask for Bob"`, `"Mon-Fri"`) after complete 10+ digit numbers instead of folding them as keypad digits, and supports longer toll-free vanity words (`1-800-MATTRESS`).
+  - Expanded extension parser (`extract_extension`) supporting `:`, `-`, `#` separators, parenthesized extensions (`(ext. 104)`), RFC 3966 `;isub=` subaddresses, and DTMF pause/wait sequences (`,104`, `p104`, `w104`).
+  - Argentina (`+54`) domestic trunk `0` stripping and 2-, 3-, and 4-digit area code `15` mobile prefix healing (`+54 9 ...`).
+  - Mexico (`+52`) legacy domestic `044`, `045`, and `01` prefix healing alongside international `+52 1` healing.
+  - Refined `ADDRESS_COUNTRY_MISMATCH` detection: suppresses false mismatches when `country` was the originating IDD exit dial plan (`011` from `US`) and raises mismatches across shared calling codes (`+1` US vs CA/PR/JM, `+44` GB vs JE/GG/IM, `+7` RU vs KZ).
+  - Guarded `(0)` trunk stripping so closed dial plans (`IT`) retain significant leading zeros.
+  - Flagged NANP `NPA=555` and reserved `N9X` area codes with `PhoneRiskFlag.INVALID_AREA_CODE` and added 17 new US overlay NPAs (`324`, `327`, `329`, `350`, `353`, `369`, `436`, `526`, `624`, `686`, `728`, `730`, `738`, `821`, `840`, `861`, `924`).
+  - Expanded `extract_phones_from_text()` to capture contiguous E.164 (`+14155552671`), 5-group French/German numbers, parenthetical `(0)` trunks, and vanity numbers (`1-800-FLOWERS`).
+  - UK (`+44`) 3-digit area code (`0113`, `0121`, `0131`, `0141`, `0151`, `0161`, `0191`) E.123 formatting (`0AAA BBB BBBB`) and 2-digit area-code formatting across `CH`, `BR`, `MX`, `AR`, `IT`, `CN`, and `KR`.
+- **Global 249-Country Dial-Plan Registry Precision** (`phone_standardizer/registry_data.py`):
+  - Upgraded 193 country dial plans with accurate ITU-T E.164 closed-plan `national_trunk_prefix=None` (`PT`, `GR`, `CZ`, `CL`, `CO`, `UY`, `CR`, `PA`, `LU`, `IS`, `MT`, `CY`, `QA`, `KW`, `BH`, `OM`, `VA`, `SM`, `MC`, `AD`), `8`/`810` trunk/IDD for `KZ`/`BY`, `06` trunk for `HU`, and exact NSN lengths and mobile prefixes across 25+ major economies (`ID`, `SA`, `IL`, `TR`, `BE`, `GR`, `CO`, `PK`, `EG`, `MY`, `PH`, `TH`, `VN`, `NG`, `KE`, `CL`, `PE`, `AR`, `PT`, `CZ`, `HU`, `RO`, `UA`, `FI`, `HK`, `TW`).
+- **Subsystem Wiring & Native Rust Dispatch** (`_native_dispatch.py`, `src/lib.rs`, `cache.py`, `audit.py`, `dedup.py`):
+  - Wired `fold_unicode_digits_dispatch`, `fold_vanity_digits_dispatch`, and `damerau_levenshtein_distance_dispatch` (`damerau_levenshtein_distance_rs`) into hot paths without circular recursion, and upgraded `standardize_batch_e164_dispatch` / `standardize_batch_e164_rs` to handle extensions, vanity words, and trunk prefixes.
+  - Wired `MultiTierCache` and `infer_country_from_postal_code()` into `standardize_phone()`, included `(addr_iso2, addr_state)` in `make_cache_key()`, and added `.close()` / context manager support to `SQLiteCache`, `MultiTierCache`, and `PhoneStewardshipLedger`.
+  - Guarded `NATIONAL_EQUIVALENT` in `compare_phones()` when both inputs carry explicit international `+CC` prefixes.
+- **Portfolio Synergy (`Address-Standardizer` & `Query-Builder`)**:
+  - Guarded `SHARED_ADDRESS_KEY` in `cluster_contact_records()` against `is_registered_agent_hub` and `is_cmra` on `StandardizedAddress` contexts.
+  - Expanded `mask_phone()` with all 8 `Query-Builder` CLAC masking strategies (`partial`, `partial_phone`, `last4`, `redact`, `null`, `hash`, `sha256`, `md5`) and registered `phone_blocking_keys()` in `register_duckdb_udfs()`.
+- **Multi-Platform SDK Parity (`v1.3.0`)**:
+  - Added `usePhoneInput()` React hook + `AbortController`/`requestId` stale-request guard in TypeScript SDK, nullable `*string` fields in Go SDK, and full `explain`, `compare`, `deduplicate`, and `listCountries` parity across TypeScript, Go, and .NET SDKs.
+
 ## [1.2.0] - 2026-10-21
 
 ### Added

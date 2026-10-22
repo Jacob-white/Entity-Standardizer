@@ -104,40 +104,117 @@ def test_register_duckdb_udfs() -> None:
             standardize_phone_national('+14155552671'),
             standardize_phone_international('(415) 555-2671'),
             validate_phone_udf('(415) 555-2671'),
-            mask_phone_udf('(415) 555-2671')
+            mask_phone_udf('(415) 555-2671'),
+            phone_blocking_keys('(415) 555-2671'),
+            phone_blocking_keys('')
         """
     ).fetchone()
-    assert row == (
+    assert row[:5] == (
         "+14155552671",
         "(415) 555-2671",
         "+1 415-555-2671",
         True,
         "+1******2671",
     )
+    assert "e164:+14155552671" in row[5]
+    assert row[6] == []
 
 
-def test_native_dispatch_extended_functions(monkeypatch) -> None:
-    # Pure Python fallback path
+def test_native_dispatch_extended_functions(monkeypatch, tmp_path) -> None:
+    import importlib.machinery
+    from pathlib import Path
+    import sys
+
+    from phone_standardizer import (
+        damerau_levenshtein_distance_dispatch,
+        fold_vanity_digits_dispatch,
+    )
+
+    # 1. release_dir has no shared library -> returns None
+    assert native_dispatch._load_native_module(tmp_path) is None
+
+    # 2. release_dir has an invalid shared library -> hits except Exception: continue -> returns None
+    bad_so = tmp_path / "lib_phone_standardizer_rs.so"
+    bad_so.write_bytes(b"corrupt")
+    assert native_dispatch._load_native_module(tmp_path) is None
+
+    # 3. release_dir has a loadable shared library -> returns module via ExtensionFileLoader
+    with monkeypatch.context() as mp:
+        mp.setattr(
+            importlib.machinery.ExtensionFileLoader,
+            "create_module",
+            lambda self, spec: MagicMock(),
+        )
+        mp.setattr(
+            importlib.machinery.ExtensionFileLoader,
+            "exec_module",
+            lambda self, module: None,
+        )
+        assert native_dispatch._load_native_module(tmp_path) is not None
+
+    # 4. release_dir=None when _phone_standardizer_rs is installed -> returns imported module
+    sentinel_mod = MagicMock()
+    with monkeypatch.context() as mp:
+        mp.setitem(sys.modules, "_phone_standardizer_rs", sentinel_mod)
+        assert native_dispatch._load_native_module(None) is sentinel_mod
+
+    # 5. release_dir=None when _phone_standardizer_rs is not installed -> falls back to target/release
+    with monkeypatch.context() as mp:
+        mp.setitem(sys.modules, "_phone_standardizer_rs", None)
+        mp.setattr(Path, "is_file", lambda self: False)
+        assert native_dispatch._load_native_module(None) is None
+
+    # Pure Python fallback path (explicitly force _native_mod = None)
+    monkeypatch.setattr(native_dispatch, "_native_mod", None)
+    assert native_dispatch.is_native_available() is False
+    assert native_dispatch.get_engine_info()["engine"] == "pure_python"
+    assert fold_vanity_digits_dispatch("FLOWERS") == "3569377"
     folded, changed = fold_unicode_digits_dispatch("＋８１ ３-１２３４-５６７８")
     assert changed is True and folded == "+81 3-1234-5678"
     assert extract_digits_dispatch("+1 (415) 555-2671") == "14155552671"
+    assert damerau_levenshtein_distance_dispatch("4155552671", "4155552671") == 0
+    assert damerau_levenshtein_distance_dispatch("", "123") == 3
+    assert damerau_levenshtein_distance_dispatch("123", "") == 3
+    assert damerau_levenshtein_distance_dispatch("4155552671", "4155552617") == 1
 
     batch_py = standardize_batch_e164_dispatch(
-        ["(415) 555-2671", "1-212-555-0299", "+44 20 7946 0912", "123", "123456789012345"],
+        [
+            "(415) 555-2671",
+            "1-212-555-0299",
+            "+44 (0) 20 7946 0912 ext 104",
+            "1-800-FLOWERS",
+            "123",
+            "123456789012345",
+            "8:00AM - 6:00PM",
+        ],
         default_calling_code="1",
     )
-    assert batch_py == ["+14155552671", "+12125550299", "+442079460912", None, None]
+    assert batch_py == [
+        "+14155552671",
+        "+12125550299",
+        "+442079460912",
+        "+18003569377",
+        None,
+        None,
+        None,
+    ]
 
-    batch_de = standardize_batch_e164_dispatch(["3012345678"], default_calling_code="49")
-    assert batch_de == ["+493012345678"]
+    batch_de = standardize_batch_e164_dispatch(["030 12345678", "3012345678"], default_calling_code="49")
+    assert batch_de == ["+493012345678", "+493012345678"]
 
     # Native Rust dispatch path
     mock_rs = MagicMock()
+    mock_rs.fold_vanity_digits_rs.return_value = "3569377"
     mock_rs.fold_unicode_digits_rs.return_value = ("+81 3-1234-5678", True)
     mock_rs.extract_digits_rs.return_value = "14155552671"
+    mock_rs.damerau_levenshtein_distance_rs.return_value = 1
     mock_rs.standardize_batch_e164_rs.return_value = ["+14155552671"]
     monkeypatch.setattr(native_dispatch, "_native_mod", mock_rs)
 
+    assert native_dispatch.get_engine_info()["engine"] == "rust_pyo3"
+    assert fold_vanity_digits_dispatch("FLOWERS") == "3569377"
     assert fold_unicode_digits_dispatch("＋８１ ３-１２３４-５６７８") == ("+81 3-1234-5678", True)
     assert extract_digits_dispatch("+1 (415) 555-2671") == "14155552671"
+    assert damerau_levenshtein_distance_dispatch("4155552671", "4155552617") == 1
     assert standardize_batch_e164_dispatch(["(415) 555-2671"]) == ["+14155552671"]
+

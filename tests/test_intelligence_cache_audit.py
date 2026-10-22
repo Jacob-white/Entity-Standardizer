@@ -86,21 +86,29 @@ def test_brazil_legacy_mobile_and_free_text_extraction() -> None:
     assert extract_phones_from_text("") == []
     sample_doc = (
         "Contact our San Francisco desk at (415) 555-2671 or our New York desk "
-        "at 212-555-0299 ext 12. Duplicate: (415) 555-2671. Invalid: 111-111-1111."
+        "at 212-555-0299 ext 12. Duplicate: (415) 555-2671. Invalid: 111-111-1111. "
+        "Also UK +44 (0) 20 7946 0200, contiguous +493012345678, France +33 1 23 45 67 89, "
+        "and toll-free 1-800-FLOWERS."
     )
     found = extract_phones_from_text(sample_doc, default_country="US")
-    assert len(found) == 2
+    assert len(found) == 6
     assert found[0].e164 == "+14155552671"
     assert found[1].e164 == "+12125550299"
     assert found[1].extension == "12"
+    assert found[2].e164 == "+442079460200"
+    assert found[3].e164 == "+493012345678"
+    assert found[4].e164 == "+33123456789"
+    assert found[5].e164 == "+18003569377"
 
 
 def test_multi_tier_cache_l1_and_l2(tmp_path: Path) -> None:
     key1 = make_cache_key("(415) 555-2671", "US", "US")
     key2 = make_cache_key("(212) 555-0299", None, "US")
     key3 = make_cache_key(None, None, "US")
+    key_ctx = make_cache_key("030 12345678", None, "US", addr_iso2="DE", addr_state="BE")
     assert key1 == "US|US|(415) 555-2671"
     assert key3 == "US||"
+    assert key_ctx == "US||DE|BE|030 12345678"
 
     rec1 = standardize_phone("(415) 555-2671")
     rec2 = standardize_phone("(212) 555-0299")
@@ -133,16 +141,24 @@ def test_multi_tier_cache_l1_and_l2(tmp_path: Path) -> None:
     clear_cache()
     assert cache.get(key1) is None
 
-    # Also test MultiTierCache without L2
-    mem_only = MultiTierCache(l1_max_size=4, sqlite_path=None)
-    assert mem_only.get(key1) is None
-    mem_only.set(key1, rec1)
-    assert mem_only.stats()["l2_enabled"] is False
-    mem_only.clear()
+    # Also test MultiTierCache without L2 and with context manager
+    with MultiTierCache(l1_max_size=4, sqlite_path=None) as mem_only:
+        assert mem_only.get(key1) is None
+        mem_only.set(key1, rec1)
+        assert mem_only.stats()["l2_enabled"] is False
+        mem_only.clear()
 
-    # Direct SQLiteCache test
-    sql_c = SQLiteCache(":memory:")
-    assert sql_c.get(key1) is None
+    with MultiTierCache(l1_max_size=4, sqlite_path=tmp_path / "ctx_cache.sqlite") as disk_cache:
+        disk_cache.set(key1, rec1)
+        assert disk_cache.get(key1) == rec1
+
+    # Direct SQLiteCache test with context manager & idempotent close()
+    with SQLiteCache(":memory:") as sql_c:
+        assert sql_c.get(key1) is None
+    sql_c.close()
+
+    # Reset default cache to in-memory so subsequent tests don't use closed temp file
+    configure_cache(l1_max_size=4096, sqlite_path=None)
 
 
 def test_explain_and_stewardship_ledger() -> None:
@@ -152,21 +168,22 @@ def test_explain_and_stewardship_ledger() -> None:
     assert rep["intelligence"]["timezones"] == ["America/Los_Angeles"]
     assert rep["explanation"]["requires_human_review"] is False
 
-    # Ledger
-    ledger = PhoneStewardshipLedger(":memory:")
-    clean_phone = standardize_phone("(415) 555-2671")
-    assert ledger.record_if_flagged(clean_phone) is None
+    # Ledger with context manager & idempotent close()
+    with PhoneStewardshipLedger(":memory:") as ledger:
+        clean_phone = standardize_phone("(415) 555-2671")
+        assert ledger.record_if_flagged(clean_phone) is None
 
-    flagged_phone = standardize_phone("(415) 555-0142")  # Fictitious 555-01XX -> FUZZY_REVIEW
-    entry_id = ledger.record_if_flagged(flagged_phone)
-    assert entry_id is not None
+        flagged_phone = standardize_phone("(415) 555-0142")  # Fictitious 555-01XX -> FUZZY_REVIEW
+        entry_id = ledger.record_if_flagged(flagged_phone)
+        assert entry_id is not None
 
-    pending = ledger.list_pending()
-    assert len(pending) == 1
-    assert pending[0]["e164"] == "+14155550142"
+        pending = ledger.list_pending()
+        assert len(pending) == 1
+        assert pending[0]["e164"] == "+14155550142"
 
-    assert ledger.resolve_entry(entry_id, status="APPROVED", note="Test fixture") is True
-    assert ledger.list_pending() == []
+        assert ledger.resolve_entry(entry_id, status="APPROVED", note="Test fixture") is True
+        assert ledger.list_pending() == []
+    ledger.close()
 
     # FastAPI /v1/explain and MCP explain_phone
     client = TestClient(app)
@@ -183,3 +200,4 @@ def test_explain_and_stewardship_ledger() -> None:
         }
     )
     assert "Telekom Deutschland" in mcp_exp["result"]["content"][0]["text"]
+

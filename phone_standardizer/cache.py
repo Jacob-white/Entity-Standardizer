@@ -12,11 +12,21 @@ from typing import Any
 from phone_standardizer.models import StandardizedPhone
 
 
-def make_cache_key(raw_phone: str | None, country: str | None = None, default_country: str = "US") -> str:
+def make_cache_key(
+    raw_phone: str | None,
+    country: str | None = None,
+    default_country: str = "US",
+    addr_iso2: str | None = None,
+    addr_state: str | None = None,
+) -> str:
     """Create a deterministic cache key for a phone standardization request."""
     p = "" if raw_phone is None else str(raw_phone).strip()
     c = "" if country is None else str(country).strip().upper()
     d = str(default_country).strip().upper()
+    ai = "" if addr_iso2 is None else str(addr_iso2).strip().upper()
+    ast = "" if addr_state is None else str(addr_state).strip().upper()
+    if ai or ast:
+        return f"{d}|{c}|{ai}|{ast}|{p}"
     return f"{d}|{c}|{p}"
 
 
@@ -76,6 +86,7 @@ class SQLiteCache:
         self.db_path = str(db_path)
         self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self._lock = threading.Lock()
+        self._closed = False
         self.hits = 0
         self.misses = 0
         with self._lock:
@@ -121,6 +132,19 @@ class SQLiteCache:
             self.hits = 0
             self.misses = 0
 
+    def close(self) -> None:
+        """Close the underlying SQLite connection."""
+        with self._lock:
+            if not self._closed:
+                self._conn.close()
+                self._closed = True
+
+    def __enter__(self) -> SQLiteCache:
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        self.close()
+
 
 class MultiTierCache:
     """Two-tier (L1 in-memory LRU + optional L2 SQLite) cache manager."""
@@ -150,6 +174,17 @@ class MultiTierCache:
         if self.l2 is not None:
             self.l2.clear()
 
+    def close(self) -> None:
+        """Close the L2 SQLite cache if enabled."""
+        if self.l2 is not None:
+            self.l2.close()
+
+    def __enter__(self) -> MultiTierCache:
+        return self
+
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        self.close()
+
     def stats(self) -> dict[str, Any]:
         return {
             "l1": self.l1.stats(),
@@ -170,6 +205,7 @@ def get_default_cache() -> MultiTierCache:
 def configure_cache(l1_max_size: int = 4096, sqlite_path: str | Path | None = None) -> MultiTierCache:
     """Reconfigure and replace the global MultiTierCache instance."""
     global _DEFAULT_CACHE
+    _DEFAULT_CACHE.close()
     _DEFAULT_CACHE = MultiTierCache(l1_max_size=l1_max_size, sqlite_path=sqlite_path)
     return _DEFAULT_CACHE
 
@@ -182,3 +218,4 @@ def clear_cache() -> None:
 def get_cache_stats() -> dict[str, Any]:
     """Return hit/miss/size metrics from the active global cache."""
     return _DEFAULT_CACHE.stats()
+

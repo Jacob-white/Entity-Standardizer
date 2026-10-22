@@ -74,36 +74,10 @@ def are_keypad_adjacent(digit_a: str, digit_b: str) -> bool:
 
 def damerau_levenshtein_distance(s1: str, s2: str) -> int:
     """Compute Optimal String Alignment (Damerau-Levenshtein) distance between two strings."""
-    if s1 == s2:
-        return 0
-    len1, len2 = len(s1), len(s2)
-    if len1 == 0:
-        return len2
-    if len2 == 0:
-        return len1
+    from phone_standardizer._native_dispatch import damerau_levenshtein_distance_dispatch
 
-    dp = [[0] * (len2 + 1) for _ in range(len1 + 1)]
-    for i in range(len1 + 1):
-        dp[i][0] = i
-    for j in range(len2 + 1):
-        dp[0][j] = j
+    return damerau_levenshtein_distance_dispatch(s1, s2)
 
-    for i in range(1, len1 + 1):
-        for j in range(1, len2 + 1):
-            cost = 0 if s1[i - 1] == s2[j - 1] else 1
-            dp[i][j] = min(
-                dp[i - 1][j] + 1,      # deletion
-                dp[i][j - 1] + 1,      # insertion
-                dp[i - 1][j - 1] + cost,  # substitution
-            )
-            if (
-                i > 1
-                and j > 1
-                and s1[i - 1] == s2[j - 2]
-                and s1[i - 2] == s2[j - 1]
-            ):
-                dp[i][j] = min(dp[i][j], dp[i - 2][j - 2] + 1)  # adjacent transposition
-    return dp[len1][len2]
 
 
 def _detect_single_transposition(a: str, b: str) -> bool:
@@ -208,7 +182,7 @@ def compare_phones(
             phone_b=pb,
             is_exact_match=False,
             is_extension_variant=True,
-            is_fuzzy_match=True,
+            is_fuzzy_match=0.96 >= fuzzy_threshold,
             similarity_score=0.96,
             match_type="EXTENSION_VARIANT",
             edit_distance=0,
@@ -220,8 +194,14 @@ def compare_phones(
             ),
         )
 
-    # 2. Identical NSN across ambiguous country context (e.g., national vs international)
-    if nsn_a == nsn_b and len(nsn_a) >= 7:
+    # 2. Identical NSN across ambiguous country context (only when at least one lacked explicit +CC)
+    has_intl_a = bool(re.match(r"^[^\d+]*\+", pa.raw_input.strip())) or (
+        "IDD_EXIT_PREFIX_STRIPPED" in pa.healing_actions
+    )
+    has_intl_b = bool(re.match(r"^[^\d+]*\+", pb.raw_input.strip())) or (
+        "IDD_EXIT_PREFIX_STRIPPED" in pb.healing_actions
+    )
+    if nsn_a == nsn_b and len(nsn_a) >= 7 and not (has_intl_a and has_intl_b):
         score = 0.94
         return PhoneComparisonResult(
             phone_a=pa,
@@ -236,6 +216,7 @@ def compare_phones(
             keypad_adjacent_typo=False,
             explanation=f"Identical National Significant Number ({nsn_a}) across country contexts.",
         )
+
 
     # 3. Same country calling code: check single transposition or single-digit typo
     same_cc = pa.country_calling_code == pb.country_calling_code
@@ -257,7 +238,10 @@ def compare_phones(
             )
         is_sub, is_keypad = _detect_single_substitution(nsn_a, nsn_b)
         if is_sub:
-            score = 0.91 if is_keypad else 0.89
+            if nsn_a.endswith("00") and nsn_b.endswith("00"):
+                score = 0.85
+            else:
+                score = 0.91 if is_keypad else 0.89
             match_type = "KEYPAD_ADJACENT_TYPO" if is_keypad else "SINGLE_DIGIT_EDIT"
             detail = "keypad-adjacent" if is_keypad else "single-digit"
             return PhoneComparisonResult(
@@ -282,6 +266,12 @@ def compare_phones(
     raw_sim = max(0.0, round(1.0 - (dist / max_len), 4))
     # Cap multi-edit similarity below 0.85 so 2+ digit mutations do not falsely auto-cluster
     capped_sim = min(raw_sim, 0.84) if dist >= 2 else raw_sim
+    final_match_type = "SINGLE_DIGIT_EDIT" if dist == 1 else "DISTINCT"
+    final_explanation = (
+        "Single-digit edit detected (Damerau-Levenshtein distance=1)."
+        if dist == 1
+        else f"Distinct telephone numbers (Damerau-Levenshtein distance={dist})."
+    )
 
     return PhoneComparisonResult(
         phone_a=pa,
@@ -290,11 +280,11 @@ def compare_phones(
         is_extension_variant=False,
         is_fuzzy_match=capped_sim >= fuzzy_threshold,
         similarity_score=capped_sim,
-        match_type="DISTINCT",
+        match_type=final_match_type,
         edit_distance=dist,
         transposition_detected=False,
         keypad_adjacent_typo=False,
-        explanation=f"Distinct telephone numbers (Damerau-Levenshtein distance={dist}).",
+        explanation=final_explanation,
     )
 
 
@@ -358,10 +348,47 @@ def deduplicate_phones(
     if not phones:
         return []
 
-    parsed_list = [_coerce_phone(p, country=country) for p in phones]
-    n = len(parsed_list)
-    parent = list(range(n))
-    match_reasons: dict[int, set[str]] = {i: set() for i in range(n)}
+    str_cache: dict[str, StandardizedPhone] = {}
+    parsed_list: list[StandardizedPhone] = []
+    for p in phones:
+        if isinstance(p, StandardizedPhone):
+            parsed_list.append(p)
+        else:
+            cp = str_cache.get(p)
+            if cp is None:
+                cp = standardize_phone(p, country=country)
+                str_cache[p] = cp
+            parsed_list.append(cp)
+
+    # Pre-group identical (e164, extension, nsn) in O(N) before pairwise bucket indexing
+    exact_reps: dict[tuple[str | None, str | None, str | None], int] = {}
+    rep_members: dict[int, list[int]] = {}
+    rep_unique_phones: dict[int, list[StandardizedPhone]] = {}
+    seen_raw_per_rep: dict[int, set[str]] = {}
+    match_reasons: dict[int, set[str]] = {}
+    buckets: dict[str, list[int]] = {}
+
+    for idx, p in enumerate(parsed_list):
+        if p.e164 or p.national_significant_number:
+            exact_key = (p.e164, p.extension, p.national_significant_number)
+            rep = exact_reps.get(exact_key)
+            if rep is not None:
+                rep_members[rep].append(idx)
+                if p.raw_input not in seen_raw_per_rep[rep]:
+                    seen_raw_per_rep[rep].add(p.raw_input)
+                    rep_unique_phones[rep].append(p)
+                reason = "EXACT_MATCH" if p.e164 else "NATIONAL_EQUIVALENT"
+                match_reasons[rep].add(reason)
+                continue
+            exact_reps[exact_key] = idx
+        rep_members[idx] = [idx]
+        rep_unique_phones[idx] = [p]
+        seen_raw_per_rep[idx] = {p.raw_input}
+        match_reasons[idx] = set()
+        for key in generate_phone_blocking_keys(p):
+            buckets.setdefault(key, []).append(idx)
+
+    parent: dict[int, int] = {r: r for r in rep_members}
 
     def find(i: int) -> int:
         while parent[i] != i:
@@ -383,12 +410,6 @@ def deduplicate_phones(
         else:
             match_reasons[ri].add(reason)
 
-    # Index candidate pairs via blocking keys
-    buckets: dict[str, list[int]] = {}
-    for idx, p in enumerate(parsed_list):
-        for key in generate_phone_blocking_keys(p):
-            buckets.setdefault(key, []).append(idx)
-
     compared_pairs: set[tuple[int, int]] = set()
     for candidate_indices in buckets.values():
         for i_pos in range(len(candidate_indices)):
@@ -408,13 +429,17 @@ def deduplicate_phones(
                     union(a_idx, b_idx, cmp_res.match_type)
 
     groups: dict[int, list[int]] = {}
-    for idx in range(n):
-        groups.setdefault(find(idx), []).append(idx)
+    group_candidates: dict[int, list[StandardizedPhone]] = {}
+    for rep_idx, m_indices in rep_members.items():
+        root = find(rep_idx)
+        groups.setdefault(root, []).extend(m_indices)
+        group_candidates.setdefault(root, []).extend(rep_unique_phones[rep_idx])
 
     clusters: list[PhoneCluster] = []
-    for cluster_num, (root_idx, member_indices) in enumerate(groups.items(), start=1):
+    for cluster_num, root_idx in enumerate(sorted(groups.keys()), start=1):
+        member_indices = sorted(groups[root_idx])
         members = tuple(parsed_list[i] for i in member_indices)
-        golden = max(members, key=_survivorship_rank)
+        golden = max(group_candidates[root_idx], key=_survivorship_rank)
         reasons = tuple(sorted(match_reasons[root_idx] or {"SINGLETON"}))
         clusters.append(
             PhoneCluster(
@@ -444,7 +469,20 @@ class ContactCluster:
         return asdict(self)
 
 
+def _is_shared_hub_or_cmra(rec: dict[str, Any]) -> bool:
+    """Return True if a contact record or its address_context is flagged as a Registered Agent hub or CMRA."""
+    if rec.get("is_registered_agent_hub") or rec.get("is_cmra"):
+        return True
+    ctx = rec.get("address_context")
+    if ctx is None:
+        return False
+    if isinstance(ctx, dict):
+        return bool(ctx.get("is_registered_agent_hub") or ctx.get("is_cmra"))
+    return bool(getattr(ctx, "is_registered_agent_hub", False) or getattr(ctx, "is_cmra", False))
+
+
 def cluster_contact_records(
+
     records: Sequence[dict[str, Any]],
     phone_field: str = "phone",
     address_key_field: str = "address_key",
@@ -502,9 +540,17 @@ def cluster_contact_records(
         else:
             reasons[ri].add(reason)
 
-    # 1. Link by phone blocking keys + fuzzy comparison
+    # 1. Pre-group identical (e164, extension, nsn) in O(N), then link by phone blocking keys + fuzzy comparison
+    exact_phone_reps: dict[tuple[str | None, str | None, str | None], int] = {}
     phone_buckets: dict[str, list[int]] = {}
     for idx, p in enumerate(parsed_phones):
+        if p.e164 or p.national_significant_number:
+            exact_key = (p.e164, p.extension, p.national_significant_number)
+            if exact_key in exact_phone_reps:
+                reason = "PHONE_EXACT_MATCH" if p.e164 else "PHONE_NATIONAL_EQUIVALENT"
+                union(exact_phone_reps[exact_key], idx, reason)
+                continue
+            exact_phone_reps[exact_key] = idx
         for key in generate_phone_blocking_keys(p):
             phone_buckets.setdefault(key, []).append(idx)
 
@@ -525,15 +571,16 @@ def cluster_contact_records(
                 if cmp_res.is_fuzzy_match:
                     union(a_idx, b_idx, f"PHONE_{cmp_res.match_type}")
 
-    # 2. Link by shared Address-Standardizer normalized_address_key
+    # 2. Link by shared Address-Standardizer normalized_address_key (excluding CMRA & Registered Agent hubs)
     addr_buckets: dict[str, list[int]] = {}
     for idx, ak in enumerate(addr_keys):
-        if ak:
+        if ak and not _is_shared_hub_or_cmra(records[idx]):
             addr_buckets.setdefault(ak, []).append(idx)
 
     for indices in addr_buckets.values():
         for i_pos in range(1, len(indices)):
             union(indices[0], indices[i_pos], "SHARED_ADDRESS_KEY")
+
 
     groups: dict[int, list[int]] = {}
     for idx in range(n):

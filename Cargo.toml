@@ -1,6 +1,6 @@
 [package]
 name = "_phone_standardizer_rs"
-version = "1.0.0"
+version = "1.4.0"
 edition = "2021"
 rust-version = "1.83"
 description = "Optional native Rust acceleration module for Phone Standardizer (E.164 normalization, vanity keypad folding, and dial prefix trie dispatch)."

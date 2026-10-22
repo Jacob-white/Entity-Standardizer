@@ -291,3 +291,5 @@ Computes a deterministic confidence score $C \in [0.0, 1.0]$ and maps to:
 | **M5** | Native Rust PyO3 Extension, Arrow/DuckDB & SDKs | `src/lib.rs`, `arrow.py`, `_native_dispatch.py`, `sdks/` | **Active (v1.1.0)** |
 | **M6** | Sub-National Intelligence, Multi-Tier Cache & Audit Ledger | `intelligence.py`, `cache.py`, `audit.py` | **Active (v1.1.0)** |
 | **M7** | Fuzzy Telephony Deduplication & Contact Entity Resolution | `dedup.py`, `/v1/compare`, `/v1/deduplicate` | **Active (v1.2.0)** |
+| **M8** | Global Dial-Plan Precision, Subsystem Wiring & Portfolio Hardening | `registry_data.py`, `standardizer.py`, `src/lib.rs`, `sdks/` | **Active (v1.3.0)** |
+
