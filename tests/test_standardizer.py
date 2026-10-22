@@ -302,11 +302,148 @@ def test_validation_risk_flags_and_format_helpers() -> None:
 
 
 def test_mask_phone_strategies() -> None:
+    import pytest
+
     assert mask_phone("+1 (415) 555-2671", strategy="partial") == "+1******2671"
+    assert mask_phone("+1 (415) 555-2671", strategy="partial_phone") == "***-***-2671"
+    assert mask_phone("123", strategy="partial_phone") == "***"
+    assert mask_phone("+1 (415) 555-2671", strategy="last4") == "****2671"
+    assert mask_phone("123", strategy="last4") == "****"
     assert mask_phone("+1 (415) 555-2671", strategy="redact") == "[REDACTED PHONE]"
+    assert mask_phone("+1 (415) 555-2671", strategy="null") is None
     assert len(mask_phone("+1 (415) 555-2671", strategy="hash")) == 64
+    assert len(mask_phone("+1 (415) 555-2671", strategy="sha256")) == 64
+    assert len(mask_phone("+1 (415) 555-2671", strategy="md5")) == 32
     assert mask_phone("", strategy="partial") == "[REDACTED PHONE]"
     assert mask_phone("12345", strategy="partial") == "*2345"
+
+    with pytest.raises(ValueError, match="Unknown masking strategy"):
+        mask_phone("+1 (415) 555-2671", strategy="invalid_strategy")
+
+
+def test_phase5_lexical_regional_healing_and_formatting() -> None:
+    # 1. Arbitrary leading labels ("Contact: ", "WhatsApp: ")
+    lbl1 = standardize_phone("Contact: +44 20 7946 0200")
+    assert lbl1.e164 == "+442079460200"
+    lbl2 = standardize_phone("WhatsApp: +49 30 12345678")
+    assert lbl2.e164 == "+493012345678"
+
+    # 2. Trailing words after complete 10+ digit number are stripped, not folded as vanity digits
+    trailing = standardize_phone("+1 415-555-2671 ask for Bob")
+    assert trailing.e164 == "+14155552671"
+    assert trailing.vanity_alias is None
+    trailing2 = standardize_phone("+1 415-555-2671 Mon-Fri")
+    assert trailing2.e164 == "+14155552671"
+    assert trailing2.vanity_alias is None
+
+    # 3. Expanded extension formats (: / - / # separators, parenthesized, RFC 3966 ;isub=, DTMF , / p / w)
+    for ext_input in [
+        "+1 415-555-2671 ext: 104",
+        "+1 415-555-2671 ext-104",
+        "+1 415-555-2671 (ext. 104)",
+        "+1 415-555-2671;isub=104",
+        "+1 415-555-2671,104",
+        "+1 415-555-2671p104",
+        "+1 415-555-2671w104",
+    ]:
+        parsed_ext = standardize_phone(ext_input)
+        assert parsed_ext.e164 == "+14155552671"
+        assert parsed_ext.extension == "104"
+
+    # 4. Argentina (+54): domestic trunk 0 stripping + 2-, 3-, and 4-digit area code 15 mobile healing
+    ar_trunk = standardize_phone("011 15-8421-9034", country="AR")
+    assert ar_trunk.e164 == "+5491184219034"
+    assert ar_trunk.area_code == "11"
+    assert ar_trunk.subscriber_number == "84219034"
+    assert ar_trunk.national == "011 15 8421 9034"
+    assert ar_trunk.international == "+54 9 11 8421 9034"
+    assert ar_trunk.rfc3966 == "tel:+54-9-11-8421-9034"
+    assert HealingAction.NATIONAL_TRUNK_STRIPPED in ar_trunk.healing_actions
+    assert HealingAction.ARGENTINA_MOBILE_15_HEALED in ar_trunk.healing_actions
+
+    ar_3digit = standardize_phone("0351 15-512-3456", country="AR")
+    assert ar_3digit.e164 == "+5493515123456"
+    assert ar_3digit.area_code == "351"
+    assert ar_3digit.subscriber_number == "5123456"
+    assert ar_3digit.national == "0351 15 512 3456"
+    assert ar_3digit.international == "+54 9 351 512 3456"
+
+    ar_4digit = standardize_phone("02944 15-456-789", country="AR")
+    assert ar_4digit.e164 == "+5492944456789"
+
+    ar_no15_12 = standardize_phone("11 4444 5555 66", country="AR")
+    assert ar_no15_12.is_valid is False
+
+    # 5. Mexico (+52): legacy domestic 044, 045, 01 prefix healing and already-clean 10-digit MX
+    mx_clean = standardize_phone("+52 55 8421 9034")
+    assert mx_clean.e164 == "+525584219034"
+
+    mx_044 = standardize_phone("044 55 8421 9034", country="MX")
+    assert mx_044.e164 == "+525584219034"
+    assert HealingAction.LEGACY_MEXICO_MOBILE_1_STRIPPED in mx_044.healing_actions
+
+    mx_045 = standardize_phone("045 81 8421 9034", country="MX")
+    assert mx_045.e164 == "+528184219034"
+
+    mx_01 = standardize_phone("01 55 8421 9034", country="MX")
+    assert mx_01.e164 == "+525584219034"
+    assert HealingAction.NATIONAL_TRUNK_STRIPPED in mx_01.healing_actions
+
+    # 6. Closed dial plan (Italy +39) preserves leading (0) / 0 in landline numbers
+    it_landline = standardize_phone("+39 (0) 6 1234 5678")
+    assert it_landline.e164 == "+390612345678"
+    assert HealingAction.REDUNDANT_INTL_TRUNK_STRIPPED not in it_landline.healing_actions
+
+    # Domestic number with (0) in open dial plan (GB)
+    gb_dom_paren = standardize_phone("(0) 20 7946 0200", country="GB")
+    assert gb_dom_paren.e164 == "+442079460200"
+    assert HealingAction.REDUNDANT_INTL_TRUNK_STRIPPED in gb_dom_paren.healing_actions
+
+    # 7. IDD exit prefix does NOT trigger false ADDRESS_COUNTRY_MISMATCH; shared CC conflict DOES
+    idd_us_to_gb = standardize_phone("011 44 20 7946 0200", country="US")
+    assert idd_us_to_gb.e164 == "+442079460200"
+    assert PhoneRiskFlag.ADDRESS_COUNTRY_MISMATCH not in idd_us_to_gb.risk_flags
+
+    nanp_mismatch = standardize_phone("+1 416-555-0199", country="US")  # 416 is Ontario, CA
+    assert nanp_mismatch.country_iso2 == "CA"
+    assert PhoneRiskFlag.ADDRESS_COUNTRY_MISMATCH in nanp_mismatch.risk_flags
+
+    # 8. NANP NPA=555 is invalid with INVALID_AREA_CODE
+    npa_555 = standardize_phone("(555) 234-5678", country="US")
+    assert npa_555.is_valid is False
+    assert PhoneRiskFlag.INVALID_AREA_CODE in npa_555.risk_flags
+
+    # 9. Address context postal-code country inference (dict and object)
+    res_postal_dict = standardize_phone("03-1234-5678", address_context={"postal_code": "100-0001"})
+    assert res_postal_dict.country_iso2 == "JP"
+    assert res_postal_dict.e164 == "+81312345678"
+
+    class DummyPostalObj:
+        postal_code = "SW1A 1AA"
+
+    res_postal_obj = standardize_phone("020 7946 0200", address_context=DummyPostalObj())
+    assert res_postal_obj.country_iso2 == "GB"
+    assert res_postal_obj.e164 == "+442079460200"
+
+    # 10. UK 3-digit area code, KR Seoul 02, and CN 11-digit mobile E.123 formatting
+    uk_leeds = standardize_phone("+44 113 496 0200")
+    assert uk_leeds.national == "0113 496 0200"
+    assert uk_leeds.international == "+44 113 496 0200"
+    assert uk_leeds.rfc3966 == "tel:+44-113-496-0200"
+
+    kr_seoul = standardize_phone("+82 2 1234 5678")
+    assert kr_seoul.area_code == "2"
+    assert kr_seoul.national == "02 1234 5678"
+    assert kr_seoul.international == "+82 2 1234 5678"
+
+    cn_mobile = standardize_phone("+86 138 0013 8000")
+    assert cn_mobile.area_code == "138"
+    assert cn_mobile.international == "+86 138 0013 8000"
+    cn_beijing = standardize_phone("+86 10 1234 5678")
+    assert cn_beijing.area_code == "10"
+    assert cn_beijing.national == "010 1234 5678"
+
+
 
 
 def test_native_dispatch_and_fallback(monkeypatch) -> None:

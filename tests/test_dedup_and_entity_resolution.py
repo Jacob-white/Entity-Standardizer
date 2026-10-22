@@ -231,6 +231,40 @@ def test_cluster_contact_records_synergy() -> None:
     c_ri_gt_rj = cluster_contact_records(rec_ri_gt_rj)
     assert len(c_ri_gt_rj) == 1
 
+    # Phase 5: Explicit international +CC on both inputs must NOT match as NATIONAL_EQUIVALENT
+    intl_diff_cc = compare_phones("+1 415-555-2671", "+33 4155552671")
+    assert intl_diff_cc.match_type == "DISTINCT"
+    assert intl_diff_cc.is_fuzzy_match is False
+
+    # Phase 5: Registered Agent hub and CMRA addresses must NOT link distinct phones via SHARED_ADDRESS_KEY
+    class DummyHubAddr:
+        is_registered_agent_hub = True
+        is_cmra = False
+
+    hub_records = [
+        {
+            "id": "corp-1",
+            "phone": "+1 415-555-1234",
+            "address_key": "US|DE|WILMINGTON|1209_ORANGE_ST",
+            "is_registered_agent_hub": True,
+        },
+        {
+            "id": "corp-2",
+            "phone": "+1 415-555-5678",
+            "address_key": "US|DE|WILMINGTON|1209_ORANGE_ST",
+            "address_context": {"is_cmra": True},
+        },
+        {
+            "id": "corp-3",
+            "phone": "+1 415-555-9012",
+            "address_key": "US|DE|WILMINGTON|1209_ORANGE_ST",
+            "address_context": DummyHubAddr(),
+        },
+    ]
+    hub_clusters = cluster_contact_records(hub_records)
+    assert len(hub_clusters) == 3
+
+
 
 def test_server_mcp_and_cli_phase4_endpoints(capsys) -> None:
     client = TestClient(app)

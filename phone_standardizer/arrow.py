@@ -166,6 +166,7 @@ def register_duckdb_udfs(con: Any, default_country: str = "US") -> None:
     """Register scalar phone standardization UDFs on a DuckDB connection."""
     if duckdb is None:
         raise ImportError("duckdb is required to use register_duckdb_udfs. Install with `pip install duckdb`.")
+    from phone_standardizer.dedup import generate_phone_blocking_keys
 
     def _e164_udf(phone: str | None) -> str | None:
         return format_e164(phone, default_country=default_country)
@@ -179,11 +180,18 @@ def register_duckdb_udfs(con: Any, default_country: str = "US") -> None:
     def _valid_udf(phone: str | None) -> bool:
         return validate_phone(phone, default_country=default_country)
 
-    def _mask_udf(phone: str | None) -> str:
+    def _mask_udf(phone: str | None) -> str | None:
         return mask_phone(phone, strategy="partial", default_country=default_country)
+
+    def _blocking_keys_udf(phone: str | None) -> list[str]:
+        if not phone:
+            return []
+        return list(generate_phone_blocking_keys(phone, country=default_country))
 
     con.create_function("standardize_phone_e164", _e164_udf, ["VARCHAR"], "VARCHAR")
     con.create_function("standardize_phone_national", _national_udf, ["VARCHAR"], "VARCHAR")
     con.create_function("standardize_phone_international", _intl_udf, ["VARCHAR"], "VARCHAR")
     con.create_function("validate_phone_udf", _valid_udf, ["VARCHAR"], "BOOLEAN")
     con.create_function("mask_phone_udf", _mask_udf, ["VARCHAR"], "VARCHAR")
+    con.create_function("phone_blocking_keys", _blocking_keys_udf, ["VARCHAR"], "VARCHAR[]")
+

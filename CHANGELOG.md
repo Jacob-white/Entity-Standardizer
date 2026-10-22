@@ -2,6 +2,32 @@
 
 All notable changes to **Phone Standardizer** will be documented in this file.
 
+## [1.3.0] - 2026-10-22
+
+### Added & Fixed
+- **Lexical, Regional Healing & E.123 Formatting Fixes** (`phone_standardizer/normalization.py`, `standardizer.py`, `nanp.py`):
+  - Arbitrary leading label stripping (`strip_leading_label`) for CRM/contact labels (`"Contact: +44..."`, `"WhatsApp: +49..."`, `"Call: ..."`).
+  - Vanity keypad decoder (`decode_vanity_phone`) guard that strips trailing annotations (`"ask for Bob"`, `"Mon-Fri"`) after complete 10+ digit numbers instead of folding them as keypad digits, and supports longer toll-free vanity words (`1-800-MATTRESS`).
+  - Expanded extension parser (`extract_extension`) supporting `:`, `-`, `#` separators, parenthesized extensions (`(ext. 104)`), RFC 3966 `;isub=` subaddresses, and DTMF pause/wait sequences (`,104`, `p104`, `w104`).
+  - Argentina (`+54`) domestic trunk `0` stripping and 2-, 3-, and 4-digit area code `15` mobile prefix healing (`+54 9 ...`).
+  - Mexico (`+52`) legacy domestic `044`, `045`, and `01` prefix healing alongside international `+52 1` healing.
+  - Refined `ADDRESS_COUNTRY_MISMATCH` detection: suppresses false mismatches when `country` was the originating IDD exit dial plan (`011` from `US`) and raises mismatches across shared calling codes (`+1` US vs CA/PR/JM, `+44` GB vs JE/GG/IM, `+7` RU vs KZ).
+  - Guarded `(0)` trunk stripping so closed dial plans (`IT`) retain significant leading zeros.
+  - Flagged NANP `NPA=555` and reserved `N9X` area codes with `PhoneRiskFlag.INVALID_AREA_CODE` and added 17 new US overlay NPAs (`324`, `327`, `329`, `350`, `353`, `369`, `436`, `526`, `624`, `686`, `728`, `730`, `738`, `821`, `840`, `861`, `924`).
+  - Expanded `extract_phones_from_text()` to capture contiguous E.164 (`+14155552671`), 5-group French/German numbers, parenthetical `(0)` trunks, and vanity numbers (`1-800-FLOWERS`).
+  - UK (`+44`) 3-digit area code (`0113`, `0121`, `0131`, `0141`, `0151`, `0161`, `0191`) E.123 formatting (`0AAA BBB BBBB`) and 2-digit area-code formatting across `CH`, `BR`, `MX`, `AR`, `IT`, `CN`, and `KR`.
+- **Global 249-Country Dial-Plan Registry Precision** (`phone_standardizer/registry_data.py`):
+  - Upgraded 193 country dial plans with accurate ITU-T E.164 closed-plan `national_trunk_prefix=None` (`PT`, `GR`, `CZ`, `CL`, `CO`, `UY`, `CR`, `PA`, `LU`, `IS`, `MT`, `CY`, `QA`, `KW`, `BH`, `OM`, `VA`, `SM`, `MC`, `AD`), `8`/`810` trunk/IDD for `KZ`/`BY`, `06` trunk for `HU`, and exact NSN lengths and mobile prefixes across 25+ major economies (`ID`, `SA`, `IL`, `TR`, `BE`, `GR`, `CO`, `PK`, `EG`, `MY`, `PH`, `TH`, `VN`, `NG`, `KE`, `CL`, `PE`, `AR`, `PT`, `CZ`, `HU`, `RO`, `UA`, `FI`, `HK`, `TW`).
+- **Subsystem Wiring & Native Rust Dispatch** (`_native_dispatch.py`, `src/lib.rs`, `cache.py`, `audit.py`, `dedup.py`):
+  - Wired `fold_unicode_digits_dispatch`, `fold_vanity_digits_dispatch`, and `damerau_levenshtein_distance_dispatch` (`damerau_levenshtein_distance_rs`) into hot paths without circular recursion, and upgraded `standardize_batch_e164_dispatch` / `standardize_batch_e164_rs` to handle extensions, vanity words, and trunk prefixes.
+  - Wired `MultiTierCache` and `infer_country_from_postal_code()` into `standardize_phone()`, included `(addr_iso2, addr_state)` in `make_cache_key()`, and added `.close()` / context manager support to `SQLiteCache`, `MultiTierCache`, and `PhoneStewardshipLedger`.
+  - Guarded `NATIONAL_EQUIVALENT` in `compare_phones()` when both inputs carry explicit international `+CC` prefixes.
+- **Portfolio Synergy (`Address-Standardizer` & `Query-Builder`)**:
+  - Guarded `SHARED_ADDRESS_KEY` in `cluster_contact_records()` against `is_registered_agent_hub` and `is_cmra` on `StandardizedAddress` contexts.
+  - Expanded `mask_phone()` with all 8 `Query-Builder` CLAC masking strategies (`partial`, `partial_phone`, `last4`, `redact`, `null`, `hash`, `sha256`, `md5`) and registered `phone_blocking_keys()` in `register_duckdb_udfs()`.
+- **Multi-Platform SDK Parity (`v1.3.0`)**:
+  - Added `usePhoneInput()` React hook + `AbortController`/`requestId` stale-request guard in TypeScript SDK, nullable `*string` fields in Go SDK, and full `explain`, `compare`, `deduplicate`, and `listCountries` parity across TypeScript, Go, and .NET SDKs.
+
 ## [1.2.0] - 2026-10-21
 
 ### Added

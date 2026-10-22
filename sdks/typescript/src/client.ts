@@ -5,6 +5,11 @@
 import {
   CountryDialPlan,
   PhoneBatchRequest,
+  PhoneCluster,
+  PhoneCompareRequest,
+  PhoneComparisonResult,
+  PhoneDeduplicateRequest,
+  PhoneExplainReport,
   PhoneStandardizeRequest,
   StandardizedPhone,
 } from "./types.js";
@@ -13,6 +18,10 @@ export interface ClientOptions {
   baseUrl?: string;
   fetchImpl?: typeof fetch;
   headers?: Record<string, string>;
+}
+
+export interface RequestOptions {
+  signal?: AbortSignal;
 }
 
 /**
@@ -56,10 +65,11 @@ export class PhoneStandardizerClient {
     };
   }
 
-  async health(): Promise<{ status: string; version: string }> {
+  async health(options?: RequestOptions): Promise<{ status: string; version: string }> {
     const res = await this.fetchImpl(`${this.baseUrl}/health`, {
       method: "GET",
       headers: this.headers,
+      signal: options?.signal,
     });
     if (!res.ok) {
       throw new Error(`Health check failed with status ${res.status}`);
@@ -67,11 +77,15 @@ export class PhoneStandardizerClient {
     return (await res.json()) as { status: string; version: string };
   }
 
-  async standardize(req: PhoneStandardizeRequest): Promise<StandardizedPhone> {
+  async standardize(
+    req: PhoneStandardizeRequest,
+    options?: RequestOptions
+  ): Promise<StandardizedPhone> {
     const res = await this.fetchImpl(`${this.baseUrl}/v1/standardize`, {
       method: "POST",
       headers: this.headers,
       body: JSON.stringify(req),
+      signal: options?.signal,
     });
     if (!res.ok) {
       throw new Error(`Standardize failed with status ${res.status}`);
@@ -79,13 +93,63 @@ export class PhoneStandardizerClient {
     return (await res.json()) as StandardizedPhone;
   }
 
+  async explain(
+    req: PhoneStandardizeRequest,
+    options?: RequestOptions
+  ): Promise<PhoneExplainReport> {
+    const res = await this.fetchImpl(`${this.baseUrl}/v1/explain`, {
+      method: "POST",
+      headers: this.headers,
+      body: JSON.stringify(req),
+      signal: options?.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Explain failed with status ${res.status}`);
+    }
+    return (await res.json()) as PhoneExplainReport;
+  }
+
+  async compare(
+    req: PhoneCompareRequest,
+    options?: RequestOptions
+  ): Promise<PhoneComparisonResult> {
+    const res = await this.fetchImpl(`${this.baseUrl}/v1/compare`, {
+      method: "POST",
+      headers: this.headers,
+      body: JSON.stringify(req),
+      signal: options?.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Compare failed with status ${res.status}`);
+    }
+    return (await res.json()) as PhoneComparisonResult;
+  }
+
+  async deduplicate(
+    req: PhoneDeduplicateRequest,
+    options?: RequestOptions
+  ): Promise<{ cluster_count: number; clusters: PhoneCluster[] }> {
+    const res = await this.fetchImpl(`${this.baseUrl}/v1/deduplicate`, {
+      method: "POST",
+      headers: this.headers,
+      body: JSON.stringify(req),
+      signal: options?.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Deduplicate failed with status ${res.status}`);
+    }
+    return (await res.json()) as { cluster_count: number; clusters: PhoneCluster[] };
+  }
+
   async batch(
-    req: PhoneBatchRequest
+    req: PhoneBatchRequest,
+    options?: RequestOptions
   ): Promise<{ count: number; results: StandardizedPhone[] }> {
     const res = await this.fetchImpl(`${this.baseUrl}/v1/batch`, {
       method: "POST",
       headers: this.headers,
       body: JSON.stringify(req),
+      signal: options?.signal,
     });
     if (!res.ok) {
       throw new Error(`Batch failed with status ${res.status}`);
@@ -93,17 +157,32 @@ export class PhoneStandardizerClient {
     return (await res.json()) as { count: number; results: StandardizedPhone[] };
   }
 
-  async getCountry(identifier: string): Promise<CountryDialPlan> {
+  async getCountry(identifier: string, options?: RequestOptions): Promise<CountryDialPlan> {
     const res = await this.fetchImpl(
       `${this.baseUrl}/v1/countries/${encodeURIComponent(identifier)}`,
       {
         method: "GET",
         headers: this.headers,
+        signal: options?.signal,
       }
     );
     if (!res.ok) {
       throw new Error(`Country lookup failed with status ${res.status}`);
     }
     return (await res.json()) as CountryDialPlan;
+  }
+
+  async listCountries(
+    options?: RequestOptions
+  ): Promise<{ count: number; countries: CountryDialPlan[] }> {
+    const res = await this.fetchImpl(`${this.baseUrl}/v1/countries`, {
+      method: "GET",
+      headers: this.headers,
+      signal: options?.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`List countries failed with status ${res.status}`);
+    }
+    return (await res.json()) as { count: number; countries: CountryDialPlan[] };
   }
 }

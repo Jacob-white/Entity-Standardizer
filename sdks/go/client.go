@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -29,27 +30,74 @@ func NewClient(baseURL string) *Client {
 	}
 }
 
-// Standardize parses, validates, and formats a single telephone number.
-func (c *Client) Standardize(ctx context.Context, req PhoneStandardizeRequest) (*StandardizedPhone, error) {
+func (c *Client) postJSON(ctx context.Context, path string, req any, out any) error {
 	body, err := json.Marshal(req)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/v1/standardize", bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+path, bytes.NewReader(body))
 	if err != nil {
-		return nil, err
+		return err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	resp, err := c.HTTPClient.Do(httpReq)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("standardize returned HTTP %d", resp.StatusCode)
+		return fmt.Errorf("%s returned HTTP %d", path, resp.StatusCode)
 	}
+	return json.NewDecoder(resp.Body).Decode(out)
+}
+
+func (c *Client) getJSON(ctx context.Context, path string, out any) error {
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+path, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := c.HTTPClient.Do(httpReq)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("%s returned HTTP %d", path, resp.StatusCode)
+	}
+	return json.NewDecoder(resp.Body).Decode(out)
+}
+
+// Standardize parses, validates, and formats a single telephone number.
+func (c *Client) Standardize(ctx context.Context, req PhoneStandardizeRequest) (*StandardizedPhone, error) {
 	var out StandardizedPhone
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := c.postJSON(ctx, "/v1/standardize", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Explain returns a diagnostic and geographic intelligence report for a phone number.
+func (c *Client) Explain(ctx context.Context, req PhoneStandardizeRequest) (*PhoneExplainReport, error) {
+	var out PhoneExplainReport
+	if err := c.postJSON(ctx, "/v1/explain", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Compare compares two phone numbers using E.164 equivalence and fuzzy keypad distance.
+func (c *Client) Compare(ctx context.Context, req PhoneCompareRequest) (*PhoneComparisonResult, error) {
+	var out PhoneComparisonResult
+	if err := c.postJSON(ctx, "/v1/compare", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// Deduplicate clusters and deduplicates a list of phone numbers into Golden Phone Records.
+func (c *Client) Deduplicate(ctx context.Context, req PhoneDeduplicateRequest) (*DeduplicateResponse, error) {
+	var out DeduplicateResponse
+	if err := c.postJSON(ctx, "/v1/deduplicate", req, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -57,26 +105,28 @@ func (c *Client) Standardize(ctx context.Context, req PhoneStandardizeRequest) (
 
 // Batch standardizes multiple phone strings in a single request.
 func (c *Client) Batch(ctx context.Context, req PhoneBatchRequest) (*BatchResponse, error) {
-	body, err := json.Marshal(req)
-	if err != nil {
-		return nil, err
-	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, c.BaseURL+"/v1/batch", bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	resp, err := c.HTTPClient.Do(httpReq)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("batch returned HTTP %d", resp.StatusCode)
-	}
 	var out BatchResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := c.postJSON(ctx, "/v1/batch", req, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
 }
+
+// GetCountry retrieves the ITU-T E.164 dial plan for an ISO country identifier.
+func (c *Client) GetCountry(ctx context.Context, identifier string) (*CountryDialPlan, error) {
+	var out CountryDialPlan
+	if err := c.getJSON(ctx, "/v1/countries/"+url.PathEscape(identifier), &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ListCountries retrieves all 249 country dial plans.
+func (c *Client) ListCountries(ctx context.Context) (*ListCountriesResponse, error) {
+	var out ListCountriesResponse
+	if err := c.getJSON(ctx, "/v1/countries", &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+

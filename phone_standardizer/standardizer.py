@@ -6,6 +6,7 @@ import hashlib
 import re
 from typing import Any
 
+from phone_standardizer.cache import get_default_cache, make_cache_key
 from phone_standardizer.confidence import evaluate_confidence_and_risk
 from phone_standardizer.models import (
     CountryDialPlan,
@@ -35,12 +36,15 @@ from phone_standardizer.registry import (
 
 # Matches an explicit "(0)" redundant trunk indicator inside an international number
 _PAREN_ZERO_TRUNK_RE = re.compile(r"\(\s*0\s*\)")
+_PLUS_BEFORE_DIGIT_RE = re.compile(r"^[^\d+]*\+")
 
 
 def _extract_address_hint(address_context: Any) -> tuple[str | None, str | None]:
-    """Extract (country_iso2, state) hints from a StandardizedAddress or dict."""
+    """Extract (country_iso2, state) hints from a StandardizedAddress or dict (with postal code inference)."""
     if address_context is None:
         return None, None
+    from phone_standardizer.dedup import infer_country_from_postal_code
+
     if isinstance(address_context, dict):
         raw_country = (
             address_context.get("country_iso2")
@@ -48,18 +52,33 @@ def _extract_address_hint(address_context: Any) -> tuple[str | None, str | None]
             or address_context.get("country")
         )
         raw_state = address_context.get("state") or address_context.get("region")
-        return normalize_country_iso2(str(raw_country)) if raw_country else None, (
-            str(raw_state).strip().upper() if raw_state else None
+        raw_postal = (
+            address_context.get("postal_code")
+            or address_context.get("zip_code")
+            or address_context.get("zip")
+            or address_context.get("postcode")
         )
+        iso2 = normalize_country_iso2(str(raw_country)) if raw_country else None
+        if not iso2 and raw_postal:
+            iso2 = infer_country_from_postal_code(str(raw_postal))
+        return iso2, (str(raw_state).strip().upper() if raw_state else None)
+
     raw_country = (
         getattr(address_context, "country_iso2", None)
         or getattr(address_context, "country_code", None)
         or getattr(address_context, "country", None)
     )
     raw_state = getattr(address_context, "state", None)
-    return normalize_country_iso2(str(raw_country)) if raw_country else None, (
-        str(raw_state).strip().upper() if raw_state else None
+    raw_postal = (
+        getattr(address_context, "postal_code", None)
+        or getattr(address_context, "zip_code", None)
+        or getattr(address_context, "zip", None)
+        or getattr(address_context, "postcode", None)
     )
+    iso2 = normalize_country_iso2(str(raw_country)) if raw_country else None
+    if not iso2 and raw_postal:
+        iso2 = infer_country_from_postal_code(str(raw_postal))
+    return iso2, (str(raw_state).strip().upper() if raw_state else None)
 
 
 def _classify_line_type(plan: CountryDialPlan, nsn: str) -> str:
@@ -104,8 +123,7 @@ def _split_area_and_subscriber(plan: CountryDialPlan, nsn: str) -> tuple[str | N
         if nsn.startswith("2"):
             return nsn[:2], nsn[2:]
         if nsn.startswith(("11", "121", "131", "141", "151", "161", "191")):
-            length = 3 if nsn.startswith("11") else 3
-            return nsn[:length], nsn[length:]
+            return nsn[:3], nsn[3:]
         return nsn[:4], nsn[4:]
     if plan.iso2 == "FR" and len(nsn) == 9:
         return nsn[:1], nsn[1:]
@@ -123,10 +141,17 @@ def _split_area_and_subscriber(plan: CountryDialPlan, nsn: str) -> tuple[str | N
         if nsn.startswith(("30", "40", "69", "89")):
             return nsn[:2], nsn[2:]
         if nsn.startswith(("15", "16", "17", "800", "900")):
-            length = 3
-            return nsn[:length], nsn[length:]
+            return nsn[:3], nsn[3:]
         return nsn[:3], nsn[3:]
-    if len(nsn) >= 7:
+    if plan.iso2 == "AR" and len(nsn) == 11 and nsn.startswith("9"):
+        if nsn.startswith("911"):
+            return "11", nsn[3:]
+        return nsn[1:4], nsn[4:]
+    if plan.iso2 == "KR" and nsn.startswith("2"):
+        return nsn[:1], nsn[1:]
+    if plan.iso2 == "CN" and len(nsn) == 11 and nsn.startswith("1") and not nsn.startswith("10"):
+        return nsn[:3], nsn[3:]
+    if len(nsn) >= 6:
         return nsn[:2], nsn[2:]
     return None, nsn
 
@@ -148,6 +173,11 @@ def _format_numbers(
     elif cc == "44":
         if nsn.startswith("2") and len(nsn) == 10:
             g1, g2, g3 = nsn[:2], nsn[2:6], nsn[6:]
+            national = f"0{g1} {g2} {g3}"
+            international = f"+44 {g1} {g2} {g3}"
+            rfc_body = f"+44-{g1}-{g2}-{g3}"
+        elif nsn.startswith(("11", "121", "131", "141", "151", "161", "191")) and len(nsn) == 10:
+            g1, g2, g3 = nsn[:3], nsn[3:6], nsn[6:]
             national = f"0{g1} {g2} {g3}"
             international = f"+44 {g1} {g2} {g3}"
             rfc_body = f"+44-{g1}-{g2}-{g3}"
@@ -188,11 +218,18 @@ def _format_numbers(
             national = f"(0{g1}) {g2} {g3}"
             international = f"+61 {g1} {g2} {g3}"
             rfc_body = f"+61-{g1}-{g2}-{g3}"
+    elif plan.iso2 == "AR" and len(nsn) == 11 and nsn.startswith("9"):
+        area, sub = _split_area_and_subscriber(plan, nsn)
+        assert area is not None and sub is not None
+        g2, g3 = sub[:-4], sub[-4:]
+        national = f"0{area} 15 {g2} {g3}"
+        international = f"+54 9 {area} {g2} {g3}"
+        rfc_body = f"+54-9-{area}-{g2}-{g3}"
     else:
         trunk = plan.national_trunk_prefix or ""
-        if len(nsn) >= 6:
-            split_idx = 2 if len(nsn) <= 8 else 3
-            g1, g2, g3 = nsn[:split_idx], nsn[split_idx:-4], nsn[-4:]
+        area, sub = _split_area_and_subscriber(plan, nsn)
+        if area and sub:
+            g1, g2, g3 = area, sub[:-4], sub[-4:]
             parts = [p for p in (g1, g2, g3) if p]
             national = f"{trunk}{parts[0]} " + " ".join(parts[1:])
             international = f"+{cc} " + " ".join(parts)
@@ -220,6 +257,19 @@ def standardize_phone(
         )
 
     raw_str = str(raw_phone)
+    addr_iso2, addr_state = _extract_address_hint(address_context)
+    cache_key = make_cache_key(
+        raw_str,
+        country=country,
+        default_country=default_country,
+        addr_iso2=addr_iso2,
+        addr_state=addr_state,
+    )
+    cache = get_default_cache()
+    cached = cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     healing_actions: list[str] = []
     extra_risk_flags: list[str] = []
 
@@ -239,7 +289,6 @@ def standardize_phone(
         healing_actions.append(HealingAction.VANITY_KEYPAD_DECODED)
 
     # 4. Determine country hints (explicit country parameter or address_context)
-    addr_iso2, addr_state = _extract_address_hint(address_context)
     explicit_iso2 = normalize_country_iso2(country) if country else None
     hint_iso2 = explicit_iso2 or addr_iso2
     if addr_iso2 and not explicit_iso2:
@@ -250,66 +299,71 @@ def standardize_phone(
 
     # 5. Detect explicit "(0)" redundant trunk marker before stripping punctuation
     has_paren_zero = bool(_PAREN_ZERO_TRUNK_RE.search(working))
-    if has_paren_zero:
-        working = _PAREN_ZERO_TRUNK_RE.sub("", working)
-        healing_actions.append(HealingAction.REDUNDANT_INTL_TRUNK_STRIPPED)
+    working_no_paren_zero = _PAREN_ZERO_TRUNK_RE.sub("", working) if has_paren_zero else working
 
     # 6. Check for international prefix (+ or IDD exit prefix)
     trimmed = working.strip()
-    has_leading_plus = trimmed.startswith("+")
-    digits_only = "".join(ch for ch in trimmed if ch.isdigit())
+    has_leading_plus = bool(_PLUS_BEFORE_DIGIT_RE.match(trimmed))
+    digits_raw = "".join(ch for ch in trimmed if ch.isdigit())
+    digits_no_paren = "".join(ch for ch in working_no_paren_zero if ch.isdigit())
 
-    if not digits_only:
-        return StandardizedPhone(
+    if not digits_raw:
+        res_empty = StandardizedPhone(
             raw_input=raw_str,
             extension=extension,
             vanity_alias=vanity_alias,
             risk_flags=(PhoneRiskFlag.INVALID_LENGTH,),
             healing_actions=tuple(healing_actions),
         )
+        cache.set(cache_key, res_empty)
+        return res_empty
 
     # Check short / emergency codes (3 digits like 911, 988, 112, 999, 411)
-    if not has_leading_plus and len(digits_only) == 3 and (
-        digits_only in NANP_SHORT_CODES or digits_only in NANP_EMERGENCY_CODES
+    if not has_leading_plus and len(digits_raw) == 3 and (
+        digits_raw in NANP_SHORT_CODES or digits_raw in NANP_EMERGENCY_CODES
     ):
         line_type = (
             PhoneLineType.EMERGENCY
-            if digits_only in NANP_EMERGENCY_CODES
+            if digits_raw in NANP_EMERGENCY_CODES
             else PhoneLineType.SHORT_CODE
         )
-        return StandardizedPhone(
+        res_short = StandardizedPhone(
             raw_input=raw_str,
-            e164=digits_only,
-            national=digits_only,
-            international=digits_only,
-            rfc3966=f"tel:{digits_only}",
+            e164=digits_raw,
+            national=digits_raw,
+            international=digits_raw,
+            rfc3966=f"tel:{digits_raw}",
             country_calling_code=context_plan.calling_code,
             country_iso2=context_plan.iso2,
             country_iso3=context_plan.iso3,
             country_name=context_plan.name,
-            national_significant_number=digits_only,
-            subscriber_number=digits_only,
+            national_significant_number=digits_raw,
+            subscriber_number=digits_raw,
             region_code=addr_state,
             line_type=line_type,
             is_valid=True,
             is_possible=True,
-            phone_key=digits_only,
-            phone_ext_key=digits_only,
+            phone_key=digits_raw,
+            phone_ext_key=digits_raw,
             confidence=1.0,
             routing_tier=PhoneRoutingTier.AUTO_PASS,
             healing_actions=tuple(healing_actions),
         )
+        cache.set(cache_key, res_short)
+        return res_short
 
     is_international = has_leading_plus
-    intl_digits = digits_only
+    intl_digits_raw = digits_raw
+    intl_digits_no_paren = digits_no_paren
 
     if not is_international:
         # Check for IDD exit prefixes (context_plan.idd_prefix or ITU standard 00) when string is long enough
         idd_candidates = ("00",) if context_plan.idd_prefix == "00" else (context_plan.idd_prefix, "00")
         for idd in idd_candidates:
-            if idd and digits_only.startswith(idd) and len(digits_only) - len(idd) >= 7:
+            if idd and digits_raw.startswith(idd) and len(digits_raw) - len(idd) >= 7:
                 is_international = True
-                intl_digits = digits_only[len(idd):]
+                intl_digits_raw = digits_raw[len(idd):]
+                intl_digits_no_paren = digits_no_paren[len(idd):]
                 healing_actions.append(HealingAction.IDD_EXIT_PREFIX_STRIPPED)
                 break
 
@@ -317,22 +371,40 @@ def standardize_phone(
     recognized_sub_area = True
 
     if is_international:
-        matched_plan, nsn, resolved_region, recognized_sub_area = (
-            CountryDialRegistry.match_calling_code(intl_digits, hint_iso2=hint_iso2)
+        matched_plan, nsn_candidate, resolved_region, recognized_sub_area = (
+            CountryDialRegistry.match_calling_code(intl_digits_no_paren, hint_iso2=hint_iso2)
         )
         if matched_plan is None:
-            return StandardizedPhone(
+            res_unassigned = StandardizedPhone(
                 raw_input=raw_str,
                 extension=extension,
                 vanity_alias=vanity_alias,
                 risk_flags=(PhoneRiskFlag.UNASSIGNED_CALLING_CODE,),
                 healing_actions=tuple(healing_actions),
             )
-        plan = matched_plan
-        region_code = resolved_region
+            cache.set(cache_key, res_unassigned)
+            return res_unassigned
+        if has_paren_zero and matched_plan.national_trunk_prefix == "0":
+            plan = matched_plan
+            nsn = nsn_candidate
+            region_code = resolved_region
+            healing_actions.append(HealingAction.REDUNDANT_INTL_TRUNK_STRIPPED)
+        else:
+            matched_plan_raw, nsn_raw, resolved_region_raw, recognized_sub_area_raw = (
+                CountryDialRegistry.match_calling_code(intl_digits_raw, hint_iso2=hint_iso2)
+            )
+            assert matched_plan_raw is not None
+            plan = matched_plan_raw
+            nsn = nsn_raw
+            region_code = resolved_region_raw
+            recognized_sub_area = recognized_sub_area_raw
     else:
         plan = context_plan
-        nsn = digits_only
+        if has_paren_zero and plan.national_trunk_prefix == "0":
+            nsn = digits_no_paren
+            healing_actions.append(HealingAction.REDUNDANT_INTL_TRUNK_STRIPPED)
+        else:
+            nsn = digits_raw
         if plan.calling_code == "1":
             if len(nsn) == 11 and nsn.startswith("1"):
                 nsn = nsn[1:]
@@ -344,7 +416,10 @@ def standardize_phone(
                 plan = CountryDialRegistry.get(iso2_resolved) or plan
         else:
             trunk = plan.national_trunk_prefix
-            if trunk and nsn.startswith(trunk) and (len(nsn) - len(trunk)) in plan.nsn_lengths:
+            if trunk and nsn.startswith(trunk) and (
+                (len(nsn) - len(trunk)) in plan.nsn_lengths
+                or (plan.iso2 == "AR" and len(nsn) == 13)
+            ):
                 nsn = nsn[len(trunk):]
                 healing_actions.append(HealingAction.NATIONAL_TRUNK_STRIPPED)
             # Re-verify UK Crown Dependencies if domestic 01534 / 01481 / 01624 used
@@ -357,13 +432,17 @@ def standardize_phone(
                 region_code = resolved_region
 
     # 7. Heal redundant international trunk prefix (e.g., +44 020 7946 0912 -> +44 20 7946 0912)
+    trunk_p = plan.national_trunk_prefix
     if (
         is_international
-        and plan.national_trunk_prefix == "0"
-        and nsn.startswith("0")
-        and (len(nsn) - 1) in plan.nsn_lengths
+        and trunk_p in ("0", "06")
+        and nsn.startswith(trunk_p)
+        and (
+            (len(nsn) - len(trunk_p)) in plan.nsn_lengths
+            or (plan.iso2 == "AR" and len(nsn) == 13)
+        )
     ):
-        nsn = nsn[1:]
+        nsn = nsn[len(trunk_p):]
         healing_actions.append(HealingAction.REDUNDANT_INTL_TRUNK_STRIPPED)
         if plan.calling_code == "44":
             matched_plan, _, resolved_region, _ = CountryDialRegistry.match_calling_code(
@@ -374,27 +453,42 @@ def standardize_phone(
             region_code = resolved_region
 
     # 8. Regional Legacy Mobile Prefix Healing
-    # Mexico (+52): strip deprecated '1' mobile prefix after +52 when followed by 10 digits
-    if plan.iso2 == "MX" and len(nsn) == 11 and nsn.startswith("1"):
-        nsn = nsn[1:]
-        healing_actions.append(HealingAction.LEGACY_MEXICO_MOBILE_1_STRIPPED)
+    # Mexico (+52): heal legacy domestic 044/045/01 prefixes and deprecated international '+52 1' mobile prefix
+    if plan.iso2 == "MX":
+        if len(nsn) == 13 and nsn.startswith(("044", "045")):
+            nsn = nsn[3:]
+            healing_actions.append(HealingAction.LEGACY_MEXICO_MOBILE_1_STRIPPED)
+        elif len(nsn) == 12 and nsn.startswith("01"):
+            nsn = nsn[2:]
+            healing_actions.append(HealingAction.NATIONAL_TRUNK_STRIPPED)
+        elif len(nsn) == 11 and nsn.startswith("1"):
+            nsn = nsn[1:]
+            healing_actions.append(HealingAction.LEGACY_MEXICO_MOBILE_1_STRIPPED)
 
-    # Argentina (+54): heal domestic '15' mobile prefix (e.g., 11 15 XXXX-XXXX -> 9 11 XXXX-XXXX)
-    if plan.iso2 == "AR" and len(nsn) == 12 and nsn[2:4] == "15":
-        nsn = "9" + nsn[:2] + nsn[4:]
-        healing_actions.append(HealingAction.ARGENTINA_MOBILE_15_HEALED)
+    # Argentina (+54): heal domestic '15' mobile prefix across 2- ('11'), 3-, and 4-digit area codes
+    if plan.iso2 == "AR" and len(nsn) == 12 and not nsn.startswith("9"):
+        if nsn.startswith("11") and nsn[2:4] == "15":
+            nsn = "9" + nsn[:2] + nsn[4:]
+            healing_actions.append(HealingAction.ARGENTINA_MOBILE_15_HEALED)
+        elif nsn[3:5] == "15":
+            nsn = "9" + nsn[:3] + nsn[5:]
+            healing_actions.append(HealingAction.ARGENTINA_MOBILE_15_HEALED)
+        elif nsn[4:6] == "15":
+            nsn = "9" + nsn[:4] + nsn[6:]
+            healing_actions.append(HealingAction.ARGENTINA_MOBILE_15_HEALED)
 
     # Brazil (+55): heal legacy 10-digit mobile numbers (2-digit DDD + 8-digit mobile starting with 6-9) by inserting '9'
     if plan.iso2 == "BR" and len(nsn) == 10 and nsn[2] in "6789":
         nsn = nsn[:2] + "9" + nsn[2:]
         healing_actions.append(HealingAction.BRAZIL_MOBILE_9_INSERTED)
 
-    # Check cross-field mismatch if explicit/address country hint conflicts with resolved calling code
+    # Check cross-field mismatch if explicit/address country hint conflicts with resolved jurisdiction
+    # (Skip when country was the originating dial plan for an IDD exit prefix like 011 from US)
     if (
         hint_iso2
         and hint_iso2 != plan.iso2
         and CountryDialRegistry.get(hint_iso2) is not None
-        and CountryDialRegistry.get(hint_iso2).calling_code != plan.calling_code  # type: ignore[union-attr]
+        and HealingAction.IDD_EXIT_PREFIX_STRIPPED not in healing_actions
     ):
         extra_risk_flags.append(PhoneRiskFlag.ADDRESS_COUNTRY_MISMATCH)
 
@@ -408,8 +502,10 @@ def standardize_phone(
     if plan.calling_code == "1" and len(nsn) == 10:
         npa = nsn[:3]
         nxx = nsn[3:6]
-        if npa[0] in "01" or npa[1:] == "11":
+        if npa[0] in "01" or npa[1:] == "11" or npa == "555":
             is_valid = False
+            extra_risk_flags.append(PhoneRiskFlag.INVALID_AREA_CODE)
+        elif npa[1] == "9":
             extra_risk_flags.append(PhoneRiskFlag.INVALID_AREA_CODE)
         if nxx[0] in "01" or nxx[1:] == "11":
             is_valid = False
@@ -442,7 +538,7 @@ def standardize_phone(
         extra_risk_flags=extra_risk_flags,
     )
 
-    return StandardizedPhone(
+    result = StandardizedPhone(
         raw_input=raw_str,
         e164=e164,
         national=national,
@@ -468,6 +564,8 @@ def standardize_phone(
         risk_flags=risk_flags,
         healing_actions=tuple(healing_actions),
     )
+    cache.set(cache_key, result)
+    return result
 
 
 def validate_phone(
@@ -524,23 +622,42 @@ def mask_phone(
     strategy: str = "partial",
     country: str | None = None,
     default_country: str = "US",
-) -> str:
+) -> str | None:
     """Privacy-preserving phone number masking compatible with Query-Builder CLAC policies.
 
     Strategies:
     - 'partial': Preserves country calling code and last 4 digits (e.g. '+1******2671')
+    - 'partial_phone': Formats as '***-***-XXXX' preserving last 4 digits
+    - 'last4': Formats as '****XXXX' preserving last 4 digits
     - 'redact': Full redaction ('[REDACTED PHONE]')
-    - 'hash': Deterministic SHA-256 hex digest of the canonical E.164 key
+    - 'null': Returns None
+    - 'hash' / 'sha256': Deterministic SHA-256 hex digest of the canonical E.164 key
+    - 'md5': Deterministic MD5 hex digest of the canonical E.164 key
     """
-    if strategy == "redact":
+    strat = strategy.lower().strip()
+    if strat == "redact":
         return "[REDACTED PHONE]"
+    if strat == "null":
+        return None
+    if strat not in ("partial", "partial_phone", "last4", "hash", "sha256", "md5"):
+        raise ValueError(
+            f"Unknown masking strategy: {strategy!r}. Supported strategies: "
+            "'partial', 'partial_phone', 'last4', 'redact', 'null', 'hash', 'sha256', 'md5'."
+        )
     res = standardize_phone(raw_phone, country=country, default_country=default_country)
     target = res.e164 or (str(raw_phone).strip() if raw_phone else "")
     if not target:
         return "[REDACTED PHONE]"
-    if strategy == "hash":
+    if strat in ("hash", "sha256"):
         return hashlib.sha256(target.encode("utf-8")).hexdigest()
-    # Default: partial masking preserving calling code and last 4 digits
+    if strat == "md5":
+        return hashlib.md5(target.encode("utf-8"), usedforsecurity=False).hexdigest()
+    digits = "".join(ch for ch in target if ch.isdigit())
+    if strat == "partial_phone":
+        return f"***-***-{digits[-4:]}" if len(digits) >= 4 else "***"
+    if strat == "last4":
+        return f"****{digits[-4:]}" if len(digits) >= 4 else "****"
+    # Default ('partial'): preserve calling code and last 4 digits
     if res.e164 and res.country_calling_code and res.national_significant_number:
         nsn = res.national_significant_number
         masked_nsn = ("*" * max(0, len(nsn) - 4)) + nsn[-4:]
@@ -548,9 +665,16 @@ def mask_phone(
     return ("*" * max(0, len(target) - 4)) + target[-4:]
 
 
-# Candidate phone number regex for free-text extraction
+# Candidate phone number regex for free-text extraction (formatted, contiguous E.164, (0) trunk, 5-group, vanity)
 _FREE_TEXT_PHONE_CANDIDATE_RE = re.compile(
-    r"(?:\+\d{1,3}[\s.\-]?)?(?:\(\d{1,4}\)[\s.\-]?|\d{1,4}[\s.\-])\d{2,4}[\s.\-]\d{3,5}(?:\s*(?:ext\.?|x|#)\s*\d{1,6})?",
+    r"(?:"
+    r"(?:\+?\d{1,3}[\s.\-]?)?(?:\(\d{2,4}\)[\s.\-]?|\d{2,4}[\s.\-])[A-Za-z]{3,8}(?:-[A-Za-z0-9]{2,6})?"
+    r"|(?:\+\d{1,3}[\s.\-]?(?:\(\s*0\s*\)[\s.\-]?)?)?"
+    r"(?:\(\d{1,5}\)[\s.\-]?|\d{1,5}[\s.\-])"
+    r"(?:\d{1,5}(?:[\s.\-]\d{2,6}){1,4}|\d{5,9})"
+    r"|\+\d{8,15}"
+    r")"
+    r"(?:\s*(?:;ext=|;isub=|(?:ext\.?|extension|x|#)\s*[:\-#]?\s*)\d{1,7})?",
     re.IGNORECASE,
 )
 
@@ -571,3 +695,4 @@ def extract_phones_from_text(
             seen_keys.add(rec.phone_ext_key)
             extracted.append(rec)
     return extracted
+

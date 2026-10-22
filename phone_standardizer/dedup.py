@@ -74,36 +74,10 @@ def are_keypad_adjacent(digit_a: str, digit_b: str) -> bool:
 
 def damerau_levenshtein_distance(s1: str, s2: str) -> int:
     """Compute Optimal String Alignment (Damerau-Levenshtein) distance between two strings."""
-    if s1 == s2:
-        return 0
-    len1, len2 = len(s1), len(s2)
-    if len1 == 0:
-        return len2
-    if len2 == 0:
-        return len1
+    from phone_standardizer._native_dispatch import damerau_levenshtein_distance_dispatch
 
-    dp = [[0] * (len2 + 1) for _ in range(len1 + 1)]
-    for i in range(len1 + 1):
-        dp[i][0] = i
-    for j in range(len2 + 1):
-        dp[0][j] = j
+    return damerau_levenshtein_distance_dispatch(s1, s2)
 
-    for i in range(1, len1 + 1):
-        for j in range(1, len2 + 1):
-            cost = 0 if s1[i - 1] == s2[j - 1] else 1
-            dp[i][j] = min(
-                dp[i - 1][j] + 1,      # deletion
-                dp[i][j - 1] + 1,      # insertion
-                dp[i - 1][j - 1] + cost,  # substitution
-            )
-            if (
-                i > 1
-                and j > 1
-                and s1[i - 1] == s2[j - 2]
-                and s1[i - 2] == s2[j - 1]
-            ):
-                dp[i][j] = min(dp[i][j], dp[i - 2][j - 2] + 1)  # adjacent transposition
-    return dp[len1][len2]
 
 
 def _detect_single_transposition(a: str, b: str) -> bool:
@@ -220,8 +194,14 @@ def compare_phones(
             ),
         )
 
-    # 2. Identical NSN across ambiguous country context (e.g., national vs international)
-    if nsn_a == nsn_b and len(nsn_a) >= 7:
+    # 2. Identical NSN across ambiguous country context (only when at least one lacked explicit +CC)
+    has_intl_a = bool(re.match(r"^[^\d+]*\+", pa.raw_input.strip())) or (
+        "IDD_EXIT_PREFIX_STRIPPED" in pa.healing_actions
+    )
+    has_intl_b = bool(re.match(r"^[^\d+]*\+", pb.raw_input.strip())) or (
+        "IDD_EXIT_PREFIX_STRIPPED" in pb.healing_actions
+    )
+    if nsn_a == nsn_b and len(nsn_a) >= 7 and not (has_intl_a and has_intl_b):
         score = 0.94
         return PhoneComparisonResult(
             phone_a=pa,
@@ -236,6 +216,7 @@ def compare_phones(
             keypad_adjacent_typo=False,
             explanation=f"Identical National Significant Number ({nsn_a}) across country contexts.",
         )
+
 
     # 3. Same country calling code: check single transposition or single-digit typo
     same_cc = pa.country_calling_code == pb.country_calling_code
@@ -444,7 +425,20 @@ class ContactCluster:
         return asdict(self)
 
 
+def _is_shared_hub_or_cmra(rec: dict[str, Any]) -> bool:
+    """Return True if a contact record or its address_context is flagged as a Registered Agent hub or CMRA."""
+    if rec.get("is_registered_agent_hub") or rec.get("is_cmra"):
+        return True
+    ctx = rec.get("address_context")
+    if ctx is None:
+        return False
+    if isinstance(ctx, dict):
+        return bool(ctx.get("is_registered_agent_hub") or ctx.get("is_cmra"))
+    return bool(getattr(ctx, "is_registered_agent_hub", False) or getattr(ctx, "is_cmra", False))
+
+
 def cluster_contact_records(
+
     records: Sequence[dict[str, Any]],
     phone_field: str = "phone",
     address_key_field: str = "address_key",
@@ -525,15 +519,16 @@ def cluster_contact_records(
                 if cmp_res.is_fuzzy_match:
                     union(a_idx, b_idx, f"PHONE_{cmp_res.match_type}")
 
-    # 2. Link by shared Address-Standardizer normalized_address_key
+    # 2. Link by shared Address-Standardizer normalized_address_key (excluding CMRA & Registered Agent hubs)
     addr_buckets: dict[str, list[int]] = {}
     for idx, ak in enumerate(addr_keys):
-        if ak:
+        if ak and not _is_shared_hub_or_cmra(records[idx]):
             addr_buckets.setdefault(ak, []).append(idx)
 
     for indices in addr_buckets.values():
         for i_pos in range(1, len(indices)):
             union(indices[0], indices[i_pos], "SHARED_ADDRESS_KEY")
+
 
     groups: dict[int, list[int]] = {}
     for idx in range(n):

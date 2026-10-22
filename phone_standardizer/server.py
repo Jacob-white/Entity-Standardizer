@@ -50,13 +50,13 @@ def create_app() -> FastAPI:
     """Create and configure the FastAPI application instance."""
     app = FastAPI(
         title="Phone Standardizer API",
-        version="1.2.0",
+        version="1.3.0",
         description="Universal multi-national phone standardization, ITU-T E.164/E.123 formatting, and NANP attribution service.",
     )
 
     @app.get("/health")
     def health() -> dict[str, str]:
-        return {"status": "ok", "version": "1.2.0"}
+        return {"status": "ok", "version": "1.3.0"}
 
     @app.post("/v1/standardize")
     def standardize_endpoint(req: PhoneStandardizeRequest) -> dict[str, Any]:

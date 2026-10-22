@@ -34,18 +34,25 @@ ITU_E161_KEYPAD_MAP: dict[str, str] = {
     "W": "9", "X": "9", "Y": "9", "Z": "9",
 }
 
-# Extension patterns at the end of a phone string (RFC 3966, English, LatAm, EU, RU, JP)
+# Extension patterns at the end of a phone string (RFC 3966 ;ext=/;isub=, parenthesized, separators, DTMF)
 _EXTENSION_RE = re.compile(
-    r"(?:;ext=|(?:,|\s)+(?:"
-    r"ext\.?|extension|int\.?|interno|ramal|poste|dw|durchwahl|доб\.?|内線|x|#"
-    r")\s*|[;#]\s*)"
-    r"([0-9]{1,7})\s*$",
+    r"(?:"
+    r";(?:ext|isub)=([0-9]{1,7})"
+    r"|\(\s*(?:ext\.?|extension|int\.?|interno|ramal|poste|dw|durchwahl|доб\.?|内線|x|#)\s*[:\-#]?\s*([0-9]{1,7})\s*\)"
+    r"|(?:,|\s)+(?:"
+    r"(?:ext\.?|extension|int\.?|interno|ramal|poste|dw|durchwahl|доб\.?|内線)\s*[:\-#]?\s*"
+    r"|x\s*[:\-#]?\s*"
+    r"|#\s*"
+    r")([0-9]{1,7})"
+    r"|(?<=\d)\s*(?:[,;#]+|[pwx]+)\s*([0-9]{1,7})"
+    r")\s*$",
     re.IGNORECASE,
 )
 
-# Leading label or RFC 3966 URI prefix
+# Leading label or RFC 3966 URI prefix (supports arbitrary "Label: " prefixes and common unpunctuated prefixes)
 _LEADING_LABEL_RE = re.compile(
-    r"^\s*(?:tel:|(?:primary\s+|main\s+|work\s+|cell\s+|mobile\s+|office\s+|phone\s+|call\s+|tel\.?\s*|ph\.?\s*|fax\.?\s*)+[:\-]?\s*)+",
+    r"^\s*(?:tel:|(?:[A-Za-z][A-Za-z0-9\s./&_'\-]{0,25}:\s*|"
+    r"(?:primary|main|work|cell|mobile|mob|office|phone|call|contact|whatsapp|direct|home|tel|ph|fax)\.?(?:\s*[:\-]\s*|\s+))+)",
     re.IGNORECASE,
 )
 
@@ -54,14 +61,31 @@ _TRAILING_NOTE_RE = re.compile(r"\s*\([A-Za-z\s.,'\-]{2,}\)\s*$")
 
 # Vanity token pattern: digits/prefix followed by separator and 3-8 uppercase/lowercase letters
 _VANITY_CANDIDATE_RE = re.compile(
-    r"(\+?[0-9()\s.\-]{3,12}[-\s.])([A-Za-z]{3,8}(?:[-\s][A-Za-z0-9]{2,6})?)"
+    r"(\+?[0-9()\s.\-]{3,16}[-\s.])([A-Za-z]{3,8}(?:[-\s][A-Za-z0-9]{2,6})?)"
 )
+
+
+def _fold_unicode_digits_py(text: str) -> tuple[str, bool]:
+    """Pure-Python implementation of multi-script Unicode numeral folding."""
+    folded = text.translate(_UNICODE_TRANSLATION_MAP)
+    return folded, (folded != text)
+
+
+def _fold_vanity_digits_py(text: str) -> str:
+    """Pure-Python implementation of ITU-T E.161 keypad character folding."""
+    return "".join(ITU_E161_KEYPAD_MAP.get(ch.upper(), ch) for ch in text)
 
 
 def fold_unicode_digits(text: str) -> tuple[str, bool]:
     """Fold non-ASCII Unicode numerals and full-width punctuation to ASCII equivalents."""
-    folded = text.translate(_UNICODE_TRANSLATION_MAP)
-    return folded, (folded != text)
+    from phone_standardizer._native_dispatch import fold_unicode_digits_dispatch
+
+    return fold_unicode_digits_dispatch(text)
+
+
+def strip_leading_label(text: str) -> str:
+    """Strip leading URI schemes ('tel:') and arbitrary conversational labels ('Contact: ', 'WhatsApp: ')."""
+    return _LEADING_LABEL_RE.sub("", text).strip()
 
 
 def extract_extension(text: str) -> tuple[str, str | None]:
@@ -71,7 +95,7 @@ def extract_extension(text: str) -> tuple[str, str | None]:
     cleaned = re.sub(r"[!?\s]+$", "", cleaned)
     match = _EXTENSION_RE.search(cleaned)
     if match:
-        ext = match.group(1)
+        ext = next(g for g in match.groups() if g is not None)
         base = cleaned[:match.start()].strip()
         return base, ext
     return cleaned, None
@@ -79,10 +103,17 @@ def extract_extension(text: str) -> tuple[str, str | None]:
 
 def decode_vanity_phone(text: str) -> tuple[str, str | None]:
     """Detect and decode ITU-T E.161 alphanumeric vanity phone numbers (e.g., 1-800-FLOWERS)."""
-    stripped = _LEADING_LABEL_RE.sub("", text).strip()
+    from phone_standardizer._native_dispatch import fold_vanity_digits_dispatch
+
+    stripped = strip_leading_label(text)
     match = _VANITY_CANDIDATE_RE.search(stripped)
     if not match:
         return stripped, None
+
+    # Guard against trailing conversational words after an already-complete 10+ digit phone number
+    digits_before_alpha = sum(ch.isdigit() for ch in stripped[:match.start(2)])
+    if digits_before_alpha >= 10:
+        return stripped[:match.start(2)].strip(), None
 
     prefix_part = match.group(1)
     alpha_part = match.group(2)
@@ -90,12 +121,7 @@ def decode_vanity_phone(text: str) -> tuple[str, str | None]:
     raw_alias = (prefix_part + alpha_part).strip().upper()
     raw_alias = re.sub(r"\s+", "-", raw_alias)
 
-    decoded_chars: list[str] = []
-    for ch in alpha_part.upper():
-        if ch in ITU_E161_KEYPAD_MAP:
-            decoded_chars.append(ITU_E161_KEYPAD_MAP[ch])
-        else:
-            decoded_chars.append(ch)
-    decoded_tail = "".join(decoded_chars)
+    decoded_tail = fold_vanity_digits_dispatch(alpha_part.upper())
     replaced = stripped[:match.start()] + prefix_part + decoded_tail + stripped[match.end():]
     return replaced, raw_alias
+

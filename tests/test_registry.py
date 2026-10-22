@@ -91,3 +91,57 @@ def test_nanp_npa_resolution() -> None:
     # Structurally invalid NPA (starts with 0 or 1, or N11)
     assert resolve_nanp_npa("012") == ("US", None, False)
     assert resolve_nanp_npa("911") == ("US", None, False)
+
+    # Phase 5: 17 newest US overlay NPAs
+    for overlay_npa, expected_state in [
+        ("324", "FL"),
+        ("327", "AR"),
+        ("329", "NY"),
+        ("350", "CA"),
+        ("353", "WI"),
+        ("369", "CA"),
+        ("436", "OH"),
+        ("526", "CA"),
+        ("624", "NY"),
+        ("686", "VA"),
+        ("728", "FL"),
+        ("730", "IL"),
+        ("738", "CA"),
+        ("821", "SC"),
+        ("840", "CA"),
+        ("861", "IL"),
+        ("924", "MN"),
+    ]:
+        assert resolve_nanp_npa(overlay_npa) == ("US", expected_state, True)
+
+
+def test_phase5_dial_plan_registry_precision() -> None:
+    # Closed dialing plans (national_trunk_prefix is None)
+    for closed_iso in ("PT", "GR", "CZ", "CL", "CO", "UY", "CR", "PA", "LU", "IS", "MT", "CY", "QA", "KW", "BH", "OM"):
+        plan = get_dial_plan(closed_iso)
+        assert plan is not None
+        assert plan.national_trunk_prefix is None, f"Expected None trunk prefix for {closed_iso}"
+
+    # Kazakhstan & Belarus use trunk '8' and IDD '810'
+    for cis_iso in ("KZ", "BY"):
+        plan = get_dial_plan(cis_iso)
+        assert plan is not None
+        assert plan.national_trunk_prefix == "8"
+        assert plan.idd_prefix == "810"
+
+    # Hungary uses trunk '06'
+    hu = get_dial_plan("HU")
+    assert hu is not None and hu.national_trunk_prefix == "06"
+
+    # Indonesia supports 9-12 digit NSNs (including 11-12 digit mobiles)
+    id_plan = get_dial_plan("ID")
+    assert id_plan is not None and 11 in id_plan.nsn_lengths and 12 in id_plan.nsn_lengths
+
+    # Saudi Arabia (9 digits, mobile 5) & Hong Kong (8 digits) & Taiwan (8-9 digits, mobile 9)
+    sa = get_dial_plan("SA")
+    assert sa is not None and sa.nsn_lengths == (9,) and "5" in sa.mobile_prefixes
+    hk = get_dial_plan("HK")
+    assert hk is not None and hk.nsn_lengths == (8,) and hk.national_trunk_prefix is None
+    tw = get_dial_plan("TW")
+    assert tw is not None and tw.nsn_lengths == (8, 9) and "9" in tw.mobile_prefixes
+
