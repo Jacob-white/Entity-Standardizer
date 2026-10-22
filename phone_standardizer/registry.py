@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from phone_standardizer.models import CountryDialPlan
 from phone_standardizer.nanp import resolve_nanp_npa
-from phone_standardizer.registry_data import COUNTRY_DIAL_PLANS
+from phone_standardizer.registry_data import COUNTRY_DIAL_PLANS, SUPPLEMENTAL_DIAL_PLANS
 
 # Primary country for shared calling codes when no sub-area prefix matches
 PRIMARY_COUNTRY_FOR_CALLING_CODE: dict[str, str] = {
@@ -17,6 +17,7 @@ PRIMARY_COUNTRY_FOR_CALLING_CODE: dict[str, str] = {
     "64": "NZ",
     "212": "MA",
     "262": "RE",
+    "290": "SH",
     "358": "FI",
     "500": "FK",
     "590": "GP",
@@ -38,27 +39,58 @@ COUNTRY_ALIASES: dict[str, str] = {
     "UNITED STATES": "US",
     "U.S.A.": "US",
     "U.S.": "US",
+    "NEW YORK": "US",
     "UAE": "AE",
     "SOUTH KOREA": "KR",
+    "KOREA, SOUTH": "KR",
     "REPUBLIC OF KOREA": "KR",
     "NORTH KOREA": "KP",
     "RUSSIA": "RU",
     "RUSSIAN FEDERATION": "RU",
     "VIETNAM": "VN",
     "TAIWAN": "TW",
+    "TAIWAN, REPUBLIC OF CHINA": "TW",
+    "BRITISH VIRGIN ISLANDS": "VG",
+    "VIRGIN ISLANDS, BRITISH": "VG",
+    "U.S. VIRGIN ISLANDS": "VI",
+    "VIRGIN ISLANDS, U.S.": "VI",
+    "BAHAMAS, THE": "BS",
+    "THE BAHAMAS": "BS",
+    "TURKEY": "TR",
+    "TURKIYE": "TR",
+    "CZECH REPUBLIC": "CZ",
+    "BOLIVIA": "BO",
+    "VENEZUELA": "VE",
+    "MACAU": "MO",
+    "MACAO": "MO",
+    "MACAU SAR": "MO",
+    "HONG KONG SAR": "HK",
+    "GEORGIA/GRUZINSKAYA": "GE",
+    "IVORY COAST": "CI",
+    "COTE D'IVOIRE": "CI",
+    "CURACAO": "CW",
+    "REUNION": "RE",
+    "BRUNEI": "BN",
+    "LAOS": "LA",
+    "MOLDOVA": "MD",
+    "SYRIA": "SY",
+    "TANZANIA": "TZ",
+    "PALESTINE": "PS",
+    "KOSOVO": "XK",
 }
 
 
 class CountryDialRegistry:
     """Indexed registry of all 249 ISO-3166-1 country dial plans and ITU calling codes."""
 
-    _BY_ISO2: dict[str, CountryDialPlan] = {p.iso2: p for p in COUNTRY_DIAL_PLANS}
-    _BY_ISO3: dict[str, CountryDialPlan] = {p.iso3: p for p in COUNTRY_DIAL_PLANS}
+    _ALL_INDEXED: tuple[CountryDialPlan, ...] = COUNTRY_DIAL_PLANS + SUPPLEMENTAL_DIAL_PLANS
+    _BY_ISO2: dict[str, CountryDialPlan] = {p.iso2: p for p in _ALL_INDEXED}
+    _BY_ISO3: dict[str, CountryDialPlan] = {p.iso3: p for p in _ALL_INDEXED}
     _BY_NUMERIC: dict[str, CountryDialPlan] = {p.numeric: p for p in COUNTRY_DIAL_PLANS}
-    _BY_NAME: dict[str, CountryDialPlan] = {p.name.upper(): p for p in COUNTRY_DIAL_PLANS}
+    _BY_NAME: dict[str, CountryDialPlan] = {p.name.upper(): p for p in _ALL_INDEXED}
     _BY_CALLING_CODE: dict[str, list[CountryDialPlan]] = {}
 
-    for _plan in COUNTRY_DIAL_PLANS:
+    for _plan in _ALL_INDEXED:
         _BY_CALLING_CODE.setdefault(_plan.calling_code, []).append(_plan)
 
     # Sorted calling codes longest-first (3 -> 2 -> 1 digits) for greedy prefix matching
@@ -71,7 +103,7 @@ class CountryDialRegistry:
         """Lookup a CountryDialPlan by ISO-2, ISO-3, numeric code, or country name."""
         if not identifier:
             return None
-        key = identifier.strip().upper()
+        key = " ".join(identifier.strip().upper().split())
         if not key:
             return None
         if key in cls._BY_ISO2:
@@ -106,6 +138,13 @@ class CountryDialRegistry:
                 nsn = digits_after_plus[len(cc):]
                 plans = cls._BY_CALLING_CODE[cc]
                 if cc == "1":
+                    if (
+                        len(nsn) != 10
+                        and hint_iso2
+                        and hint_iso2 in cls._BY_ISO2
+                        and cls._BY_ISO2[hint_iso2].calling_code == "1"
+                    ):
+                        return cls._BY_ISO2[hint_iso2], nsn, None, True
                     # NANP: use 3-digit NPA to resolve exact territory & state/province
                     npa = nsn[:3]
                     fallback = hint_iso2 if hint_iso2 and hint_iso2 in cls._BY_ISO2 else "US"
@@ -114,17 +153,52 @@ class CountryDialRegistry:
                 if cc == "44":
                     # UK & Crown Dependencies (Jersey, Guernsey, Isle of Man)
                     clean_nsn = nsn[1:] if nsn.startswith("0") and len(nsn) >= 10 else nsn
-                    if clean_nsn.startswith(("1534", "7797", "7700", "7829", "7509", "7937")):
+                    if clean_nsn.startswith((
+                        "1534", "7797", "7700", "7829", "7509", "7937",
+                        "800735", "800781", "808901", "901810", "701511",
+                    )):
                         return cls._BY_ISO2["JE"], nsn, "JE", True
                     if clean_nsn.startswith(("1481", "7781", "7839", "7911")):
                         return cls._BY_ISO2["GG"], nsn, "GG", True
-                    if clean_nsn.startswith(("1624", "7624", "7524", "7924")):
+                    if clean_nsn.startswith((
+                        "1624", "7624", "7524", "7924", "74576", "808162", "901624",
+                    )):
                         return cls._BY_ISO2["IM"], nsn, "IM", True
+                    if hint_iso2 in ("JE", "GG", "IM") and clean_nsn.startswith((
+                        "3", "5", "70", "76", "8", "9",
+                    )):
+                        return cls._BY_ISO2[hint_iso2], nsn, hint_iso2, True
                     return cls._BY_ISO2["GB"], nsn, None, True
                 if cc == "7":
-                    if nsn.startswith(("6", "7")):
+                    if nsn.startswith(("6", "7")) or (hint_iso2 == "KZ" and nsn.startswith("8")):
                         return cls._BY_ISO2["KZ"], nsn, None, True
                     return cls._BY_ISO2["RU"], nsn, None, True
+                if cc == "39" and nsn.startswith("06698"):
+                    return cls._BY_ISO2["VA"], nsn, None, True
+                if cc == "47" and nsn.startswith("79"):
+                    return cls._BY_ISO2["SJ"], nsn, None, True
+                if cc == "61":
+                    clean_61 = nsn[1:] if nsn.startswith("0") and len(nsn) >= 10 else nsn
+                    if clean_61.startswith("89164"):
+                        return cls._BY_ISO2["CX"], nsn, None, True
+                    if clean_61.startswith("89162"):
+                        return cls._BY_ISO2["CC"], nsn, None, True
+                if cc == "358":
+                    clean_358 = nsn[1:] if nsn.startswith("0") else nsn
+                    if clean_358.startswith("18"):
+                        return cls._BY_ISO2["AX"], nsn, None, True
+                if cc == "212":
+                    clean_212 = nsn[1:] if nsn.startswith("0") else nsn
+                    if clean_212.startswith(("5288", "5289")):
+                        return cls._BY_ISO2["EH"], nsn, None, True
+                if cc == "262":
+                    clean_262 = nsn[1:] if nsn.startswith("0") else nsn
+                    if clean_262.startswith(("269", "639")):
+                        return cls._BY_ISO2["YT"], nsn, None, True
+                if cc == "599" and nsn.startswith(("3", "4", "7")):
+                    return cls._BY_ISO2["BQ"], nsn, None, True
+                if cc == "290" and nsn.startswith("8"):
+                    return cls._BY_ISO2["TA"], nsn, None, True
                 if len(plans) == 1:
                     return plans[0], nsn, None, True
                 if hint_iso2:
@@ -145,3 +219,4 @@ def normalize_country_iso2(identifier: str | None) -> str | None:
     """Normalize any country identifier (ISO-2, ISO-3, numeric, name, alias) to ISO-2."""
     plan = CountryDialRegistry.get(identifier)
     return plan.iso2 if plan else None
+

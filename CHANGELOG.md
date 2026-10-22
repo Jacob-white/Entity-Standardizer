@@ -2,6 +2,24 @@
 
 All notable changes to **Phone Standardizer** will be documented in this file.
 
+## [1.4.0] - 2026-10-22
+
+### Added & Fixed
+- **Dataset-Driven International Healing & Multi-Phone Extraction** (`phone_standardizer/standardizer.py`, `phone_standardizer/normalization.py`):
+  - Bare international calling-code healing & anti-doubling: eliminated all 177 doubled calling-code corruptions (`+6565...`, `+352352...`, `+4949...`, `+4343...`, `+6464...`, `+4646...`) while preserving valid 8-digit Singapore `65xx xxxx` landlines and 10-digit Italian `39x xxx xxxx` mobiles.
+  - Safe foreign `"011"` IDD exit stripping when `digits_raw` begins with `"011" + context_plan.calling_code` and `"011 +"` redundant prefix stripping.
+  - Primary phone extraction (`split_primary_phone`) for `;`, `/`, and `, ` multi-phone strings (`"212-555-1234 / 212-555-5678"`), embedded-digit vanity phone decoding (`"(844) PLAN4IT"`), and clock time-range rejection (`"8:00AM - 6:00PM"`).
+  - Argentina (`+54`) 13-digit `+54 9 <area> 15 <subscr>` mobile healing and Brazil (`+55`) `0 + 2-digit carrier code` (`021`, `015`) long-distance prefix stripping.
+  - US territory (`PR`, `VI`, `GU`, `AS`, `MP`) `ADDRESS_COUNTRY_MISMATCH` exemption when `country="US"` and NANP Toll-Free `N11` exchange support (`800-211-xxxx`, `800-911-xxxx`).
+- **`libphonenumber` `PhoneNumberMetadata.xml` & `ShortNumberMetadata.xml` Full Parity** (`phone_standardizer/registry_data.py`, `phone_standardizer/registry.py`, `phone_standardizer/nanp.py`):
+  - Synchronized `nsn_lengths`, `national_trunk_prefix`, and line-type prefixes (`mobile`, `toll_free`, `premium_rate`, `shared_cost`, `voip`, `personal_number`, `pager`, `uan`, `voicemail`) across all 249 ISO-3166-1 dial plans + supplemental territories (`AC`, `TA`, `XK`), achieving **100.00% (`1,132 / 1,132`)** validity, ISO-2, and line-type accuracy against `PhoneNumberMetadata.xml` and **100.00% (`240 / 240`)** emergency code recognition against `ShortNumberMetadata.xml`.
+  - Added 5 NANP overlay NPAs (`227` MD, `235` MO, `748` CO, `257` BC, `273` ON) for **439 / 439 (100%)** NANPA area-code parity and sub-area routing for `+39` (`VA`), `+47` (`SJ`), `+61` (`CX`, `CC`), `+358` (`AX`), `+212` (`EH`), `+262` (`YT`), `+599` (`BQ`), and `+290` (`TA`).
+- **$O(N)$ Exact-E.164 Deduplication Pre-Grouping & Switchboard Guard** (`phone_standardizer/dedup.py`):
+  - Pre-grouped identical `(e164, extension)` records before pairwise bucket indexing in `deduplicate_phones()` and `cluster_contact_records()`, accelerating 22,398-record `dtcc_raw_mfs` deduplication by **58x** (`5,420 ms` -> `92.9 ms`).
+  - Guarded corporate switchboard blocks ending in `00`/`000` (`800-526-6300` vs `800-526-6500`) against uncorroborated single-digit fuzzy merges, respected `fuzzy_threshold` on `EXTENSION_VARIANT`, and labeled `dist == 1` length edits as `SINGLE_DIGIT_EDIT`.
+- **Rust/Python 100% Batch Parity & Shared Library Auto-Loading** (`src/lib.rs`, `phone_standardizer/_native_dispatch.py`):
+  - Synchronized `standardize_batch_e164_rs` with Python's `standardize_batch_e164_dispatch`, achieving **47,270 / 47,270 (100.00%)** parity on `production.firm_master`, and added automatic `target/release/lib_phone_standardizer_rs.so` fallback loading.
+
 ## [1.3.0] - 2026-10-22
 
 ### Added & Fixed

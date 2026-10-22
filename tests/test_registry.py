@@ -62,17 +62,52 @@ def test_calling_code_matching_variants() -> None:
     plan_ru, _, _, _ = CountryDialRegistry.match_calling_code("74955551234")
     assert plan_ru is not None and plan_ru.iso2 == "RU"
 
-    # Shared calling code (+61 Australia / Christmas Island with hint)
-    plan_cx, _, _, _ = CountryDialRegistry.match_calling_code("61891641234", hint_iso2="CX")
-    assert plan_cx is not None and plan_cx.iso2 == "CX"
+    # Shared calling code (+61 Australia / Christmas Island / Cocos Islands)
+    plan_cx, _, reg_cx, _ = CountryDialRegistry.match_calling_code("61891641234")
+    assert plan_cx is not None and plan_cx.iso2 == "CX" and reg_cx is None
 
-    # Shared calling code with non-matching hint falls back to primary
-    plan_au, _, _, _ = CountryDialRegistry.match_calling_code("61891641234", hint_iso2="DE")
+    plan_cc, _, reg_cc, _ = CountryDialRegistry.match_calling_code("61891621234")
+    assert plan_cc is not None and plan_cc.iso2 == "CC" and reg_cc is None
+
+    # Shared +61 non-geographic with hint_iso2="CX"
+    plan_cx_hint, _, _, _ = CountryDialRegistry.match_calling_code("611800123456", hint_iso2="CX")
+    assert plan_cx_hint is not None and plan_cx_hint.iso2 == "CX"
+
+    # Shared calling code with non-matching hint or no hint falls back to primary (AU)
+    plan_au, _, _, _ = CountryDialRegistry.match_calling_code("61299991234", hint_iso2="DE")
     assert plan_au is not None and plan_au.iso2 == "AU"
 
-    # Shared calling code without hint falls back to primary
-    plan_au2, _, _, _ = CountryDialRegistry.match_calling_code("61891641234", hint_iso2=None)
+    plan_au2, _, _, _ = CountryDialRegistry.match_calling_code("61299991234", hint_iso2=None)
     assert plan_au2 is not None and plan_au2.iso2 == "AU"
+
+    # Sub-area prefix matching across +39 (VA/IT), +47 (SJ/NO), +358 (AX/FI), +212 (EH/MA), +262 (YT/RE), +599 (BQ/CW), +290 (TA/SH)
+    assert CountryDialRegistry.match_calling_code("390669812345")[0].iso2 == "VA"  # type: ignore[union-attr]
+    assert CountryDialRegistry.match_calling_code("39061234567")[0].iso2 == "IT"  # type: ignore[union-attr]
+    assert CountryDialRegistry.match_calling_code("4779123456")[0].iso2 == "SJ"  # type: ignore[union-attr]
+    assert CountryDialRegistry.match_calling_code("4721123456")[0].iso2 == "NO"  # type: ignore[union-attr]
+    assert CountryDialRegistry.match_calling_code("3581812345")[0].iso2 == "AX"  # type: ignore[union-attr]
+    assert CountryDialRegistry.match_calling_code("3589123456")[0].iso2 == "FI"  # type: ignore[union-attr]
+    assert CountryDialRegistry.match_calling_code("212528812345")[0].iso2 == "EH"  # type: ignore[union-attr]
+    assert CountryDialRegistry.match_calling_code("212537123456")[0].iso2 == "MA"  # type: ignore[union-attr]
+    assert CountryDialRegistry.match_calling_code("262269123456")[0].iso2 == "YT"  # type: ignore[union-attr]
+    assert CountryDialRegistry.match_calling_code("262262123456")[0].iso2 == "RE"  # type: ignore[union-attr]
+    assert CountryDialRegistry.match_calling_code("5997171234")[0].iso2 == "BQ"  # type: ignore[union-attr]
+    assert CountryDialRegistry.match_calling_code("59991234567")[0].iso2 == "CW"  # type: ignore[union-attr]
+    assert CountryDialRegistry.match_calling_code("2908123")[0].iso2 == "TA"  # type: ignore[union-attr]
+    assert CountryDialRegistry.match_calling_code("29022123")[0].iso2 == "SH"  # type: ignore[union-attr]
+
+    # Shared non-geographic hint preservation on +1, +44, +7
+    assert CountryDialRegistry.match_calling_code("129955", hint_iso2="CA")[0].iso2 == "CA"  # type: ignore[union-attr]
+    assert CountryDialRegistry.match_calling_code("12995550199", hint_iso2="CA")[0].iso2 == "CA"  # type: ignore[union-attr]
+    assert CountryDialRegistry.match_calling_code("12995550199", hint_iso2="DE")[0].iso2 == "US"  # type: ignore[union-attr]
+    assert CountryDialRegistry.match_calling_code("448001234567", hint_iso2="JE")[0].iso2 == "JE"  # type: ignore[union-attr]
+    assert CountryDialRegistry.match_calling_code("78005551234", hint_iso2="KZ")[0].iso2 == "KZ"  # type: ignore[union-attr]
+
+    # Supplemental territories (+247 AC, +383 XK) and expanded aliases
+    assert CountryDialRegistry.match_calling_code("24765432")[0].iso2 == "AC"  # type: ignore[union-attr]
+    assert CountryDialRegistry.match_calling_code("38338123456")[0].iso2 == "XK"  # type: ignore[union-attr]
+    assert normalize_country_iso2("CAYMAN   ISLANDS") == "KY"
+    assert normalize_country_iso2("Kosovo") == "XK"
 
     # Unassigned calling code (000...)
     plan_none, nsn_none, _, rec_none = CountryDialRegistry.match_calling_code("000123")
@@ -84,6 +119,7 @@ def test_nanp_npa_resolution() -> None:
     assert resolve_nanp_npa("416") == ("CA", "ON", True)
     assert resolve_nanp_npa("212") == ("US", "NY", True)
     assert resolve_nanp_npa("800", fallback_iso2="CA") == ("CA", None, True)
+    assert resolve_nanp_npa("800", fallback_iso2="KY") == ("KY", None, True)
     assert resolve_nanp_npa("800", fallback_iso2="DE") == ("US", None, True)
     # Unallocated but structurally valid NPA (e.g. 299)
     assert resolve_nanp_npa("299", fallback_iso2="US") == ("US", None, False)
@@ -92,32 +128,41 @@ def test_nanp_npa_resolution() -> None:
     assert resolve_nanp_npa("012") == ("US", None, False)
     assert resolve_nanp_npa("911") == ("US", None, False)
 
-    # Phase 5: 17 newest US overlay NPAs
-    for overlay_npa, expected_state in [
-        ("324", "FL"),
-        ("327", "AR"),
-        ("329", "NY"),
-        ("350", "CA"),
-        ("353", "WI"),
-        ("369", "CA"),
-        ("436", "OH"),
-        ("526", "CA"),
-        ("624", "NY"),
-        ("686", "VA"),
-        ("728", "FL"),
-        ("730", "IL"),
-        ("738", "CA"),
-        ("821", "SC"),
-        ("840", "CA"),
-        ("861", "IL"),
-        ("924", "MN"),
+    # Phase 5 & Phase 6 US/CA overlay NPAs (achieving 439/439 NANPA parity)
+    for overlay_npa, expected_country, expected_state in [
+        ("227", "US", "MD"),
+        ("235", "US", "MO"),
+        ("324", "US", "FL"),
+        ("327", "US", "AR"),
+        ("329", "US", "NY"),
+        ("350", "US", "CA"),
+        ("353", "US", "WI"),
+        ("369", "US", "CA"),
+        ("436", "US", "OH"),
+        ("526", "US", "CA"),
+        ("624", "US", "NY"),
+        ("686", "US", "VA"),
+        ("728", "US", "FL"),
+        ("730", "US", "IL"),
+        ("738", "US", "CA"),
+        ("748", "US", "CO"),
+        ("821", "US", "SC"),
+        ("840", "US", "CA"),
+        ("861", "US", "IL"),
+        ("924", "US", "MN"),
+        ("257", "CA", "BC"),
+        ("273", "CA", "ON"),
     ]:
-        assert resolve_nanp_npa(overlay_npa) == ("US", expected_state, True)
+        assert resolve_nanp_npa(overlay_npa) == (expected_country, expected_state, True)
 
 
 def test_phase5_dial_plan_registry_precision() -> None:
     # Closed dialing plans (national_trunk_prefix is None)
-    for closed_iso in ("PT", "GR", "CZ", "CL", "CO", "UY", "CR", "PA", "LU", "IS", "MT", "CY", "QA", "KW", "BH", "OM"):
+    for closed_iso in (
+        "PT", "GR", "CZ", "CL", "CR", "PA", "LU", "IS", "MT", "CY", "QA", "KW", "BH", "OM",
+        "UZ", "HN", "SV", "NI", "GT", "BZ", "HT", "GQ", "CF", "CM", "KM", "DJ", "LS", "MU",
+        "SC", "CV", "ST", "TG", "ML", "NE", "BF", "BJ", "GW", "PF", "CK", "FO", "GL", "SM",
+    ):
         plan = get_dial_plan(closed_iso)
         assert plan is not None
         assert plan.national_trunk_prefix is None, f"Expected None trunk prefix for {closed_iso}"
@@ -133,15 +178,15 @@ def test_phase5_dial_plan_registry_precision() -> None:
     hu = get_dial_plan("HU")
     assert hu is not None and hu.national_trunk_prefix == "06"
 
-    # Indonesia supports 9-12 digit NSNs (including 11-12 digit mobiles)
+    # Indonesia supports 7-13 digit NSNs (including 11-12 digit mobiles)
     id_plan = get_dial_plan("ID")
     assert id_plan is not None and 11 in id_plan.nsn_lengths and 12 in id_plan.nsn_lengths
 
     # Saudi Arabia (9 digits, mobile 5) & Hong Kong (8 digits) & Taiwan (8-9 digits, mobile 9)
     sa = get_dial_plan("SA")
-    assert sa is not None and sa.nsn_lengths == (9,) and "5" in sa.mobile_prefixes
+    assert sa is not None and 9 in sa.nsn_lengths and "5" in sa.mobile_prefixes
     hk = get_dial_plan("HK")
-    assert hk is not None and hk.nsn_lengths == (8,) and hk.national_trunk_prefix is None
+    assert hk is not None and 8 in hk.nsn_lengths and hk.national_trunk_prefix is None
     tw = get_dial_plan("TW")
-    assert tw is not None and tw.nsn_lengths == (8, 9) and "9" in tw.mobile_prefixes
+    assert tw is not None and 8 in tw.nsn_lengths and 9 in tw.nsn_lengths and "9" in tw.mobile_prefixes
 

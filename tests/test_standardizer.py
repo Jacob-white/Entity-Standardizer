@@ -17,6 +17,7 @@ from phone_standardizer import (
     PhoneRoutingTier,
     batch_standardize_phones,
     decode_vanity_phone,
+    extract_phones_from_text,
     fold_vanity_digits_dispatch,
     format_e164,
     format_international,
@@ -596,3 +597,105 @@ def test_mcp_server_requests() -> None:
 
     call_unknown_method = handle_mcp_request({"jsonrpc": "2.0", "id": 7, "method": "unknown/method"})
     assert call_unknown_method["error"]["code"] == -32601
+
+
+def test_phase6_global_remediations_and_edge_cases() -> None:
+    # 1. Multi-phone primary extraction (';', '/', '&', ', ', '/XXXX') and XT./X. extensions
+    assert standardize_phone("212-555-1234 / 212-555-5678").e164 == "+12125551234"
+    assert standardize_phone("212-555-1234; 212-555-5678").e164 == "+12125551234"
+    assert standardize_phone("443-797-7114 & 281-794-0077").e164 == "+14437977114"
+    assert standardize_phone("1-787-425-0035/0036").e164 == "+17874250035"
+    assert standardize_phone("212-555-1234, 212-555-5678").e164 == "+12125551234"
+    assert standardize_phone("212-555-1234, 104").extension == "104"
+    p_xt = standardize_phone("415-424-4005 XT. 21")
+    assert p_xt.e164 == "+14154244005" and p_xt.extension == "21"
+    p_xdot = standardize_phone("212-354-6500 X. 304")
+    assert p_xdot.e164 == "+12123546500" and p_xdot.extension == "304"
+
+    # 2. Time range guard and embedded-digit vanity phone decoding
+    assert standardize_phone("8:00AM - 6:00PM").is_valid is False
+    vanity_emb = standardize_phone("(844) PLAN4IT")
+    assert vanity_emb.e164 == "+18447526448"
+    assert vanity_emb.vanity_alias == "(844)-PLAN4IT"
+
+    # 3. Extended line-type classification (CA 7-digit UAN, NANP UAN/FIXED_LINE_OR_MOBILE, CL shared cost, IN fixed, GB personal, BR mobile)
+    assert standardize_phone("+1 310-1234", country="CA").line_type == PhoneLineType.UAN
+    assert standardize_phone("+1 242 225 1234", country="BS").line_type == PhoneLineType.UAN
+    assert standardize_phone("+1 242 322 1234", country="BS").line_type == PhoneLineType.FIXED_LINE_OR_MOBILE
+    assert standardize_phone("+56 600 123 4567", country="CL").line_type == PhoneLineType.SHARED_COST
+    assert standardize_phone("+91 74104 12345", country="IN").line_type == PhoneLineType.FIXED_LINE
+    assert standardize_phone("+44 70 1234 5678", country="GB").line_type == PhoneLineType.PERSONAL_NUMBER
+    assert standardize_phone("+55 11 91234-5678", country="BR").line_type == PhoneLineType.MOBILE
+
+    # 4. Redundant '011 +', '+00', and safe foreign '011' IDD exit prefix stripping
+    p_011_plus = standardize_phone("011 +44 20 7946 0912")
+    assert p_011_plus.e164 == "+442079460912"
+    assert HealingAction.IDD_EXIT_PREFIX_STRIPPED in p_011_plus.healing_actions
+
+    p_plus_00 = standardize_phone("+0041223188788", country="CH")
+    assert p_plus_00.e164 == "+41223188788"
+    assert HealingAction.IDD_EXIT_PREFIX_STRIPPED in p_plus_00.healing_actions
+
+    p_011_gb = standardize_phone("011-44-20-7946-0912", country="GB")
+    assert p_011_gb.e164 == "+442079460912"
+    assert HealingAction.IDD_EXIT_PREFIX_STRIPPED in p_011_gb.healing_actions
+
+    # 5. Bare international calling-code healing & anti-doubling vs domestic prefix collision guards
+    assert standardize_phone("6568328282", country="SG").e164 == "+6568328282"
+    assert standardize_phone("65123456", country="SG").e164 == "+6565123456"
+    assert standardize_phone("352 26 1234", country="LU").e164 == "+352261234"
+    assert standardize_phone("49 (0) 69 7560 1000", country="DE").e164 == "+496975601000"
+    assert standardize_phone("49 069 7560 1000", country="DE").e164 == "+496975601000"
+    assert standardize_phone("39 347 123 4567", country="IT").e164 == "+393471234567"
+    assert standardize_phone("3921234567", country="IT").e164 == "+393921234567"
+    assert standardize_phone("3931234567", country="IT").e164 == "+393931234567"
+    assert standardize_phone("35212345", country="LU").e164 == "+35235212345"
+    assert standardize_phone("9001234567", country="TR").e164 == "+909001234567"
+    assert standardize_phone("(55) 3220-1234", country="BR").e164 == "+555532201234"
+    assert standardize_phone("55991234567", country="BR").e164 == "+5555991234567"
+    assert standardize_phone("9123456789", country="IN").e164 == "+919123456789"
+    assert standardize_phone("483621234", country="PL").e164 == "+48483621234"
+    assert standardize_phone("318123456", country="NL").e164 == "+31318123456"
+    assert standardize_phone("9222123456", country="PK").e164 == "+929222123456"
+    assert standardize_phone("841234567", country="VN").e164 == "+84841234567"
+    assert standardize_phone("272712345", country="ZA").e164 == "+27272712345"
+
+    # 6. Belarus (BY), Hungary (HU), and Brazil (BR) trunk / carrier prefix healing
+    assert standardize_phone("80 17 229-40-00", country="BY").e164 == "+375172294000"
+    assert standardize_phone("0 17 229-40-00", country="BY").e164 == "+375172294000"
+    assert standardize_phone("8 17 229-40-00", country="BY").e164 == "+375172294000"
+    assert standardize_phone("17 229-40-00", country="BY").e164 == "+375172294000"
+    assert standardize_phone("06 1 234 5678", country="HU").e164 == "+3612345678"
+    assert standardize_phone("01 234 5678", country="HU").e164 == "+3612345678"
+    assert standardize_phone("1 234 5678", country="HU").e164 == "+3612345678"
+    assert standardize_phone("021 11 98765-4321", country="BR").e164 == "+5511987654321"
+    assert standardize_phone("+55 021 11 98765-4321", country="BR").e164 == "+5511987654321"
+
+    # 7. Fallback bare international calling-code resolution when context_plan does not match
+    assert standardize_phone("44 20 7946 0912", country="US").e164 == "+442079460912"
+    assert standardize_phone("49 069 7560 1000", country="US").e164 == "+496975601000"
+    assert standardize_phone("44 (0) 20 7946 0912", country="US").e164 == "+442079460912"
+
+    # 8. Argentina 13-digit '+54 9 <area> 15 <subscr>' healing (2, 3, and 4 digit area codes)
+    assert standardize_phone("+54 11 2345-6789", country="AR").e164 == "+541123456789"
+    assert standardize_phone("+54 9 11 15 2345-6789", country="AR").e164 == "+5491123456789"
+    assert standardize_phone("+54 9 351 15 234-5678", country="AR").e164 == "+5493512345678"
+    assert standardize_phone("+54 9 2944 15 23-4567", country="AR").e164 == "+5492944234567"
+
+    # 9. US territory ADDRESS_COUNTRY_MISMATCH exemption (both directions) & Toll-Free N11 exchange
+    p_pr = standardize_phone("787-555-0244", country="US")
+    assert p_pr.country_iso2 == "PR"
+    assert PhoneRiskFlag.ADDRESS_COUNTRY_MISMATCH not in p_pr.risk_flags
+
+    p_us_from_pr = standardize_phone("212-555-1234", country="PR")
+    assert p_us_from_pr.country_iso2 == "US"
+    assert PhoneRiskFlag.ADDRESS_COUNTRY_MISMATCH not in p_us_from_pr.risk_flags
+
+    p_tf_n11 = standardize_phone("800-911-4567", country="US")
+    assert p_tf_n11.is_valid is True
+    assert p_tf_n11.line_type == PhoneLineType.TOLL_FREE
+
+    # 10. ISO-8601 timestamp boundary guard in extract_phones_from_text
+    extracted = extract_phones_from_text("2026-04-21T14:30:00-04:00 call (415) 555-2671")
+    assert [m.e164 for m in extracted] == ["+14155552671"]
+

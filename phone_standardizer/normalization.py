@@ -37,14 +37,14 @@ ITU_E161_KEYPAD_MAP: dict[str, str] = {
 # Extension patterns at the end of a phone string (RFC 3966 ;ext=/;isub=, parenthesized, separators, DTMF)
 _EXTENSION_RE = re.compile(
     r"(?:"
-    r";(?:ext|isub)=([0-9]{1,7})"
-    r"|\(\s*(?:ext\.?|extension|int\.?|interno|ramal|poste|dw|durchwahl|доб\.?|内線|x|#)\s*[:\-#]?\s*([0-9]{1,7})\s*\)"
+    r";(?:ext|isub)=([0-9]{1,10})"
+    r"|\(\s*(?:ext\.?|extension|xt\.?|int\.?|interno|ramal|poste|dw|durchwahl|доб\.?|内線|x\.?|#)\s*[:\-#]?\s*([0-9]{1,10})\s*\)"
     r"|(?:,|\s)+(?:"
-    r"(?:ext\.?|extension|int\.?|interno|ramal|poste|dw|durchwahl|доб\.?|内線)\s*[:\-#]?\s*"
-    r"|x\s*[:\-#]?\s*"
+    r"(?:ext\.?|extension|xt\.?|int\.?|interno|ramal|poste|dw|durchwahl|доб\.?|内線)\s*[:\-#]?\s*"
+    r"|x\.?\s*[:\-#]?\s*"
     r"|#\s*"
-    r")([0-9]{1,7})"
-    r"|(?<=\d)\s*(?:[,;#]+|[pwx]+)\s*([0-9]{1,7})"
+    r")([0-9]{1,10})"
+    r"|(?<=\d)\s*(?:x\.?\s*[:\-#]?\s*([0-9]{1,10})|(?:[,;#]+|[pw]+)\s*([0-9]{1,7}))"
     r")\s*$",
     re.IGNORECASE,
 )
@@ -59,10 +59,13 @@ _LEADING_LABEL_RE = re.compile(
 # Trailing conversational parenthetical notes (e.g. "(ask for Sarah)", "(UK)") - preserves "(0)" and digit groups
 _TRAILING_NOTE_RE = re.compile(r"\s*\([A-Za-z\s.,'\-]{2,}\)\s*$")
 
-# Vanity token pattern: digits/prefix followed by separator and 3-8 uppercase/lowercase letters
+# Vanity token pattern: digits/prefix followed by separator and 3-11 alphanumeric vanity letters/digits
 _VANITY_CANDIDATE_RE = re.compile(
-    r"(\+?[0-9()\s.\-]{3,16}[-\s.])([A-Za-z]{3,8}(?:[-\s][A-Za-z0-9]{2,6})?)"
+    r"(\+?[0-9()\s.,\-]{3,16}[-\s.,])([A-Za-z0-9]*[A-Za-z]{3,8}[A-Za-z0-9]*(?:[-\s][A-Za-z0-9]{2,6})?)"
 )
+
+_TIME_RANGE_RE = re.compile(r"\b\d{1,2}:\d{2}\s*(?:AM|PM)\b", re.IGNORECASE)
+_MULTI_PHONE_SEMI_SLASH_RE = re.compile(r"\s*(?:;|/|&)\s*(?!(?:ext|isub)=)", re.IGNORECASE)
 
 
 def _fold_unicode_digits_py(text: str) -> tuple[str, bool]:
@@ -88,11 +91,31 @@ def strip_leading_label(text: str) -> str:
     return _LEADING_LABEL_RE.sub("", text).strip()
 
 
+def split_primary_phone(text: str) -> str:
+    """If text contains multiple complete phone numbers separated by ';', '/', '&', or ', ', return the primary (first) phone."""
+    parts = _MULTI_PHONE_SEMI_SLASH_RE.split(text)
+    if (
+        len(parts) >= 2
+        and sum(c.isdigit() for c in parts[0]) >= 7
+        and (
+            sum(c.isdigit() for c in parts[1]) >= 7
+            or (sum(c.isdigit() for c in parts[0]) >= 10 and len(parts[1].strip()) == 4 and parts[1].strip().isdigit())
+        )
+    ):
+        return parts[0].strip()
+    if ", " in text:
+        cparts = text.split(", ")
+        if len(cparts) >= 2 and sum(c.isdigit() for c in cparts[0]) >= 8 and sum(c.isdigit() for c in cparts[1]) >= 8:
+            return cparts[0].strip()
+    return text
+
+
 def extract_extension(text: str) -> tuple[str, str | None]:
     """Extract a trailing numeric extension and return (base_text, extension)."""
+    primary = split_primary_phone(text)
     # Strip trailing non-digit comments first if they follow an extension or base number
-    cleaned = _TRAILING_NOTE_RE.sub("", text).strip()
-    cleaned = re.sub(r"[!?\s]+$", "", cleaned)
+    cleaned = _TRAILING_NOTE_RE.sub("", primary).strip()
+    cleaned = re.sub(r"[!?,;\s]+$", "", cleaned)
     match = _EXTENSION_RE.search(cleaned)
     if match:
         ext = next(g for g in match.groups() if g is not None)
@@ -104,6 +127,9 @@ def extract_extension(text: str) -> tuple[str, str | None]:
 def decode_vanity_phone(text: str) -> tuple[str, str | None]:
     """Detect and decode ITU-T E.161 alphanumeric vanity phone numbers (e.g., 1-800-FLOWERS)."""
     from phone_standardizer._native_dispatch import fold_vanity_digits_dispatch
+
+    if _TIME_RANGE_RE.search(text):
+        return text.strip(), None
 
     stripped = strip_leading_label(text)
     match = _VANITY_CANDIDATE_RE.search(stripped)
@@ -119,9 +145,10 @@ def decode_vanity_phone(text: str) -> tuple[str, str | None]:
     alpha_part = match.group(2)
     # Reconstruct clean vanity alias
     raw_alias = (prefix_part + alpha_part).strip().upper()
-    raw_alias = re.sub(r"\s+", "-", raw_alias)
+    raw_alias = re.sub(r"[\s,]+", "-", raw_alias)
 
     decoded_tail = fold_vanity_digits_dispatch(alpha_part.upper())
     replaced = stripped[:match.start()] + prefix_part + decoded_tail + stripped[match.end():]
     return replaced, raw_alias
+
 

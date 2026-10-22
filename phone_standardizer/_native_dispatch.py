@@ -2,20 +2,53 @@
 
 from __future__ import annotations
 
+import importlib.machinery
+import importlib.util
+from pathlib import Path
 import re
 from typing import Any
 
 from phone_standardizer.normalization import (
+    _TIME_RANGE_RE,
     _fold_unicode_digits_py,
     _fold_vanity_digits_py,
     decode_vanity_phone,
     extract_extension,
 )
 
-try:
-    import _phone_standardizer_rs as _native_mod  # type: ignore[import-not-found]
-except ImportError:  # pragma: no cover
-    _native_mod = None
+
+def _load_native_module(release_dir: Path | None = None) -> Any:
+    """Import _phone_standardizer_rs or load it from cargo's target/release directory."""
+    if release_dir is None:
+        try:
+            import _phone_standardizer_rs as mod  # type: ignore[import-not-found]
+        except ImportError:
+            release_dir = Path(__file__).resolve().parent.parent / "target" / "release"
+        else:
+            return mod
+
+    for filename in (
+        "lib_phone_standardizer_rs.so",
+        "lib_phone_standardizer_rs.dylib",
+        "_phone_standardizer_rs.pyd",
+    ):
+        candidate = release_dir / filename
+        if candidate.is_file():
+            try:
+                loader = importlib.machinery.ExtensionFileLoader(
+                    "_phone_standardizer_rs", str(candidate)
+                )
+                spec = importlib.util.spec_from_loader("_phone_standardizer_rs", loader)
+                if spec is not None:  # pragma: no branch
+                    mod = importlib.util.module_from_spec(spec)
+                    loader.exec_module(mod)
+                    return mod
+            except Exception:
+                continue
+    return None
+
+
+_native_mod = _load_native_module()
 
 _PAREN_ZERO_RE = re.compile(r"\(\s*0\s*\)")
 _PLUS_BEFORE_DIGIT_RE = re.compile(r"^[^\d+]*\+")
@@ -108,6 +141,9 @@ def standardize_batch_e164_dispatch(
     for raw in inputs:
         folded, _ = _fold_unicode_digits_py(raw)
         no_ext, _ = extract_extension(folded)
+        if _TIME_RANGE_RE.search(no_ext):
+            results.append(None)
+            continue
         decoded, _ = decode_vanity_phone(no_ext)
         cleaned = _PAREN_ZERO_RE.sub("", decoded).strip()
         has_plus = bool(_PLUS_BEFORE_DIGIT_RE.match(cleaned))

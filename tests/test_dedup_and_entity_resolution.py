@@ -126,6 +126,17 @@ def test_compare_phones_all_match_categories() -> None:
     assert diff_len.match_type == "DISTINCT"
     assert diff_len.is_fuzzy_match is False
 
+    # 9. Phase 6: Corporate switchboard / sequential block ending in 00/000 guard
+    corp_sw = compare_phones("800-526-6300", "800-526-6500")
+    assert corp_sw.similarity_score == 0.85
+    assert corp_sw.is_fuzzy_match is False
+    assert compare_phones("800-526-6300", "800-526-6500", fuzzy_threshold=0.85).is_fuzzy_match is True
+
+    # 10. Phase 6: Single-digit insertion/deletion (different length, dist == 1)
+    len_edit = compare_phones("+49 30 1234567", "+49 30 12345678")
+    assert len_edit.edit_distance == 1
+    assert len_edit.match_type == "SINGLE_DIGIT_EDIT"
+
 
 def test_blocking_keys_and_deduplicate_phones() -> None:
     assert generate_phone_blocking_keys("") == ()
@@ -140,21 +151,28 @@ def test_blocking_keys_and_deduplicate_phones() -> None:
 
     assert deduplicate_phones([]) == []
 
-    # Cluster with exact, extension variant, transposition, and a distinct UK number + reverse index union
+    # Cluster with exact, duplicate identical raw string, extension variant, transposition, and a distinct UK number
     raw_phones = [
         "(415) 555-2671",
+        "(415) 555-2671",  # identical raw string hit in local str_cache
+        "+1 415-555-2671",  # exact duplicate pre-grouped in O(N)
         "+1-415-555-2671 ext 104",
         "+1 415 555 2617",  # transposition of 71 -> 17
-        "+1 415 555 2678",  # keypad typo of 71 -> 78? No, 1 and 8 are not adjacent, still single edit (0.89 >= 0.88)
+        "+1 415 555 2678",  # single edit (0.89 >= 0.88)
         "+44 (0) 20 7946 0912",
     ]
     clusters = deduplicate_phones(raw_phones)
     assert len(clusters) == 2
     c0 = clusters[0]
-    assert len(c0.members) == 4
+    assert len(c0.members) == 6
     assert c0.golden_phone.e164 == "+14155552671"
     assert c0.golden_phone.extension == "104"
+    assert "EXACT_MATCH" in c0.match_types
     assert c0.to_dict()["cluster_id"] == "PHONE-CLUSTER-0001"
+
+    # Pre-grouping of empty/invalid phones in deduplicate_phones
+    inv_clusters = deduplicate_phones(["", "904-218", "904-218"])
+    assert len(inv_clusters) == 2
 
     # Test union when rj < ri (reverse merge order across buckets)
     # Record 0 and Record 2 share head6, Record 1 and Record 2 share tail7
@@ -176,6 +194,13 @@ def test_cluster_contact_records_synergy() -> None:
             "id": "crm-1",
             "name": "Alice Smith",
             "phone": "(415) 555-2671",
+            "postal_code": "94105",
+            "address_key": "US|CA|SAN_FRANCISCO|100_MAIN_ST",
+        },
+        {
+            "id": "crm-1b",
+            "name": "Alice Smith (Duplicate)",
+            "phone": "+1-415-555-2671",  # exact E.164 match pre-grouped in O(N)
             "postal_code": "94105",
             "address_key": "US|CA|SAN_FRANCISCO|100_MAIN_ST",
         },
@@ -205,8 +230,9 @@ def test_cluster_contact_records_synergy() -> None:
     assert len(clusters) == 2
 
     alice_cluster = clusters[0]
-    assert alice_cluster.record_ids == ("crm-1", "crm-2", "crm-3")
+    assert alice_cluster.record_ids == ("crm-1", "crm-1b", "crm-2", "crm-3")
     assert alice_cluster.golden_address_key == "US|CA|SAN_FRANCISCO|100_MAIN_ST"
+    assert "PHONE_EXACT_MATCH" in alice_cluster.linkage_reasons
     assert "PHONE_ADJACENT_TRANSPOSITION" in alice_cluster.linkage_reasons
     assert "SHARED_ADDRESS_KEY" in alice_cluster.linkage_reasons
     assert alice_cluster.to_dict()["cluster_id"] == "CONTACT-CLUSTER-0001"
@@ -227,9 +253,10 @@ def test_cluster_contact_records_synergy() -> None:
         {"id": "0", "phone": "4155552671", "country": "FR"},
         {"id": "1", "phone": "+1 415-555-2672", "country": "US"},
         {"id": "2", "phone": "+1 415-555-2671", "country": "US"},
+        {"id": "3", "phone": "", "address_key": "US|NY|NYC|1_BROADWAY"},
     ]
     c_ri_gt_rj = cluster_contact_records(rec_ri_gt_rj)
-    assert len(c_ri_gt_rj) == 1
+    assert len(c_ri_gt_rj) == 2
 
     # Phase 5: Explicit international +CC on both inputs must NOT match as NATIONAL_EQUIVALENT
     intl_diff_cc = compare_phones("+1 415-555-2671", "+33 4155552671")

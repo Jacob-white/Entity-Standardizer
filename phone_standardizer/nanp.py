@@ -18,9 +18,19 @@ NANP_PERSONAL_NPAS: frozenset[str] = frozenset({
 
 NANP_SHORT_CODES: frozenset[str] = frozenset({
     "211", "311", "411", "511", "611", "711", "811", "911", "988",
+    "116111", "116123",
 })
 
-NANP_EMERGENCY_CODES: frozenset[str] = frozenset({"911", "988", "112", "999"})
+NANP_EMERGENCY_CODES: frozenset[str] = frozenset({
+    "000", "01", "011", "019", "060", "085",
+    "100", "101", "10111", "102", "104", "105",
+    "110", "111", "112", "113", "114", "115", "117", "118", "119",
+    "122", "128", "13", "130", "131", "14", "1444",
+    "15", "16", "17", "18",
+    "190", "191", "192", "193", "197", "199",
+    "333", "355", "555",
+    "90", "91", "911", "919", "92", "93", "988", "990", "991", "993", "996", "999",
+})
 
 # Non-US/CA NANP Countries & Territories mapped by 3-digit NPA
 NANP_CARIBBEAN_PACIFIC_NPA_TO_ISO2: dict[str, tuple[str, str]] = {
@@ -53,14 +63,18 @@ NANP_CARIBBEAN_PACIFIC_NPA_TO_ISO2: dict[str, tuple[str, str]] = {
     "939": ("PR", "PR"),  # Puerto Rico
 }
 
+NANP_JURISDICTIONS: frozenset[str] = frozenset(
+    {"US", "CA", "UM"} | {iso2 for iso2, _ in NANP_CARIBBEAN_PACIFIC_NPA_TO_ISO2.values()}
+)
+
 # Canadian Provinces & Territories mapped by 3-digit NPA
 NANP_CANADA_NPA_TO_PROVINCE: dict[str, str] = {
     "204": "MB", "431": "MB", "584": "MB",
-    "226": "ON", "249": "ON", "289": "ON", "343": "ON", "365": "ON",
+    "226": "ON", "249": "ON", "273": "ON", "289": "ON", "343": "ON", "365": "ON",
     "382": "ON", "416": "ON", "437": "ON", "519": "ON", "548": "ON",
     "613": "ON", "647": "ON", "683": "ON", "705": "ON", "742": "ON",
     "753": "ON", "807": "ON", "905": "ON", "942": "ON",
-    "236": "BC", "250": "BC", "604": "BC", "672": "BC", "778": "BC",
+    "236": "BC", "250": "BC", "257": "BC", "604": "BC", "672": "BC", "778": "BC",
     "263": "QC", "354": "QC", "367": "QC", "418": "QC", "438": "QC",
     "450": "QC", "468": "QC", "514": "QC", "579": "QC", "581": "QC",
     "819": "QC", "873": "QC",
@@ -104,17 +118,17 @@ NANP_US_NPA_TO_STATE: dict[str, str] = {
     "231": "MI", "248": "MI", "269": "MI", "313": "MI", "517": "MI", "586": "MI", "616": "MI", "679": "MI", "734": "MI", "810": "MI", "906": "MI", "947": "MI", "989": "MI",
     "239": "FL", "305": "FL", "321": "FL", "324": "FL", "352": "FL", "386": "FL", "407": "FL", "448": "FL", "561": "FL", "645": "FL",
     "656": "FL", "689": "FL", "727": "FL", "728": "FL", "754": "FL", "772": "FL", "786": "FL", "813": "FL", "850": "FL", "863": "FL", "904": "FL", "941": "FL", "954": "FL",
-    "240": "MD", "301": "MD", "410": "MD", "443": "MD", "667": "MD",
+    "227": "MD", "240": "MD", "301": "MD", "410": "MD", "443": "MD", "667": "MD",
     "252": "NC", "336": "NC", "472": "NC", "704": "NC", "743": "NC", "828": "NC", "910": "NC", "919": "NC", "980": "NC", "984": "NC",
     "262": "WI", "274": "WI", "353": "WI", "414": "WI", "534": "WI", "608": "WI", "715": "WI", "920": "WI",
     "270": "KY", "364": "KY", "502": "KY", "606": "KY", "859": "KY",
     "276": "VA", "434": "VA", "540": "VA", "571": "VA", "686": "VA", "703": "VA", "757": "VA", "804": "VA", "826": "VA", "948": "VA",
     "302": "DE",
-    "303": "CO", "719": "CO", "720": "CO", "970": "CO", "983": "CO",
+    "303": "CO", "719": "CO", "720": "CO", "748": "CO", "970": "CO", "983": "CO",
     "304": "WV", "681": "WV",
     "307": "WY",
     "308": "NE", "402": "NE", "531": "NE",
-    "314": "MO", "417": "MO", "557": "MO", "573": "MO", "636": "MO", "660": "MO", "816": "MO", "975": "MO",
+    "235": "MO", "314": "MO", "417": "MO", "557": "MO", "573": "MO", "636": "MO", "660": "MO", "816": "MO", "975": "MO",
     "316": "KS", "620": "KS", "785": "KS", "913": "KS",
     "319": "IA", "515": "IA", "563": "IA", "641": "IA", "712": "IA",
     "339": "MA", "351": "MA", "413": "MA", "508": "MA", "617": "MA", "774": "MA", "781": "MA", "857": "MA", "978": "MA",
@@ -155,13 +169,14 @@ def resolve_nanp_npa(npa: str, fallback_iso2: str = "US") -> tuple[str, str | No
         return "US", NANP_US_NPA_TO_STATE[npa], True
 
     if npa in NANP_TOLL_FREE_NPAS or npa in NANP_PREMIUM_NPAS or npa in NANP_PERSONAL_NPAS:
-        country = fallback_iso2 if fallback_iso2 in ("US", "CA") else "US"
+        country = fallback_iso2 if fallback_iso2 in NANP_JURISDICTIONS else "US"
         return country, None, True
 
     # Structurally valid NANP NPA: [2-9][0-9]{2}, not N11
     if len(npa) == 3 and npa[0] in "23456789" and npa[1:].isdigit() and npa[1:] != "11":
-        country = fallback_iso2 if fallback_iso2 in ("US", "CA") else "US"
+        country = fallback_iso2 if fallback_iso2 in NANP_JURISDICTIONS else "US"
         return country, None, False
 
     return fallback_iso2, None, False
+
 

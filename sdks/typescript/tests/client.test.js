@@ -24,7 +24,7 @@ test("PhoneStandardizerClient and PhoneInputController interact with API", async
       return {
         ok: true,
         status: 200,
-        json: async () => ({ status: "ok", version: "1.3.0" }),
+        json: async () => ({ status: "ok", version: "1.4.0" }),
       };
     }
     if (u.endsWith("/v1/standardize")) {
@@ -160,7 +160,7 @@ test("PhoneStandardizerClient and PhoneInputController interact with API", async
 
   const health = await client.health();
   assert.equal(health.status, "ok");
-  assert.equal(health.version, "1.3.0");
+  assert.equal(health.version, "1.4.0");
 
   const country = await client.getCountry("US");
   assert.equal(country.calling_code, "1");

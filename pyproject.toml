@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "phone-standardizer"
-version = "1.3.0"
+version = "1.4.0"
 description = "Universal multi-national phone number standardization, ITU-T E.164/E.123/RFC 3966 formatting, NANP carrier/state resolution, line-type classification, and high-throughput entity linkage."
 readme = "README.md"
 requires-python = ">=3.11"
