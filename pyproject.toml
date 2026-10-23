@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "phone-standardizer"
-version = "1.4.0"
-description = "Universal multi-national phone number standardization, ITU-T E.164/E.123/RFC 3966 formatting, NANP carrier/state resolution, line-type classification, and high-throughput entity linkage."
+name = "entity-standardizer"
+version = "2.0.0"
+description = "Unified multi-national Entity, Address (USPS Pub 28 / UPU S42), and Phone (ITU-T E.164 / E.123 / RFC 3966) standardization, bidirectional cross-healing, and entity resolution engine."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -64,12 +64,16 @@ docs = [
 ]
 
 [project.scripts]
+entity-standardizer = "phone_standardizer.cli:main"
+entity-standardizer-mcp = "phone_standardizer.mcp.server:main"
 phone-standardizer = "phone_standardizer.cli:main"
 phone-standardizer-mcp = "phone_standardizer.mcp.server:main"
+address-standardizer = "address_standardizer.cli:main"
+address-standardizer-mcp = "address_standardizer.mcp.server:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["phone_standardizer*"]
+include = ["entity_standardizer*", "phone_standardizer*", "address_standardizer*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

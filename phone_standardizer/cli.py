@@ -7,8 +7,10 @@ import json
 import sys
 from typing import Sequence
 
+from address_standardizer.standardizer import standardize_address
 from phone_standardizer.batch import stream_standardize_csv
 from phone_standardizer.dedup import compare_phones, deduplicate_phones
+from phone_standardizer.joint import standardize_contact
 from phone_standardizer.registry import get_dial_plan
 from phone_standardizer.standardizer import standardize_phone
 
@@ -52,6 +54,30 @@ def build_parser() -> argparse.ArgumentParser:
     dedup_cmd.add_argument("-c", "--country", default=None, help="Optional ISO country hint.")
     dedup_cmd.add_argument("-t", "--threshold", type=float, default=0.88, help="Fuzzy threshold (default: 0.88).")
 
+    # address command
+    addr_cmd = sub.add_parser("address", help="Standardize a physical/mailing address and output JSON.")
+    addr_cmd.add_argument("street1", help="Primary street address line.")
+    addr_cmd.add_argument("--street2", default=None, help="Secondary unit/suite line.")
+    addr_cmd.add_argument("--city", default=None, help="City/locality.")
+    addr_cmd.add_argument("--state", default=None, help="State/province/region.")
+    addr_cmd.add_argument("--postal-code", default=None, help="ZIP or postal code.")
+    addr_cmd.add_argument("-c", "--country", default="US", help="ISO country code or name (default: US).")
+
+    # contact command
+    contact_cmd = sub.add_parser(
+        "contact",
+        help="Jointly standardize an entity's address and phone number with bidirectional cross-healing.",
+    )
+    contact_cmd.add_argument("--street1", default=None, help="Primary street address line.")
+    contact_cmd.add_argument("--street2", default=None, help="Secondary unit/suite line.")
+    contact_cmd.add_argument("--city", default=None, help="City/locality.")
+    contact_cmd.add_argument("--state", default=None, help="State/province/region.")
+    contact_cmd.add_argument("--postal-code", default=None, help="ZIP or postal code.")
+    contact_cmd.add_argument("-c", "--country", default=None, help="Optional ISO country hint.")
+    contact_cmd.add_argument("--phone", default=None, help="Raw telephone number.")
+    contact_cmd.add_argument("--fax", default=None, help="Raw fax number.")
+    contact_cmd.add_argument("-d", "--default-country", default="US", help="Fallback ISO country (default: US).")
+
     return parser
 
 
@@ -94,6 +120,34 @@ def main(argv: Sequence[str] | None = None) -> int:
             fuzzy_threshold=args.threshold,
         )
         sys.stdout.write(json.dumps([c.to_dict() for c in clusters], indent=2) + "\n")
+        return 0
+
+    if args.command == "address":
+        addr_res = standardize_address(
+            street1=args.street1,
+            street2=args.street2,
+            city=args.city,
+            state=args.state,
+            postal_code=args.postal_code,
+            country=args.country,
+            allow_locality=True,
+        )
+        sys.stdout.write(json.dumps(addr_res.as_dict(), indent=2) + "\n")
+        return 0
+
+    if args.command == "contact":
+        contact_res = standardize_contact(
+            street1=args.street1,
+            street2=args.street2,
+            city=args.city,
+            state=args.state,
+            postal_code=args.postal_code,
+            country=args.country,
+            phone=args.phone,
+            fax=args.fax,
+            default_country=args.default_country,
+        )
+        sys.stdout.write(json.dumps(contact_res.to_dict(), indent=2) + "\n")
         return 0
 
     # args.command == "batch"

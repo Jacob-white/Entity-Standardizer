@@ -1,0 +1,70 @@
+"""Entity Standardizer: Unified Address + Phone Standardization & Cross-Healing Engine."""
+
+from __future__ import annotations
+
+from address_standardizer import (
+    StandardizedAddress,
+    batch_standardize,
+    generate_building_key,
+    generate_normalized_address_key,
+    standardize_address,
+    validate_address,
+)
+from phone_standardizer import (
+    CrossHealingAction,
+    HealingAction,
+    PhoneLineType,
+    PhoneRiskFlag,
+    PhoneRoutingTier,
+    StandardizedContact,
+    StandardizedEntity,
+    StandardizedPhone,
+    batch_standardize_contacts,
+    batch_standardize_entities,
+    batch_standardize_phones,
+    compare_phones,
+    deduplicate_phones,
+    format_e164,
+    format_international,
+    format_national,
+    format_rfc3966,
+    mask_phone,
+    standardize_contact,
+    standardize_entity,
+    standardize_phone,
+    validate_phone,
+)
+
+__version__ = "2.0.0"
+
+__all__ = [
+    "CrossHealingAction",
+    "HealingAction",
+    "PhoneLineType",
+    "PhoneRiskFlag",
+    "PhoneRoutingTier",
+    "StandardizedAddress",
+    "StandardizedContact",
+    "StandardizedEntity",
+    "StandardizedPhone",
+    "__version__",
+    "batch_standardize",
+    "batch_standardize_contacts",
+    "batch_standardize_entities",
+    "batch_standardize_phones",
+    "compare_phones",
+    "deduplicate_phones",
+    "format_e164",
+    "format_international",
+    "format_national",
+    "format_rfc3966",
+    "generate_building_key",
+    "generate_normalized_address_key",
+    "mask_phone",
+    "standardize_address",
+    "standardize_contact",
+    "standardize_entity",
+    "standardize_phone",
+    "validate_address",
+    "validate_phone",
+]

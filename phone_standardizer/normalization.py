@@ -37,14 +37,14 @@ ITU_E161_KEYPAD_MAP: dict[str, str] = {
 # Extension patterns at the end of a phone string (RFC 3966 ;ext=/;isub=, parenthesized, separators, DTMF)
 _EXTENSION_RE = re.compile(
     r"(?:"
-    r";(?:ext|isub)=([0-9]{1,10})"
-    r"|\(\s*(?:ext\.?|extension|xt\.?|int\.?|interno|ramal|poste|dw|durchwahl|доб\.?|内線|x\.?|#)\s*[:\-#]?\s*([0-9]{1,10})\s*\)"
+    r";\s*(?:ext|isub)=([0-9]{1,10})"
+    r"|\(\s*(?:ext\.?|extension|xt\.?|int\.?|interno|ramal|poste|dw|durchwahl|доб\.?|内線|x\.?|#)\s*[:\-=#]?\s*([0-9]{1,10})\s*\)"
     r"|(?:[|,;\s]+)(?:"
-    r"(?:ext\.?|extension|xt\.?|int\.?|interno|ramal|poste|dw|durchwahl|доб\.?|内線)\s*[:\-#]?\s*"
-    r"|x\.?\s*[:\-#]?\s*"
+    r"(?:ext\.?|extension|xt\.?|int\.?|interno|ramal|poste|dw|durchwahl|доб\.?|内線)\s*[:\-=#]?\s*"
+    r"|x\.?\s*[:\-=#]?\s*"
     r"|#\s*"
     r")([0-9]{1,10})"
-    r"|(?<=\d)\s*(?:(?:ext\.?|xt\.?|x\.?|#)\s*[:\-#]?\s*([0-9]{1,10})|(?:[,;#]+|[pw]+)\s*([0-9]{1,10}))"
+    r"|(?<=\d)\s*(?:(?:ext\.?|xt\.?|x\.?|#)\s*[:\-=#]?\s*([0-9]{1,10})|(?:[,;#]+|[pw]+)\s*([0-9]{1,10}))"
     r")\s*$",
     re.IGNORECASE,
 )
@@ -61,16 +61,23 @@ _TRAILING_NOTE_RE = re.compile(r"\s*\([A-Za-z\s.,'\-]{2,}\)\s*$")
 
 # Vanity token pattern: digits/prefix followed by separator and 3-11 alphanumeric vanity letters/digits
 _VANITY_CANDIDATE_RE = re.compile(
-    r"(\+?[0-9()\s.,\-]{3,16}[-\s.,]?)(?=[A-Za-z])([A-Za-z0-9]*[A-Za-z]{3,8}[A-Za-z0-9]*(?:[-\s][A-Za-z0-9]{2,6})?)"
+    r"(\+?[0-9()\s.,\-]{3,16}[-\s.,]?)(?=[A-Za-z]|401[Kk]\b)"
+    r"([A-Za-z0-9]*(?:[A-Za-z]{3,8}|[A-Za-z]{1,2}[-\s][A-Za-z]{2,8}|401[Kk])[A-Za-z0-9]*(?:[-\s][A-Za-z0-9]{2,6})?)"
 )
 
 _TIME_RANGE_RE = re.compile(r"\b\d{1,2}:\d{2}\s*(?:AM|PM)\b", re.IGNORECASE)
 _MULTI_PHONE_SEMI_SLASH_RE = re.compile(
-    r"\s*(?:;|/|\||&)\s*(?!(?:ext|isub)=)",
+    r"\s*(?:;|/|\||&)\s*(?!\s*(?:(?:ext\.?|extension|xt\.?|int\.?|interno|ramal|poste|dw|durchwahl|доб\.?|内線|x\.?|isub)\b|#))",
     re.IGNORECASE,
 )
 _SPACE_DOUBLE_NANP_RE = re.compile(
     r"^\s*(\(?[2-9]\d{2}\)?[\s.\-]?\d{3}[\s.\-]?\d{4})\s+(\(?[2-9]\d{2}\)?[\s.\-]?\d{3}[\s.\-]?\d{4})\s*$"
+)
+_HYPHEN_MULTI_NANP_RE = re.compile(
+    r"^\s*([2-9]\d{2}-[2-9]\d{2}-\d{4})-(?:\d{3}-\d{3}-\d{3,4}|\d{7,10})\s*$"
+)
+_HYPHEN_NANP_EXT_RE = re.compile(
+    r"^\s*([2-9]\d{2}-[2-9]\d{2}-\d{4})(?:-(\d{1,5})|(\d{3,5}))\s*$"
 )
 
 
@@ -124,7 +131,13 @@ def split_primary_phone(text: str) -> tuple[str, bool]:
         and sum(c.isdigit() for c in parts[0]) >= 7
         and (
             sum(c.isdigit() for c in parts[1]) >= 7
-            or (sum(c.isdigit() for c in parts[0]) >= 10 and len(parts[1].strip()) == 4 and parts[1].strip().isdigit())
+            or (
+                "/" in text
+                and ";" not in text
+                and sum(c.isdigit() for c in parts[0]) >= 9
+                and 1 <= sum(c.isdigit() for c in parts[1]) <= 6
+                and not any(c.isalpha() for c in parts[1])
+            )
         )
     ):
         p0, _ = split_primary_phone(parts[0])
@@ -151,6 +164,10 @@ def split_primary_phone(text: str) -> tuple[str, bool]:
     if m_space:
         return m_space.group(1).strip(), True
 
+    m_hyph_multi = _HYPHEN_MULTI_NANP_RE.match(text)
+    if m_hyph_multi:
+        return m_hyph_multi.group(1).strip(), True
+
     return text, False
 
 
@@ -170,8 +187,11 @@ def extract_extension(text: str) -> tuple[str, str | None]:
             base_digits = sum(c.isdigit() for c in base)
             if base_digits < 10 or "," in base:
                 return cleaned, None
-        base = re.sub(r"[!?|,;\s]+$", "", base)
+        base = re.sub(r"[!?|,;\-\s]+$", "", base)
         return base, ext
+    m_hyph_ext = _HYPHEN_NANP_EXT_RE.match(cleaned)
+    if m_hyph_ext:
+        return m_hyph_ext.group(1), (m_hyph_ext.group(2) or m_hyph_ext.group(3))
     return cleaned, None
 
 
