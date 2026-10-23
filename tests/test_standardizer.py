@@ -1341,9 +1341,17 @@ def test_joint_cross_healing_and_phase7_upgrades() -> None:
     assert c_uk_def_no_ph.address.country == "GBR"
 
     # Single-line US address with trailing <City> <5-digit ZIP> (no state) must not be overwritten by foreign phone
-    c_us_zip_uk_ph = standardize_contact(street1="123 Main St, Austin 78701", phone="+44 20 7946 0912")
-    assert c_us_zip_uk_ph.address.country == "USA" and c_us_zip_uk_ph.address.state == "TX"
-    assert PhoneRiskFlag.ADDRESS_COUNTRY_MISMATCH in c_us_zip_uk_ph.phone.risk_flags
+    import address_standardizer.us_street_parser as usp
+
+    saved_usa = usp.usaddress
+    try:
+        usp.usaddress = None
+        c_us_zip_uk_ph = standardize_contact(street1="123 Main St, Austin 78701", phone="+44 20 7946 0912")
+        assert c_us_zip_uk_ph.address.country == "USA" and c_us_zip_uk_ph.address.state == "TX"
+        assert c_us_zip_uk_ph.address.city == "AUSTIN" and c_us_zip_uk_ph.address.postal_code == "78701"
+        assert PhoneRiskFlag.ADDRESS_COUNTRY_MISMATCH in c_us_zip_uk_ph.phone.risk_flags
+    finally:
+        usp.usaddress = saved_usa
 
     # European 5-digit postal codes (metro, non-US ZIP, or mismatched US ZIP city) must not trigger false US mismatch
     c_fr_paris = standardize_contact(

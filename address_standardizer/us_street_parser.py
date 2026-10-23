@@ -458,6 +458,25 @@ def _parse_us_street_tokens(address_str: str, enable_fuzzy: bool = True, city_ra
 
                 if not split_found:
                     st_input = before_sz.strip()
+        elif not p_city and not p_zp:
+            m_cz = re.match(
+                r"^(?P<street>.*\d.*),\s*(?P<city>[A-Za-z][A-Za-z\s.\-]*?)(?:,\s*|\s+)(?P<zip>\d{5}(?:-\d{4})?)\s*$",
+                clean_input,
+            )
+            if m_cz:
+                cand_city = m_cz.group("city").strip()
+                cand_zip = m_cz.group("zip").strip()
+                city_toks = {RE_NON_ALPHANUMERIC.sub("", t).upper() for t in cand_city.split()}
+                if (
+                    cand_city
+                    and not (city_toks & set(SECONDARY_UNITS.keys()))
+                    and not (city_toks & set(SECONDARY_UNITS.values()))
+                    and "BOX" not in city_toks
+                    and get_state_from_zip3(cand_zip[:3])
+                ):
+                    st_input = m_cz.group("street").strip()
+                    p_city = cand_city
+                    p_zp = cand_zip
 
         rb_st1, rb_st2, ok = _rule_based_us_street_parse(st_input, enable_fuzzy=enable_fuzzy)
         if urb_prefix:

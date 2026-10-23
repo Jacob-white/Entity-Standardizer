@@ -222,12 +222,15 @@ def test_native_dispatch_extended_functions(monkeypatch, tmp_path) -> None:
     assert batch_de == ["+493012345678", "+493012345678"]
 
     # Native Rust dispatch path
+    from phone_standardizer._native_dispatch import standardize_batch_with_country_dispatch
+
     mock_rs = MagicMock()
     mock_rs.fold_vanity_digits_rs.return_value = "3569377"
     mock_rs.fold_unicode_digits_rs.return_value = ("+81 3-1234-5678", True)
     mock_rs.extract_digits_rs.return_value = "14155552671"
     mock_rs.damerau_levenshtein_distance_rs.return_value = 1
     mock_rs.standardize_batch_e164_rs.return_value = ["+14155552671"]
+    mock_rs.standardize_batch_with_country_rs.return_value = ["+14155552671"]
     monkeypatch.setattr(native_dispatch, "_native_mod", mock_rs)
 
     assert native_dispatch.get_engine_info()["engine"] == "rust_pyo3"
@@ -236,4 +239,5 @@ def test_native_dispatch_extended_functions(monkeypatch, tmp_path) -> None:
     assert extract_digits_dispatch("+1 (415) 555-2671") == "14155552671"
     assert damerau_levenshtein_distance_dispatch("4155552671", "4155552617") == 1
     assert standardize_batch_e164_dispatch(["(415) 555-2671"]) == ["+14155552671"]
+    assert standardize_batch_with_country_dispatch([("(415) 555-2671", "US")]) == ["+14155552671"]
 
