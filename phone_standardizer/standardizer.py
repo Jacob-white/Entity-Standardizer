@@ -107,13 +107,13 @@ def _extract_address_hint(address_context: Any) -> tuple[str | None, str | None]
         p_str = str(raw_postal).strip()
         iso2 = infer_country_from_postal_code(p_str)
         if iso2 == "US" and len(p_str) == 5 and not raw_state:
-            from address_standardizer.reference._match import fold_name
+            from address_standardizer.reference._match import name_tokens
             from address_standardizer.reference.us_zip5 import get_default_us_zip5_provider
 
             places = get_default_us_zip5_provider().lookup_postal("US", p_str)
             if not places or (
                 raw_city
-                and fold_name(str(raw_city)) not in {fold_name(p.place_name) for p in places}
+                and name_tokens(str(raw_city)) not in {name_tokens(p.place_name) for p in places}
             ):
                 iso2 = None
     return iso2, (str(raw_state).strip().upper() if raw_state else None)
@@ -1011,7 +1011,8 @@ def standardize_phone(
 
     area_code, subscriber_number = _split_area_and_subscriber(plan, nsn)
     line_type = _classify_line_type(plan, nsn) if is_possible else PhoneLineType.UNKNOWN
-    if region_code is None and not addr_state and is_possible and plan.calling_code != "1":
+    eff_addr_state = addr_state if addr_iso2 in (None, plan.iso2) else None
+    if region_code is None and not eff_addr_state and is_possible and plan.calling_code != "1":
         region_code = resolve_international_region(plan.iso2, nsn)
 
     if is_possible:
@@ -1053,7 +1054,7 @@ def standardize_phone(
         subscriber_number=subscriber_number,
         extension=extension,
         vanity_alias=vanity_alias,
-        region_code=region_code or addr_state,
+        region_code=region_code or eff_addr_state,
         line_type=line_type,
         is_valid=is_valid,
         is_possible=is_possible,

@@ -1340,18 +1340,48 @@ def test_joint_cross_healing_and_phase7_upgrades() -> None:
     c_uk_def_no_ph = standardize_contact(street1="10 High St", default_country="GB")
     assert c_uk_def_no_ph.address.country == "GBR"
 
-    # Single-line US address with trailing <City> <5-digit ZIP> (no state) must not be overwritten by foreign phone
+    # Single-line US address with trailing <City> <5-digit ZIP> (with or without comma, no state) must not be overwritten by foreign phone
     import address_standardizer.us_street_parser as usp
 
     saved_usa = usp.usaddress
     try:
-        usp.usaddress = None
-        c_us_zip_uk_ph = standardize_contact(street1="123 Main St, Austin 78701", phone="+44 20 7946 0912")
-        assert c_us_zip_uk_ph.address.country == "USA" and c_us_zip_uk_ph.address.state == "TX"
-        assert c_us_zip_uk_ph.address.city == "AUSTIN" and c_us_zip_uk_ph.address.postal_code == "78701"
-        assert PhoneRiskFlag.ADDRESS_COUNTRY_MISMATCH in c_us_zip_uk_ph.phone.risk_flags
+        for us_mod in (saved_usa, None):
+            usp.usaddress = us_mod
+            c_us_zip_uk_ph = standardize_contact(street1="123 Main St, Austin 78701", phone="+44 20 7946 0912")
+            assert c_us_zip_uk_ph.address.country == "USA" and c_us_zip_uk_ph.address.state == "TX"
+            assert c_us_zip_uk_ph.address.city == "AUSTIN" and c_us_zip_uk_ph.address.postal_code == "78701"
+            assert c_us_zip_uk_ph.phone.region_code == "London"
+            assert PhoneRiskFlag.ADDRESS_COUNTRY_MISMATCH in c_us_zip_uk_ph.phone.risk_flags
+
+            c_us_nocomma = standardize_contact(street1="123 Main St Austin 78701", phone="+44 20 7946 0912")
+            assert c_us_nocomma.address.street1 == "123 MAIN ST" and c_us_nocomma.address.city == "AUSTIN"
+            assert c_us_nocomma.address.state == "TX" and c_us_nocomma.address.country == "USA"
+            assert PhoneRiskFlag.ADDRESS_COUNTRY_MISMATCH in c_us_nocomma.phone.risk_flags
+
+            c_us_ny = standardize_contact(street1="123 Main St, New York 10001", phone="+44 20 7946 0912")
+            assert c_us_ny.address.street1 == "123 MAIN ST" and c_us_ny.address.city == "NEW YORK"
+            assert c_us_ny.address.state == "NY" and c_us_ny.address.country == "USA"
+
+            c_us_stl = standardize_contact(street1="123 Main St St. Louis 63101", phone="+44 20 7946 0912")
+            assert c_us_stl.address.street1 == "123 MAIN ST" and c_us_stl.address.city == "ST LOUIS"
+            assert c_us_stl.address.state == "MO" and c_us_stl.address.country == "USA"
+
+            c_us_pob = standardize_contact(street1="PO Box 100 Austin 78701", phone="+44 20 7946 0912")
+            assert c_us_pob.address.street1 == "PO BOX 100" and c_us_pob.address.city == "AUSTIN"
+            assert c_us_pob.address.state == "TX" and c_us_pob.address.country == "USA"
     finally:
         usp.usaddress = saved_usa
+
+    c_stl_struct = standardize_contact(
+        street1="123 Main St", city="St. Louis", postal_code="63101", phone="+44 20 7946 0912"
+    )
+    assert c_stl_struct.address.country == "USA" and c_stl_struct.address.state == "MO"
+    assert PhoneRiskFlag.ADDRESS_COUNTRY_MISMATCH in c_stl_struct.phone.risk_flags
+
+    c_aus_def_gb = standardize_contact(
+        street1="123 Main St", city="Austin", postal_code="78701", default_country="GB"
+    )
+    assert c_aus_def_gb.address.country == "USA" and c_aus_def_gb.address.state == "TX"
 
     # European 5-digit postal codes (metro, non-US ZIP, or mismatched US ZIP city) must not trigger false US mismatch
     c_fr_paris = standardize_contact(
@@ -1373,6 +1403,15 @@ def test_joint_cross_healing_and_phase7_upgrades() -> None:
     )
     assert c_es_toledo.address.country == "ESP"
     assert PhoneRiskFlag.ADDRESS_COUNTRY_MISMATCH not in c_es_toledo.phone.risk_flags
+
+    c_es_toledo_single = standardize_contact(street1="Calle Mayor 1, Toledo 45001", phone="+34 925 22 33 44")
+    assert c_es_toledo_single.address.country == "ESP"
+    assert PhoneRiskFlag.ADDRESS_COUNTRY_MISMATCH not in c_es_toledo_single.phone.risk_flags
+
+    c_fr_lyon_single = standardize_contact(street1="10 Avenue Victor Hugo, Lyon 69002", phone="+33 4 72 10 30 30")
+    assert c_fr_lyon_single.address.country == "FRA"
+    assert PhoneRiskFlag.ADDRESS_COUNTRY_MISMATCH not in c_fr_lyon_single.phone.risk_flags
+    assert c_fr_lyon_single.address.street1 == "10 AV VICTOR HUGO"
 
     # Batch E.164 dispatch parity for 11-digit UK domestic numbers (both native and pure Python)
     from phone_standardizer import _native_dispatch as nd

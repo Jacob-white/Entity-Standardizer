@@ -402,6 +402,68 @@ def _parse_us_street_tokens(address_str: str, enable_fuzzy: bool = True, city_ra
                         p_city = " ".join(tokens_raw[-num_words:])
                         clean_input = " ".join(cand_street_tokens)
                         break
+    else:
+        m_z = re.search(r"(?:^|[,\s])(\d{5}(?:-\d{4})?)\s*$", clean_input)
+        if m_z and get_state_from_zip3(m_z.group(1)[:3]):
+            cand_zip = m_z.group(1).strip()
+            before_z = clean_input[:m_z.start()].rstrip(" ,")
+            DANGLING_PREPOSITIONS = {"DE", "DEL", "OF", "LA", "EL", "DU", "VON", "VAN"}
+            from address_standardizer.reference._match import name_tokens
+            from address_standardizer.reference.us_zip5 import get_default_us_zip5_provider
+
+            place_tokens = {
+                name_tokens(p.place_name)
+                for p in get_default_us_zip5_provider().lookup_postal("US", cand_zip[:5])
+            }
+            if "," in before_z:
+                st_part, city_cand = before_z.rsplit(",", 1)
+                cand_city = city_cand.strip()
+                city_toks = {RE_NON_ALPHANUMERIC.sub("", t).upper() for t in cand_city.split()}
+                if (
+                    st_part.strip()
+                    and cand_city
+                    and re.fullmatch(r"[A-Za-z][A-Za-z\s.\-]*", cand_city)
+                    and not (city_toks & set(SECONDARY_UNITS.keys()))
+                    and not (city_toks & set(SECONDARY_UNITS.values()))
+                    and "BOX" not in city_toks
+                ):
+                    p_city = cand_city
+                    p_zp = cand_zip
+                    st_clean = st_part.strip()
+                    st_tokens = st_clean.split()
+                    if st_tokens and st_tokens[-1].upper() in DANGLING_PREPOSITIONS:
+                        st_clean = " ".join(st_tokens[:-1]).rstrip(" ,.-")
+                    clean_input = st_clean
+            elif not RE_DIGITS.search(before_z):
+                cand_city = before_z.strip()
+                city_tok_list = [RE_NON_ALPHANUMERIC.sub("", t).upper() for t in cand_city.split()]
+                if (
+                    cand_city
+                    and re.fullmatch(r"[A-Za-z][A-Za-z\s.\-]*", cand_city)
+                    and not (set(city_tok_list) & (set(SECONDARY_UNITS.keys()) | set(SECONDARY_UNITS.values()) | {"BOX"}))
+                    and city_tok_list[-1] not in STREET_SUFFIXES
+                    and city_tok_list[-1] not in STREET_SUFFIXES.values()
+                    and (name_tokens(cand_city) in place_tokens or usaddress is None)
+                ):
+                    p_city = cand_city
+                    p_zp = cand_zip
+                    clean_input = ""
+            else:
+                tokens_raw = before_z.split()
+                for num_words in (4, 3, 2, 1):
+                    if len(tokens_raw) >= num_words + 2:
+                        cand_city = " ".join(tokens_raw[-num_words:])
+                        if (
+                            re.fullmatch(r"[A-Za-z][A-Za-z\s.\-]*", cand_city)
+                            and name_tokens(cand_city) in place_tokens
+                        ):
+                            cand_street_tokens = tokens_raw[:-num_words]
+                            if cand_street_tokens and cand_street_tokens[-1].upper() in DANGLING_PREPOSITIONS:
+                                cand_street_tokens = cand_street_tokens[:-1]
+                            p_city = cand_city
+                            p_zp = cand_zip
+                            clean_input = " ".join(cand_street_tokens)
+                            break
 
     # Execute CRF parser
     if usaddress is not None:
@@ -414,11 +476,18 @@ def _parse_us_street_tokens(address_str: str, enable_fuzzy: bool = True, city_ra
 
     if parsed is None:
         st_input = clean_input
-        if not p_city and m_sz:
-            before_sz = clean_input[:m_sz.start()].rstrip(" ,")
+        m_tail = m_sz
+        if not m_tail and not p_city and not p_zp:
+            m_z_fb = re.search(r"(?:^|[,\s])(\d{5}(?:-\d{4})?)\s*$", clean_input)
+            if m_z_fb and get_state_from_zip3(m_z_fb.group(1)[:3]):
+                m_tail = m_z_fb
+        if not p_city and m_tail:
+            before_sz = clean_input[:m_tail.start()].rstrip(" ,")
             if not RE_DIGITS.search(before_sz):
                 st_input = ""
                 p_city = before_sz.strip()
+                if not m_sz:
+                    p_zp = m_tail.group(1).strip()
             else:
                 # Right-to-Left Reverse Anchor Parsing
                 split_found = False
@@ -456,27 +525,10 @@ def _parse_us_street_tokens(address_str: str, enable_fuzzy: bool = True, city_ra
                                 split_found = True
                             break
 
-                if not split_found:
+                if split_found and not m_sz:
+                    p_zp = m_tail.group(1).strip()
+                elif not split_found and m_sz:
                     st_input = before_sz.strip()
-        elif not p_city and not p_zp:
-            m_cz = re.match(
-                r"^(?P<street>.*\d.*),\s*(?P<city>[A-Za-z][A-Za-z\s.\-]*?)(?:,\s*|\s+)(?P<zip>\d{5}(?:-\d{4})?)\s*$",
-                clean_input,
-            )
-            if m_cz:
-                cand_city = m_cz.group("city").strip()
-                cand_zip = m_cz.group("zip").strip()
-                city_toks = {RE_NON_ALPHANUMERIC.sub("", t).upper() for t in cand_city.split()}
-                if (
-                    cand_city
-                    and not (city_toks & set(SECONDARY_UNITS.keys()))
-                    and not (city_toks & set(SECONDARY_UNITS.values()))
-                    and "BOX" not in city_toks
-                    and get_state_from_zip3(cand_zip[:3])
-                ):
-                    st_input = m_cz.group("street").strip()
-                    p_city = cand_city
-                    p_zp = cand_zip
 
         rb_st1, rb_st2, ok = _rule_based_us_street_parse(st_input, enable_fuzzy=enable_fuzzy)
         if urb_prefix:
@@ -721,6 +773,9 @@ def _parse_us_street_tokens(address_str: str, enable_fuzzy: bool = True, city_ra
                 for c in city_parts:
                     street_parts.append(DIRECTIONALS[c])
                 city_parts = list(state_parts)
+                state_parts = []
+            elif city_parts and state_parts and zip_parts:
+                city_parts.extend(state_parts)
                 state_parts = []
             else:
                 street_parts.extend(state_parts)

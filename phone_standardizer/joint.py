@@ -13,7 +13,7 @@ from address_standardizer.normalization import normalize_country_code
 from address_standardizer.standardizer import get_state_from_zip3, standardize_address
 from phone_standardizer.models import PhoneRiskFlag, StandardizedPhone
 from phone_standardizer.registry import normalize_country_iso2
-from phone_standardizer.standardizer import standardize_phone
+from phone_standardizer.standardizer import _extract_address_hint, standardize_phone
 
 _EMBEDDED_PHONE_LABEL_RE = re.compile(
     r"(?:[,;|/\-]|\b(?:TEL|TELEPHONE|PHONE|PH|MOBILE|CELL|CALL)\b)[:.\s]*([+()\d][\d\s().\-]{6,22})$",
@@ -173,15 +173,26 @@ def standardize_contact(
         probed_iso2 = (
             normalize_country_iso2(probed_country)
             if probed_country != "ZZZ"
-            else None
+            else _extract_address_hint(raw_ctx)[0]
         )
         if probed_iso2 is None and eff_s1:
-            m_us_zip = re.search(
-                r",\s*[A-Za-z][A-Za-z\s.\-]*\s+(\d{5})(?:-\d{4})?\s*$",
-                eff_s1,
-            )
-            if m_us_zip and get_state_from_zip3(m_us_zip.group(1)[:3]):
-                probed_iso2 = "US"
+            m_us_zip = re.search(r"\b(\d{5})(?:-\d{4})?\s*$", eff_s1)
+            if m_us_zip:
+                from address_standardizer.reference._match import name_tokens
+                from address_standardizer.reference.us_zip5 import get_default_us_zip5_provider
+
+                places = get_default_us_zip5_provider().lookup_postal("US", m_us_zip.group(1))
+                if places:
+                    place_tokens = {name_tokens(p.place_name) for p in places}
+                    before_zip = eff_s1[: m_us_zip.start()].rstrip(" ,")
+                    tokens = before_zip.split()
+                    cand_cities = (
+                        [before_zip.rsplit(",", 1)[1].strip()]
+                        if "," in before_zip
+                        else [" ".join(tokens[-n:]) for n in (4, 3, 2, 1) if len(tokens) >= n + 2]
+                    )
+                    if any(name_tokens(c) in place_tokens for c in cand_cities):
+                        probed_iso2 = "US"
         if (
             phone_res.is_valid
             and phone_res.country_iso2
