@@ -180,3 +180,180 @@ def resolve_nanp_npa(npa: str, fallback_iso2: str = "US") -> tuple[str, str | No
     return fallback_iso2, None, False
 
 
+# Deterministic single-NPA or historical primary NPA for 7-digit local subscriber recovery
+NANP_STATE_OR_ISO2_PRIMARY_NPA: dict[str, str] = {
+    # All 50 US States, DC, and Territories (primary / historical anchor NPA)
+    "AK": "907",
+    "AL": "205",
+    "AR": "501",
+    "AS": "684",
+    "AZ": "602",
+    "CA": "415",
+    "CO": "303",
+    "CT": "203",
+    "DC": "202",
+    "DE": "302",
+    "FL": "305",
+    "GA": "404",
+    "GU": "671",
+    "HI": "808",
+    "IA": "515",
+    "ID": "208",
+    "IL": "312",
+    "IN": "317",
+    "KS": "316",
+    "KY": "502",
+    "LA": "504",
+    "MA": "617",
+    "MD": "301",
+    "ME": "207",
+    "MI": "313",
+    "MN": "612",
+    "MO": "314",
+    "MP": "670",
+    "MS": "601",
+    "MT": "406",
+    "NC": "704",
+    "ND": "701",
+    "NE": "402",
+    "NH": "603",
+    "NJ": "201",
+    "NM": "505",
+    "NV": "702",
+    "NY": "212",
+    "OH": "216",
+    "OK": "405",
+    "OR": "503",
+    "PA": "215",
+    "PR": "787",
+    "RI": "401",
+    "SC": "803",
+    "SD": "605",
+    "TN": "615",
+    "TX": "214",
+    "UT": "801",
+    "VA": "703",
+    "VI": "340",
+    "VT": "802",
+    "WA": "206",
+    "WI": "414",
+    "WV": "304",
+    "WY": "307",
+    # Canadian Provinces & Territories
+    "AB": "403",
+    "BC": "604",
+    "MB": "204",
+    "NB": "506",
+    "NL": "709",
+    "NS": "902",
+    "NT": "867",
+    "NU": "867",
+    "ON": "416",
+    "PE": "902",
+    "QC": "514",
+    "SK": "306",
+    "YT": "867",
+}
+
+NANP_ISO2_PRIMARY_NPA: dict[str, str] = {
+    "AS": "684",
+    "GU": "671",
+    "MP": "670",
+    "PR": "787",
+    "VI": "340",
+    "AI": "264",
+    "AG": "268",
+    "BB": "246",
+    "BM": "441",
+    "BS": "242",
+    "DM": "767",
+    "DO": "809",
+    "GD": "473",
+    "JM": "876",
+    "KN": "869",
+    "KY": "345",
+    "LC": "758",
+    "MS": "664",
+    "SX": "721",
+    "TC": "649",
+    "TT": "868",
+    "VC": "784",
+    "VG": "284",
+}
+
+# Major International Geographic Area Code -> Sub-National Region / State Code
+INTERNATIONAL_SUB_AREA_PREFIXES: dict[str, tuple[tuple[str, str], ...]] = {
+    "GB": (
+        ("20", "London"), ("121", "Birmingham"), ("131", "Edinburgh"),
+        ("141", "Glasgow"), ("151", "Liverpool"), ("161", "Manchester"),
+    ),
+    "DE": (
+        ("30", "BE"), ("40", "HH"), ("69", "HE"), ("89", "BY"),
+        ("211", "NW"), ("221", "NW"), ("351", "SN"), ("511", "NI"), ("711", "BW"),
+    ),
+    "CN": (
+        ("10", "BJ"), ("20", "GD"), ("21", "SH"), ("22", "TJ"), ("23", "CQ"),
+        ("24", "LN"), ("25", "JS"), ("27", "HB"), ("28", "SC"), ("29", "SN"),
+        ("755", "GD"), ("571", "ZJ"),
+    ),
+    "BR": (
+        ("11", "SP"), ("12", "SP"), ("13", "SP"), ("19", "SP"),
+        ("21", "RJ"), ("27", "ES"), ("31", "MG"), ("41", "PR"),
+        ("48", "SC"), ("51", "RS"), ("61", "DF"), ("71", "BA"),
+        ("81", "PE"), ("85", "CE"), ("91", "PA"), ("92", "AM"),
+    ),
+    "JP": (
+        ("3", "13"), ("6", "27"), ("11", "01"), ("45", "14"),
+        ("52", "23"), ("75", "26"), ("78", "28"), ("82", "34"), ("92", "40"),
+    ),
+    "AU": (
+        ("2", "NSW"), ("3", "VIC"), ("7", "QLD"), ("8", "WA"),
+    ),
+    "CH": (
+        ("21", "VD"), ("22", "GE"), ("31", "BE"), ("41", "ZG"),
+        ("43", "ZH"), ("44", "ZH"), ("61", "BS"), ("91", "TI"),
+    ),
+    "FR": (
+        ("1", "IDF"), ("2", "NO"), ("3", "NE"), ("4", "SE"), ("5", "SO"),
+    ),
+    "ES": (
+        ("91", "MD"), ("93", "CT"), ("95", "AN"), ("96", "VC"),
+    ),
+    "IT": (
+        ("02", "MI"), ("06", "RM"), ("011", "TO"), ("055", "FI"), ("081", "NA"),
+    ),
+    "IN": (
+        ("11", "DL"), ("22", "MH"), ("33", "WB"), ("40", "TG"),
+        ("44", "TN"), ("80", "KA"),
+    ),
+}
+
+
+def infer_nanp_npa_from_context(iso2: str | None, state: str | None) -> str | None:
+    """Infer a 3-digit NANP area code (NPA) for a 7-digit local number from state or territory ISO2."""
+    if state:
+        from address_standardizer.tables import US_STATES
+
+        st_u = state.strip().upper()
+        st_code = US_STATES.get(st_u, st_u)
+        if st_code in NANP_STATE_OR_ISO2_PRIMARY_NPA:
+            return NANP_STATE_OR_ISO2_PRIMARY_NPA[st_code]
+    if iso2:
+        iso_u = iso2.strip().upper()
+        if iso_u in NANP_ISO2_PRIMARY_NPA:
+            return NANP_ISO2_PRIMARY_NPA[iso_u]
+    return None
+
+
+def resolve_international_region(iso2: str, nsn: str) -> str | None:
+    """Resolve sub-national region/state code from international NSN area code prefix."""
+    prefixes = INTERNATIONAL_SUB_AREA_PREFIXES.get(iso2)
+    if not prefixes:
+        return None
+    for pfx, reg in prefixes:
+        if nsn.startswith(pfx):
+            return reg
+    return None
+
+
+

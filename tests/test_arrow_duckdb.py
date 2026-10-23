@@ -65,18 +65,37 @@ def test_standardize_arrow_and_polars_errors(monkeypatch) -> None:
     with pytest.raises(TypeError, match="Expected polars"):
         standardize_polars(["not_a_df"])
 
-    # Simulate missing optional dependencies
-    monkeypatch.setattr(arrow_mod, "pa", None)
-    with pytest.raises(ImportError, match="pyarrow"):
-        standardize_arrow(tbl)
+    # Simulate missing optional dependencies via both None override and lazy _UNSET import failure
+    import sys
+    import address_standardizer.arrow as addr_arrow_mod
 
-    monkeypatch.setattr(arrow_mod, "pl", None)
-    with pytest.raises(ImportError, match="polars"):
-        standardize_polars(tbl)
+    for mod, fn_arrow, fn_polars, fn_duckdb in (
+        (arrow_mod, standardize_arrow, standardize_polars, register_duckdb_udfs),
+        (
+            addr_arrow_mod,
+            addr_arrow_mod.standardize_arrow,
+            addr_arrow_mod.standardize_polars,
+            addr_arrow_mod.register_duckdb_udfs,
+        ),
+    ):
+        for attr, mod_name, fn in (
+            ("pa", "pyarrow", fn_arrow),
+            ("pl", "polars", fn_polars),
+            ("duckdb", "duckdb", fn_duckdb),
+        ):
+            with monkeypatch.context() as mp:
+                mp.setattr(mod, attr, None)
+                with pytest.raises(ImportError, match=mod_name):
+                    fn(tbl if attr != "duckdb" else None)
 
-    monkeypatch.setattr(arrow_mod, "duckdb", None)
-    with pytest.raises(ImportError, match="duckdb"):
-        register_duckdb_udfs(None)
+            with monkeypatch.context() as mp:
+                mp.setattr(mod, attr, mod._UNSET)
+                mp.setitem(sys.modules, mod_name, None)
+                with pytest.raises(ImportError, match=mod_name):
+                    fn(tbl if attr != "duckdb" else None)
+                assert getattr(mod, attr) is None
+
+
 
 
 def test_standardize_polars_df_and_lazy() -> None:
@@ -203,12 +222,15 @@ def test_native_dispatch_extended_functions(monkeypatch, tmp_path) -> None:
     assert batch_de == ["+493012345678", "+493012345678"]
 
     # Native Rust dispatch path
+    from phone_standardizer._native_dispatch import standardize_batch_with_country_dispatch
+
     mock_rs = MagicMock()
     mock_rs.fold_vanity_digits_rs.return_value = "3569377"
     mock_rs.fold_unicode_digits_rs.return_value = ("+81 3-1234-5678", True)
     mock_rs.extract_digits_rs.return_value = "14155552671"
     mock_rs.damerau_levenshtein_distance_rs.return_value = 1
     mock_rs.standardize_batch_e164_rs.return_value = ["+14155552671"]
+    mock_rs.standardize_batch_with_country_rs.return_value = ["+14155552671"]
     monkeypatch.setattr(native_dispatch, "_native_mod", mock_rs)
 
     assert native_dispatch.get_engine_info()["engine"] == "rust_pyo3"
@@ -217,4 +239,5 @@ def test_native_dispatch_extended_functions(monkeypatch, tmp_path) -> None:
     assert extract_digits_dispatch("+1 (415) 555-2671") == "14155552671"
     assert damerau_levenshtein_distance_dispatch("4155552671", "4155552617") == 1
     assert standardize_batch_e164_dispatch(["(415) 555-2671"]) == ["+14155552671"]
+    assert standardize_batch_with_country_dispatch([("(415) 555-2671", "US")]) == ["+14155552671"]
 

@@ -130,3 +130,21 @@ func (c *Client) ListCountries(ctx context.Context) (*ListCountriesResponse, err
 	return &out, nil
 }
 
+// StandardizeAddress parses, validates, and standardizes a physical/postal address via POST /v1/address.
+func (c *Client) StandardizeAddress(ctx context.Context, req AddressStandardizeRequest) (*StandardizedAddress, error) {
+	var out StandardizedAddress
+	if err := c.postJSON(ctx, "/v1/address", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// StandardizeContact performs bidirectional Phone + Address cross-healing via POST /v1/contact.
+func (c *Client) StandardizeContact(ctx context.Context, req ContactStandardizeRequest) (*StandardizedContact, error) {
+	var out StandardizedContact
+	if err := c.postJSON(ctx, "/v1/contact", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+

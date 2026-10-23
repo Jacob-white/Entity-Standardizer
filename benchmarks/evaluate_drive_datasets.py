@@ -50,7 +50,7 @@ import phone_standardizer._native_dispatch as nd  # noqa: E402
 # -----------------------------------------------------------------------------
 
 _PHONE_COL_EXCLUDE = re.compile(
-    r"(?:[\s_-]+(?:type|carrier|flag|valid|status|id|verified|opt_in|opt-in|consent|count|desc|ts)|(?:_type|_carrier|_flag|_valid|_status|_id|_verified|_opt_in|_consent|_count|_desc|_ts))$",
+    r"^do[\s_-]*not|(?:[\s_-]+|[a-z0-9])(?:type|carrier|flag|valid|status|id|verified|opt_in|opt-in|consent|count|desc|ts|update|donotcall|do_not_call|ext|extension)$",
     re.IGNORECASE,
 )
 
@@ -59,7 +59,7 @@ _DATE_PATTERNS = re.compile(
 )
 
 _NON_PHONE_COL = re.compile(
-    r"(?:date|time|url|link|email|mail|name|desc|note|comment|title|crd|addr|street|city|state|zip|country|custodian|exam|license|aum|revenue|rep|employee)",
+    r"(?:date|time|url|link|email|mail|name|desc|note|comment|title|crd|cik|npn|addr|street|city|state|zip|country|custodian|exam|license|aum|asset|account|client|total|average|avg|change|cagr|sma|revenue|rep|employee|year|age|lat|lon|pct|percent)",
     re.IGNORECASE,
 )
 
@@ -75,23 +75,23 @@ _PHONE_COL_INCLUDE = re.compile(
 
 _CONTEXT_PATTERNS = {
     "country": re.compile(
-        r"^(?:country|country_code|country_iso2|country_iso3|country_name|cntry|c_code|nation)$",
+        r"(?:^|[\s_])(?:country|country_code|country_iso2|country_iso3|country_name|country[\s_]+id|cntry|c_code|nation)$",
         re.IGNORECASE,
     ),
     "state": re.compile(
-        r"^(?:state|state_code|state_abbr|province|province_code|region)$",
+        r"(?:^|[\s_]|branch|home|office|mainoffice)(?:state|state_code|state_abbr|state[\s_]+province|province|province_code|region)$",
         re.IGNORECASE,
     ),
     "postal_code": re.compile(
-        r"^(?:postal_code|postalcode|zip|zip_code|zipcode|zip5|postcode|pincode)$",
+        r"(?:^|[\s_]|branch|home|office|mainoffice)(?:postal_code|postalcode|postal[\s_]+code(?:[\s_]+1)?|zip|zip_code|zipcode|zip5|postcode|pincode)$",
         re.IGNORECASE,
     ),
     "city": re.compile(
-        r"^(?:city|municipality|town|locality)$",
+        r"(?:^|[\s_]|branch|home|office|mainoffice)(?:city|municipality|town|locality)$",
         re.IGNORECASE,
     ),
     "address": re.compile(
-        r"^(?:address|address1|address_line1|street|street_address|line1)$",
+        r"(?:^|[\s_]|branch|home|office|mainoffice)(?:address|address1|address_1|address[\s_]+line[\s_]*1|addr1|street|street_address|line1)$",
         re.IGNORECASE,
     ),
 }
@@ -452,8 +452,13 @@ def evaluate_column(
     contexts: list[dict[str, Any]] = []
 
     # Extract non-empty rows
-    phone_series = df[phone_col]
-    for idx, raw_val in enumerate(phone_series):
+    phone_list = df[phone_col].to_list()
+    ctx_lists = {
+        k: df[c_name].to_list()
+        for k, c_name in context_cols.items()
+        if c_name and c_name in df.columns
+    }
+    for idx, raw_val in enumerate(phone_list):
         if raw_val is not None:
             v_str = str(raw_val).strip()
             if v_str:
@@ -462,11 +467,12 @@ def evaluate_column(
 
                 # Extract context row
                 ctx_dict: dict[str, Any] = {}
-                for k, c_name in context_cols.items():
-                    if c_name and c_name in df.columns:
-                        v = df[c_name][idx]
-                        if v is not None:
-                            ctx_dict[k] = str(v).strip()
+                for k, c_vals in ctx_lists.items():
+                    v = c_vals[idx]
+                    if v is not None:
+                        vs = str(v).strip()
+                        if vs:
+                            ctx_dict[k] = vs
                 contexts.append(ctx_dict)
 
     metrics.non_empty_rows = len(raw_phones)
@@ -586,6 +592,100 @@ def evaluate_column(
     return metrics
 
 
+def _resolve_column_context(
+    phone_col: str,
+    base_context: dict[str, str | None],
+    all_columns: list[str],
+) -> dict[str, str | None]:
+    """Resolve prefix-specific context columns (Firm, MainOffice, Office, Branch, Home, HQMailing) for a phone column."""
+    col_context = dict(base_context)
+    col_lower = phone_col.lower()
+    col_set = set(all_columns)
+
+    if "firm" in col_lower:
+        for k, v in base_context.items():
+            firm_candidate = f"Firm {v}" if v else None
+            if firm_candidate and firm_candidate in col_set:
+                col_context[k] = firm_candidate
+
+    prefix_candidates: list[str] = []
+    if col_lower.startswith("home_"):
+        prefix_candidates = ["Home_"]
+    elif col_lower.startswith("home"):
+        prefix_candidates = ["Home"]
+    elif col_lower.startswith("branch_"):
+        prefix_candidates = ["Branch_"]
+    elif col_lower.startswith("branch"):
+        prefix_candidates = ["Branch"]
+    elif col_lower.startswith("office_"):
+        prefix_candidates = ["Office_"]
+    elif col_lower.startswith("mainoffice_"):
+        prefix_candidates = ["MainOffice_"]
+    elif col_lower.startswith("hq_"):
+        prefix_candidates = ["HQ_", "HQMailing_"]
+
+    suffix_map = {
+        "country": ["Country", "CountryID", "Country_ID"],
+        "state": ["State", "StateProvince", "Province"],
+        "postal_code": ["ZipCode", "Zip", "PostalCode"],
+        "city": ["City"],
+        "address": ["Address1", "Addr1", "Address"],
+    }
+    for pfx in prefix_candidates:
+        for k, suffixes in suffix_map.items():
+            for sfx in suffixes:
+                cand = f"{pfx}{sfx}"
+                if cand in col_set:
+                    col_context[k] = cand
+                    break
+
+    return col_context
+
+
+def _read_csv_with_fallback(
+    file_path: Path,
+    separator: str = ",",
+    n_rows: int | None = None,
+    columns: list[str] | None = None,
+) -> pl.DataFrame:
+    """Read a CSV/TSV/TXT file via Polars with lossless String schema and backslash-escaped quote fallback."""
+    try:
+        return pl.read_csv(
+            file_path,
+            separator=separator,
+            n_rows=n_rows,
+            columns=columns,
+            ignore_errors=True,
+            truncate_ragged_lines=True,
+            encoding="utf8-lossy",
+            infer_schema_length=0,
+        )
+    except Exception:
+        if file_path.name.endswith(".gz"):
+            import gzip
+
+            with gzip.open(file_path, "rb") as f:
+                raw_data = f.read()
+        else:
+            with file_path.open("rb") as f:
+                raw_data = f.read()
+        clean_bytes = (
+            raw_data.replace(b'\\"', b'""')
+            .decode("utf-8", errors="replace")
+            .encode("utf-8")
+        )
+        return pl.read_csv(
+            clean_bytes,
+            separator=separator,
+            n_rows=n_rows,
+            columns=columns,
+            ignore_errors=True,
+            truncate_ragged_lines=True,
+            encoding="utf8-lossy",
+            infer_schema_length=0,
+        )
+
+
 def evaluate_dataset_file(
     file_path: Path,
     batch_size: int = 10000,
@@ -618,36 +718,8 @@ def evaluate_dataset_file(
         # Load dataset via Polars
         if suffix in (".parquet", ".pq"):
             df = pl.read_parquet(file_path, n_rows=max_rows)
-        elif suffix in (".tsv", ".tab") or file_path.name.endswith(".tsv.gz"):
-            try:
-                df = pl.read_csv(
-                    file_path,
-                    separator="\t",
-                    n_rows=max_rows,
-                    ignore_errors=True,
-                    truncate_ragged_lines=True,
-                    encoding="utf8-lossy",
-                    infer_schema_length=1000,
-                )
-            except Exception:
-                if file_path.name.endswith(".gz"):
-                    import gzip
-
-                    with gzip.open(file_path, "rb") as f:
-                        raw_data = f.read()
-                else:
-                    with file_path.open("rb") as f:
-                        raw_data = f.read()
-                clean_bytes = raw_data.decode("utf-8", errors="replace").encode("utf-8")
-                df = pl.read_csv(
-                    clean_bytes,
-                    separator="\t",
-                    n_rows=max_rows,
-                    ignore_errors=True,
-                    truncate_ragged_lines=True,
-                    encoding="utf8-lossy",
-                    infer_schema_length=1000,
-                )
+            phone_cols, context_cols = detect_columns(df)
+            all_cols = list(df.columns)
         elif suffix in (".jsonl", ".ndjson") or file_path.name.endswith(".jsonl.gz"):
             try:
                 df = pl.read_ndjson(file_path, n_rows=max_rows, ignore_errors=True)
@@ -662,36 +734,33 @@ def evaluate_dataset_file(
                         raw_data = f.read()
                 clean_bytes = raw_data.decode("utf-8", errors="replace").encode("utf-8")
                 df = pl.read_ndjson(clean_bytes, n_rows=max_rows, ignore_errors=True)
-        else:  # CSV default
-            try:
-                df = pl.read_csv(
-                    file_path,
-                    n_rows=max_rows,
-                    ignore_errors=True,
-                    truncate_ragged_lines=True,
-                    encoding="utf8-lossy",
-                    infer_schema_length=1000,
-                )
-            except Exception:
-                if file_path.name.endswith(".gz"):
-                    import gzip
+            phone_cols, context_cols = detect_columns(df)
+            all_cols = list(df.columns)
+        else:
+            sep = "\t" if (suffix in (".tsv", ".tab") or file_path.name.endswith(".tsv.gz")) else ","
+            sample_df = _read_csv_with_fallback(file_path, separator=sep, n_rows=100)
+            all_cols = list(sample_df.columns)
+            phone_cols, context_cols = detect_columns(sample_df)
+            needed_cols: list[str] = []
+            for c in phone_cols:
+                if c not in needed_cols:
+                    needed_cols.append(c)
+                c_ctx = _resolve_column_context(c, context_cols, all_cols)
+                for ctx_col in c_ctx.values():
+                    if ctx_col and ctx_col in all_cols and ctx_col not in needed_cols:
+                        needed_cols.append(ctx_col)
+            for ctx_col in context_cols.values():
+                if ctx_col and ctx_col in all_cols and ctx_col not in needed_cols:
+                    needed_cols.append(ctx_col)
+            if not needed_cols and all_cols:
+                needed_cols = [all_cols[0]]
+            df = _read_csv_with_fallback(
+                file_path,
+                separator=sep,
+                n_rows=max_rows,
+                columns=needed_cols or None,
+            )
 
-                    with gzip.open(file_path, "rb") as f:
-                        raw_data = f.read()
-                else:
-                    with file_path.open("rb") as f:
-                        raw_data = f.read()
-                clean_bytes = raw_data.decode("utf-8", errors="replace").encode("utf-8")
-                df = pl.read_csv(
-                    clean_bytes,
-                    n_rows=max_rows,
-                    ignore_errors=True,
-                    truncate_ragged_lines=True,
-                    encoding="utf8-lossy",
-                    infer_schema_length=1000,
-                )
-
-        phone_cols, context_cols = detect_columns(df)
         dataset_metrics = DatasetEvaluationMetrics(
             file_name=file_path.name,
             file_path=str(file_path),
@@ -702,12 +771,7 @@ def evaluate_dataset_file(
         )
 
         for col in phone_cols:
-            col_context = dict(context_cols)
-            if "firm" in col.lower():
-                for k, v in context_cols.items():
-                    firm_candidate = f"Firm {v}" if v else None
-                    if firm_candidate and firm_candidate in df.columns:
-                        col_context[k] = firm_candidate
+            col_context = _resolve_column_context(col, context_cols, all_cols)
             col_metrics = evaluate_column(
                 df,
                 phone_col=col,
@@ -739,7 +803,7 @@ def discover_dataset_files(datasets_dir: Path) -> list[Path]:
     if not datasets_dir.is_dir():
         return []
 
-    valid_extensions = {".csv", ".tsv", ".tab", ".parquet", ".pq", ".jsonl", ".ndjson", ".gz"}
+    valid_extensions = {".csv", ".tsv", ".tab", ".txt", ".parquet", ".pq", ".jsonl", ".ndjson", ".gz"}
     found: list[Path] = []
     for root, _, files in os.walk(datasets_dir):
         for f in sorted(files):

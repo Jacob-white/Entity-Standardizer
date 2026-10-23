@@ -60,8 +60,8 @@ jobs:
           maturin build --release --locked --out dist
           python -m zipfile -e dist/*.whl native_x
           cp -r native_x/_phone_standardizer_rs "$(python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')/"
-          python -c "import phone_standardizer as ps; assert ps.is_native_available(), 'Native extension not loaded'"
-          pytest
+          python -c "import entity_standardizer as es, phone_standardizer as ps, address_standardizer as as_; assert es.is_native_available() and ps.is_native_available() and as_.is_native_available(), 'Native extension not loaded'"
+          pytest --cov --cov-report=term-missing
 
   sdks:
     runs-on: ubuntu-latest

@@ -6,8 +6,10 @@ import json
 import sys
 from typing import Any
 
+from address_standardizer.standardizer import standardize_address
 from phone_standardizer.audit import explain_phone
 from phone_standardizer.dedup import compare_phones, deduplicate_phones
+from phone_standardizer.joint import standardize_contact
 from phone_standardizer.registry import get_dial_plan
 from phone_standardizer.standardizer import mask_phone, standardize_phone
 
@@ -93,6 +95,39 @@ MCP_TOOLS: list[dict[str, Any]] = [
             "required": ["phones"],
         },
     },
+    {
+        "name": "standardize_address",
+        "description": "Parse, normalize, validate, and format a US or international physical/mailing address.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "street1": {"type": "string"},
+                "street2": {"type": "string"},
+                "city": {"type": "string"},
+                "state": {"type": "string"},
+                "postal_code": {"type": "string"},
+                "country": {"type": "string", "default": "US"},
+            },
+        },
+    },
+    {
+        "name": "standardize_contact",
+        "description": "Jointly standardize an entity's physical address and telephone number with bidirectional cross-healing.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "street1": {"type": "string"},
+                "street2": {"type": "string"},
+                "city": {"type": "string"},
+                "state": {"type": "string"},
+                "postal_code": {"type": "string"},
+                "country": {"type": "string"},
+                "phone": {"type": "string"},
+                "fax": {"type": "string"},
+                "default_country": {"type": "string", "default": "US"},
+            },
+        },
+    },
 ]
 
 
@@ -108,7 +143,7 @@ def handle_mcp_request(request: dict[str, Any]) -> dict[str, Any]:
             "id": req_id,
             "result": {
                 "protocolVersion": "2024-11-05",
-                "serverInfo": {"name": "phone-standardizer-mcp", "version": "1.4.0"},
+                "serverInfo": {"name": "phone-standardizer-mcp", "version": "2.0.0"},
                 "capabilities": {"tools": {}},
             },
         }
@@ -192,6 +227,40 @@ def handle_mcp_request(request: dict[str, Any]) -> dict[str, Any]:
                             "text": json.dumps([c.to_dict() for c in clusters]),
                         }
                     ]
+                },
+            }
+        if tool_name == "standardize_address":
+            addr_res = standardize_address(
+                street1=args.get("street1"),
+                street2=args.get("street2"),
+                city=args.get("city"),
+                state=args.get("state"),
+                postal_code=args.get("postal_code"),
+                country=args.get("country", "US"),
+                allow_locality=True,
+            )
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {"content": [{"type": "text", "text": json.dumps(addr_res.as_dict())}]},
+            }
+        if tool_name == "standardize_contact":
+            contact_res = standardize_contact(
+                street1=args.get("street1"),
+                street2=args.get("street2"),
+                city=args.get("city"),
+                state=args.get("state"),
+                postal_code=args.get("postal_code"),
+                country=args.get("country"),
+                phone=args.get("phone"),
+                fax=args.get("fax"),
+                default_country=args.get("default_country", "US"),
+            )
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {
+                    "content": [{"type": "text", "text": json.dumps(contact_res.to_dict())}]
                 },
             }
         return {

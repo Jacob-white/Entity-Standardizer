@@ -144,4 +144,55 @@ type PhoneExplainReport struct {
 	Explanation  PhoneExplanation  `json:"explanation"`
 }
 
+// AddressStandardizeRequest is the request payload for POST /v1/address.
+type AddressStandardizeRequest struct {
+	Street1    string `json:"street1,omitempty"`
+	Street2    string `json:"street2,omitempty"`
+	City       string `json:"city,omitempty"`
+	State      string `json:"state,omitempty"`
+	PostalCode string `json:"postal_code,omitempty"`
+	Country    string `json:"country,omitempty"`
+}
+
+// ContactStandardizeRequest is the request payload for POST /v1/contact.
+type ContactStandardizeRequest struct {
+	Street1        string `json:"street1,omitempty"`
+	Street2        string `json:"street2,omitempty"`
+	City           string `json:"city,omitempty"`
+	State          string `json:"state,omitempty"`
+	PostalCode     string `json:"postal_code,omitempty"`
+	Country        string `json:"country,omitempty"`
+	Phone          string `json:"phone,omitempty"`
+	Fax            string `json:"fax,omitempty"`
+	DefaultCountry string `json:"default_country,omitempty"`
+}
+
+// StandardizedAddress represents a normalized physical/postal address returned by POST /v1/address.
+type StandardizedAddress struct {
+	Street1              string  `json:"street1"`
+	Street2              string  `json:"street2"`
+	City                 string  `json:"city"`
+	State                string  `json:"state"`
+	PostalCode           string  `json:"postal_code"`
+	Country              string  `json:"country"`
+	NormalizedAddressKey *string `json:"normalized_address_key"`
+	BuildingKey          *string `json:"building_key"`
+	PhoneticKey          *string `json:"phonetic_key"`
+	AddressStatus        string  `json:"address_status"`
+	RawStreetAddress     string  `json:"raw_street_address"`
+	IsUS                 bool    `json:"is_us"`
+	IsPrivateResidence   bool    `json:"is_private_residence"`
+	IsRegisteredAgentHub bool    `json:"is_registered_agent_hub"`
+}
+
+// StandardizedContact represents a unified cross-healed address and telephone contact from POST /v1/contact.
+type StandardizedContact struct {
+	Address             StandardizedAddress `json:"address"`
+	Phone               StandardizedPhone   `json:"phone"`
+	Fax                 *StandardizedPhone  `json:"fax"`
+	EntityKey           *string             `json:"entity_key"`
+	CrossHealingActions []string            `json:"cross_healing_actions"`
+	OverallConfidence   float64             `json:"overall_confidence"`
+}
+
 

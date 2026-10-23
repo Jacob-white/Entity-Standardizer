@@ -3,9 +3,9 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "phone-standardizer"
-version = "1.4.0"
-description = "Universal multi-national phone number standardization, ITU-T E.164/E.123/RFC 3966 formatting, NANP carrier/state resolution, line-type classification, and high-throughput entity linkage."
+name = "entity-standardizer"
+version = "2.0.0"
+description = "Unified multi-national Entity, Address (USPS Pub 28 / UPU S42), and Phone (ITU-T E.164 / E.123 / RFC 3966) standardization, bidirectional cross-healing, and entity resolution engine."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { text = "MIT" }
@@ -27,7 +27,9 @@ classifiers = [
     "Topic :: Communications :: Telephony",
     "Topic :: Text Processing :: General",
 ]
-dependencies = []
+dependencies = [
+    "h3>=4.0.0",
+]
 
 [project.optional-dependencies]
 server = [
@@ -51,6 +53,15 @@ arrow = [
     "duckdb>=0.10.0",
     "numpy>=1.24",
 ]
+ml = [
+    "usaddress>=0.5.16",
+]
+benchmark = [
+    "psutil>=5.9.0",
+]
+translit = [
+    "anyascii>=0.3",
+]
 dev = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",
@@ -64,23 +75,33 @@ docs = [
 ]
 
 [project.scripts]
+entity-standardizer = "phone_standardizer.cli:main"
+entity-standardizer-mcp = "phone_standardizer.mcp.server:main"
 phone-standardizer = "phone_standardizer.cli:main"
 phone-standardizer-mcp = "phone_standardizer.mcp.server:main"
+address-standardizer = "address_standardizer.cli:main"
+address-standardizer-mcp = "address_standardizer.mcp.server:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["phone_standardizer*"]
+include = ["entity_standardizer*", "phone_standardizer*", "address_standardizer*"]
+
+[tool.setuptools.package-data]
+address_standardizer = [
+    "service/static/*.html",
+    "reference/data/*.tsv.gz",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-norecursedirs = [".claude", "node_modules", ".git", "build", "dist", "target"]
+norecursedirs = [".claude", ".hypothesis", "node_modules", ".git", "build", "dist", "target"]
 python_files = ["test_*.py"]
 markers = [
     "perf: absolute-throughput/memory SLA tests; run without coverage tracing (pytest -m perf)",
 ]
 
 [tool.coverage.run]
-source = ["phone_standardizer"]
+source = ["phone_standardizer", "entity_standardizer"]
 branch = true
 
 [tool.coverage.report]

@@ -520,6 +520,32 @@ def test_cli_commands(tmp_path: Path, capsys) -> None:
     assert rc_b == 0
     assert json.loads(capsys.readouterr().out)["processed_rows"] == 1
 
+    # address & contact
+    rc_addr = cli_main(
+        ["address", "1600 Amphitheatre Pkwy", "--city", "Mountain View", "--state", "CA", "--postal-code", "94043"]
+    )
+    assert rc_addr == 0
+    assert json.loads(capsys.readouterr().out)["state"] == "CA"
+
+    rc_contact = cli_main(
+        [
+            "contact",
+            "--street1",
+            "350 Fifth Ave",
+            "--city",
+            "New York",
+            "--state",
+            "NY",
+            "--postal-code",
+            "10118",
+            "--phone",
+            "555-2368",
+        ]
+    )
+    assert rc_contact == 0
+    assert json.loads(capsys.readouterr().out)["phone"]["e164"] == "+12125552368"
+
+
 
 def test_fastapi_server_endpoints() -> None:
     client = TestClient(app)
@@ -547,13 +573,27 @@ def test_fastapi_server_endpoints() -> None:
     assert r_all.status_code == 200
     assert r_all.json()["count"] == 249
 
+    r_addr = client.post(
+        "/v1/address",
+        json={"street1": "1600 Amphitheatre Pkwy", "city": "Mountain View", "state": "CA", "postal_code": "94043"},
+    )
+    assert r_addr.status_code == 200
+    assert r_addr.json()["state"] == "CA"
+
+    r_contact = client.post(
+        "/v1/contact",
+        json={"street1": "350 Fifth Ave", "city": "New York", "state": "NY", "postal_code": "10118", "phone": "555-2368"},
+    )
+    assert r_contact.status_code == 200
+    assert r_contact.json()["phone"]["e164"] == "+12125552368"
+
 
 def test_mcp_server_requests() -> None:
     init_resp = handle_mcp_request({"jsonrpc": "2.0", "id": 1, "method": "initialize"})
     assert init_resp["result"]["serverInfo"]["name"] == "phone-standardizer-mcp"
 
     list_resp = handle_mcp_request({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
-    assert len(list_resp["result"]["tools"]) == 6
+    assert len(list_resp["result"]["tools"]) == 8
 
     call_std = handle_mcp_request(
         {
@@ -564,6 +604,32 @@ def test_mcp_server_requests() -> None:
         }
     )
     assert "+14155552671" in call_std["result"]["content"][0]["text"]
+
+    call_addr = handle_mcp_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 31,
+            "method": "tools/call",
+            "params": {
+                "name": "standardize_address",
+                "arguments": {"street1": "1600 Amphitheatre Pkwy", "city": "Mountain View", "state": "CA", "postal_code": "94043"},
+            },
+        }
+    )
+    assert '"state": "CA"' in call_addr["result"]["content"][0]["text"]
+
+    call_contact = handle_mcp_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 32,
+            "method": "tools/call",
+            "params": {
+                "name": "standardize_contact",
+                "arguments": {"street1": "350 Fifth Ave", "city": "New York", "state": "NY", "postal_code": "10118", "phone": "555-2368"},
+            },
+        }
+    )
+    assert "+12125552368" in call_contact["result"]["content"][0]["text"]
 
     call_country = handle_mcp_request(
         {
@@ -607,6 +673,12 @@ def test_phase6_global_remediations_and_edge_cases() -> None:
     assert standardize_phone("1-787-425-0035/0036").e164 == "+17874250035"
     assert standardize_phone("212-555-1234, 212-555-5678").e164 == "+12125551234"
     assert standardize_phone("212-555-1234, 104").extension == "104"
+    p_semi_ext = standardize_phone("+1 415-555-2671;1234")
+    assert p_semi_ext.e164 == "+14155552671"
+    assert p_semi_ext.extension == "1234"
+    assert p_semi_ext.rfc3966 == "tel:+1-415-555-2671;ext=1234"
+    assert HealingAction.EXTENSION_EXTRACTED in p_semi_ext.healing_actions
+    assert HealingAction.MULTI_NUMBER_PRIMARY_SELECTED not in p_semi_ext.healing_actions
     p_xt = standardize_phone("415-424-4005 XT. 21")
     assert p_xt.e164 == "+14154244005" and p_xt.extension == "21"
     p_xdot = standardize_phone("212-354-6500 X. 304")
@@ -880,4 +952,548 @@ def test_milestone3_drive_dataset_remediations() -> None:
     p_uk_bare_44 = standardize_phone("4401483688787", country="US")
     assert p_uk_bare_44.is_valid is True and p_uk_bare_44.e164 == "+441483688787" and p_uk_bare_44.country_iso2 == "GB"
 
+    # AdvisorAtlas & Discovery dataset remediation tests
+    p_encore = standardize_phone("877-6EN-CORE", country="US")
+    assert p_encore.is_valid is True and p_encore.e164 == "+18776362673" and p_encore.vanity_alias == "877-6EN-CORE"
+    p_401k1 = standardize_phone("855-508-401k", country="US")
+    assert p_401k1.is_valid is True and p_401k1.e164 == "+18555084015" and p_401k1.vanity_alias == "855-508-401K"
+    p_401k2 = standardize_phone("860-521-401k", country="US")
+    assert p_401k2.is_valid is True and p_401k2.e164 == "+18605214015"
+
+    p_uk_hyph = standardize_phone("442-072-922107", country="US")
+    assert p_uk_hyph.is_valid is True and p_uk_hyph.e164 == "+442072922107" and p_uk_hyph.country_iso2 == "GB"
+    p_cn_hyph = standardize_phone("861-862-168-8725")
+    assert p_cn_hyph.is_valid is True and p_cn_hyph.e164 == "+8618621688725" and p_cn_hyph.country_iso2 == "CN"
+
+    p_hyph_ext1 = standardize_phone("415-984-1915-1", country="US")
+    assert p_hyph_ext1.is_valid is True and p_hyph_ext1.e164 == "+14159841915" and p_hyph_ext1.extension == "1"
+    p_hyph_ext2 = standardize_phone("415-984-1915-1921")
+    assert p_hyph_ext2.is_valid is True and p_hyph_ext2.e164 == "+14159841915" and p_hyph_ext2.extension == "1921"
+    p_hyph_ext3 = standardize_phone("315-627-0474225", country="US")
+    assert p_hyph_ext3.is_valid is True and p_hyph_ext3.e164 == "+13156270474" and p_hyph_ext3.extension == "225"
+
+    p_hyph_multi1 = standardize_phone("800-965-2576-949-365-177")
+    assert p_hyph_multi1.is_valid is True and p_hyph_multi1.e164 == "+18009652576"
+    p_hyph_multi2 = standardize_phone("312-558-9400-800-969-3987")
+    assert p_hyph_multi2.is_valid is True and p_hyph_multi2.e164 == "+13125589400"
+    p_hyph_multi3 = standardize_phone("212-687-5650-6246633423")
+    assert p_hyph_multi3.is_valid is True and p_hyph_multi3.e164 == "+12126875650"
+
+    p_dup_exch = standardize_phone("307-771-771-3713")
+    assert p_dup_exch.is_valid is True and p_dup_exch.e164 == "+13077713713"
+
+    p_us_in_ch = standardize_phone("212-510-8477", country="CH")
+    assert p_us_in_ch.is_valid is True and p_us_in_ch.e164 == "+12125108477" and p_us_in_ch.country_iso2 == "US"
+    p_us_in_fr = standardize_phone("212-506-5610", country="FR")
+    assert p_us_in_fr.is_valid is True and p_us_in_fr.e164 == "+12125065610" and p_us_in_fr.country_iso2 == "US"
+    p_us_in_hk = standardize_phone("949-604-8929", country="HK")
+    assert p_us_in_hk.is_valid is True and p_us_in_hk.e164 == "+19496048929" and p_us_in_hk.country_iso2 == "US"
+    p_us_in_gi = standardize_phone("305-898-0672", country="GI")
+    assert p_us_in_gi.is_valid is True and p_us_in_gi.e164 == "+13058980672" and p_us_in_gi.country_iso2 == "US"
+
+    p_dup_cc_ch1 = standardize_phone("41-41-4151-14687", country="CH")
+    assert p_dup_cc_ch1.is_valid is True and p_dup_cc_ch1.e164 == "+41415114687" and p_dup_cc_ch1.country_iso2 == "CH"
+    p_dup_cc_ch2 = standardize_phone("0041-41-4151-14631", country="CH")
+    assert p_dup_cc_ch2.is_valid is True and p_dup_cc_ch2.e164 == "+41415114631" and p_dup_cc_ch2.country_iso2 == "CH"
+    p_dup_cc_au = standardize_phone("61-61292763030", country="AU")
+    assert p_dup_cc_au.is_valid is True and p_dup_cc_au.e164 == "+61292763030" and p_dup_cc_au.country_iso2 == "AU"
+
+    p_bare_sg = standardize_phone("65-6411-3000")
+    assert p_bare_sg.is_valid is True and p_bare_sg.e164 == "+6564113000" and p_bare_sg.country_iso2 == "SG"
+    p_bare_lu = standardize_phone("352-22-74-41")
+    assert p_bare_lu.is_valid is True and p_bare_lu.e164 == "+352227441" and p_bare_lu.country_iso2 == "LU"
+    p_bare_dk = standardize_phone("45-3154-7235")
+    assert p_bare_dk.is_valid is True and p_bare_dk.e164 == "+4531547235" and p_bare_dk.country_iso2 == "DK"
+    p_bare_no = standardize_phone("47-905-58-104")
+    assert p_bare_no.is_valid is True and p_bare_no.e164 == "+4790558104" and p_bare_no.country_iso2 == "NO"
+
+    # Global dirty dataset remediation tests (FSQ, Overture, Wikidata, SEC/DTCC)
+    p_mx_dom10 = standardize_phone("5255123456", country="MX")
+    assert p_mx_dom10.is_valid is True and p_mx_dom10.e164 == "+525255123456"
+    p_cl_dom9 = standardize_phone("562123456", country="CL")
+    assert p_cl_dom9.is_valid is True and p_cl_dom9.e164 == "+56562123456"
+
+    p_gh_plus0 = standardize_phone("+0302123456", country="GH")
+    assert p_gh_plus0.is_valid is True and p_gh_plus0.e164 == "+233302123456"
+
+    p_es_plus1 = standardize_phone("+1971800450", country="ES")
+    assert p_es_plus1.is_valid is True and p_es_plus1.e164 == "+34971800450"
+    p_ru_plus18 = standardize_phone("+183834130584", country="RU")
+    assert p_ru_plus18.is_valid is True and p_ru_plus18.e164 == "+73834130584"
+
+    p_ca_plus_dom = standardize_phone("+418-835-5182", country="CA")
+    assert p_ca_plus_dom.is_valid is True and p_ca_plus_dom.e164 == "+14188355182" and p_ca_plus_dom.country_iso2 == "CA"
+    p_ca_plus_invalid = standardize_phone("+418-035-5182", country="CA")
+    assert p_ca_plus_invalid.is_valid is False
+    p_cl_plus_dom = standardize_phone("+341234567", country="CL")
+    assert p_cl_plus_dom.is_valid is True and p_cl_plus_dom.e164 == "+56341234567" and p_cl_plus_dom.country_iso2 == "CL"
+
+    p_intl_concat_ext = standardize_phone("+12125551234101", country="US")
+    assert p_intl_concat_ext.is_valid is True and p_intl_concat_ext.e164 == "+12125551234" and p_intl_concat_ext.extension == "101"
+    p_dom11_concat_ext = standardize_phone("12125551234101", country="US")
+    assert p_dom11_concat_ext.is_valid is True and p_dom11_concat_ext.e164 == "+12125551234" and p_dom11_concat_ext.extension == "101"
+
+    p_sx_mf = standardize_phone("0590 87 53 26", country="SX")
+    assert p_sx_mf.is_valid is True and p_sx_mf.e164 == "+590590875326" and p_sx_mf.country_iso2 == "MF"
+
+    p_lt_trunk8 = standardize_phone("8 5 268 2828", country="LT")
+    assert p_lt_trunk8.is_valid is True and p_lt_trunk8.e164 == "+37052682828"
+
+    p_jp_0066 = standardize_phone("0066-9711-0871660", country="JP")
+    assert p_jp_0066.is_valid is True and p_jp_0066.e164 == "+816697110871660"
+
+    p_cy_tr_0392 = standardize_phone("0392 227 51 43", country="CY")
+    assert p_cy_tr_0392.is_valid is True and p_cy_tr_0392.e164 == "+903922275143" and p_cy_tr_0392.country_iso2 == "TR"
+    p_cy_tr_392 = standardize_phone("392 227 51 43", country="CY")
+    assert p_cy_tr_392.is_valid is True and p_cy_tr_392.e164 == "+903922275143" and p_cy_tr_392.country_iso2 == "TR"
+    p_cy_11_non_tr = standardize_phone("0222 227 51 43", country="CY")
+    assert p_cy_11_non_tr.is_valid is False
+
+    p_la_nanp11 = standardize_phone("1-337-232-1111", country="LA")
+    assert p_la_nanp11.is_valid is True and p_la_nanp11.e164 == "+13372321111" and p_la_nanp11.country_iso2 == "US"
+
+
+def test_joint_cross_healing_and_phase7_upgrades() -> None:
+    from entity_standardizer import standardize_entity as std_ent
+    from phone_standardizer import (
+        CrossHealingAction,
+        batch_standardize_contacts,
+        infer_nanp_npa_from_context,
+        resolve_international_region,
+        standardize_batch_with_country_dispatch,
+        standardize_contact,
+    )
+    assert std_ent is standardize_contact
+
+    # 1. infer_nanp_npa_from_context & resolve_international_region
+    assert infer_nanp_npa_from_context("US", "NY") == "212"
+    assert infer_nanp_npa_from_context("US", "New York") == "212"
+    assert infer_nanp_npa_from_context("US", "ZZ") is None
+    assert infer_nanp_npa_from_context(None, "ZZ") is None
+    assert infer_nanp_npa_from_context("PR", None) == "787"
+    assert infer_nanp_npa_from_context("GB", None) is None
+    assert resolve_international_region("GB", "2079460912") == "London"
+    assert resolve_international_region("GB", "7911123456") is None
+    assert resolve_international_region("XX", "123456") is None
+
+    # 2. standardize_batch_with_country_dispatch (native and pure-Python fallback)
+    pairs = [("(415) 555-2671", "US"), ("020 7946 0912", "GB")]
+    assert standardize_batch_with_country_dispatch(pairs) == ["+14155552671", "+442079460912"]
+    saved = native_dispatch._native_mod
+    try:
+        native_dispatch._native_mod = None
+        assert standardize_batch_with_country_dispatch(pairs) == ["+14155552671", "+442079460912"]
+        assert standardize_batch_with_country_dispatch([("4155552671", "1")]) == ["+14155552671"]
+    finally:
+        native_dispatch._native_mod = saved
+
+    # 3. Phase 7 standardizer.py upgrades
+    # Calling code 1-digit typo healing (+40 -> +44 on JE/GB, and +33 -> +34 on ES)
+    p_cc_je = standardize_phone("+40 1534 756100", country="JE")
+    assert p_cc_je.is_valid is True and p_cc_je.e164 == "+441534756100" and p_cc_je.country_iso2 == "JE"
+    assert HealingAction.CALLING_CODE_HEALED_FROM_CONTEXT in p_cc_je.healing_actions
+
+    p_cc_es = standardize_phone("+33 91123456", country="ES")
+    assert p_cc_es.is_valid is False
+
+    p_cc_ro_to_no = standardize_phone("+40 21234567", country="NO")
+    assert p_cc_ro_to_no.is_valid is True and p_cc_ro_to_no.e164 == "+4721234567"
+
+    # +1 1 NXX-NXX-XXXX redundant trunk after +1
+    p_plus1_1 = standardize_phone("+1 1 800-555-1212", country="US")
+    assert p_plus1_1.is_valid is True and p_plus1_1.e164 == "+18005551212"
+
+    # 7-digit local NPA inference from state/territory context and non-inferable fallback
+    p_local7_ny = standardize_phone("555-2368", country="US", address_context={"state": "NY"})
+    assert p_local7_ny.is_valid is True and p_local7_ny.e164 == "+12125552368"
+    assert HealingAction.LOCAL_NPA_INFERRED_FROM_CONTEXT in p_local7_ny.healing_actions
+
+    p_local7_none = standardize_phone("555-2368", country="US")
+    assert p_local7_none.is_valid is False
+
+    # 11-digit hyphenated NANP extra-digit healing (trailing and leading extra digit)
+    p_extra_tail = standardize_phone("212-555-23689", country="US")
+    assert p_extra_tail.is_valid is True and p_extra_tail.e164 == "+12125552368"
+    assert HealingAction.TRUNCATED_OR_EXTRA_DIGIT_HEALED in p_extra_tail.healing_actions
+
+    p_extra_head = standardize_phone("9212-555-2368", country="US")
+    assert p_extra_head.is_valid is True and p_extra_head.e164 == "+12125552368"
+    assert HealingAction.TRUNCATED_OR_EXTRA_DIGIT_HEALED in p_extra_head.healing_actions
+
+    # Cyprus 444XXXX Turkish call-center short code
+    p_cy_444 = standardize_phone("444 1 444", country="CY")
+    assert p_cy_444.is_valid is True and p_cy_444.e164 == "+904441444" and p_cy_444.country_iso2 == "TR"
+    p_cy_7_other = standardize_phone("222 1 444", country="CY")
+    assert p_cy_7_other.is_valid is False
+
+    # 4. Joint Contact Standardization & Bidirectional Cross-Healing
+    # A. Rescue pure phone from street1
+    c_s1_pure = standardize_contact(street1="(212) 555-2368", city="New York", state="NY", postal_code="10001")
+    assert c_s1_pure.phone.e164 == "+12125552368"
+    assert CrossHealingAction.PHONE_RESCUED_FROM_ADDRESS_FIELD.value in c_s1_pure.cross_healing_actions
+    assert c_s1_pure.to_dict()["phone"]["e164"] == "+12125552368"
+
+    # B. Rescue labeled phone from street1
+    c_s1_lbl = standardize_contact(
+        street1="350 Fifth Ave Tel: (212) 555-2368", city="New York", state="NY", postal_code="10118"
+    )
+    assert c_s1_lbl.phone.e164 == "+12125552368"
+    assert c_s1_lbl.address.street1 == "350 5TH AVE"
+
+    # C. Rescue pure phone and labeled phone from street2
+    c_s2_pure = standardize_contact(
+        street1="350 Fifth Ave", street2="(212) 555-2368", city="New York", state="NY", postal_code="10118"
+    )
+    assert c_s2_pure.phone.e164 == "+12125552368"
+
+    c_s2_lbl = standardize_contact(
+        street1="350 Fifth Ave", street2="Suite 400 | (212) 555-2368", city="New York", state="NY", postal_code="10118"
+    )
+    assert c_s2_lbl.phone.e164 == "+12125552368"
+
+    # Street1/street2 with non-phone or invalid phone when phone is missing
+    c_no_rescue = standardize_contact(
+        street1="350 Fifth Ave Tel: 1234567", street2="Suite 100 Tel: 1234567", city="New York", state="NY"
+    )
+    assert c_no_rescue.phone.is_valid is False
+
+    c_pure_inv = standardize_contact(street1="1234567", street2="1234567", city="New York")
+    assert c_pure_inv.phone.is_valid is False
+
+    # D. Infer address country from international phone when country omitted
+    c_intl = standardize_contact(street1="10 Downing Street", city="London", postal_code="SW1A 2AA", phone="+44 20 7946 0912")
+    assert c_intl.address.country == "GBR"
+    assert CrossHealingAction.ADDRESS_COUNTRY_INFERRED_FROM_PHONE.value in c_intl.cross_healing_actions
+
+    # E. Heal US Address ERR_ZIP_STATE_MISMATCH from Phone NPA
+    c_state_heal = standardize_contact(
+        street1="350 Fifth Ave", city="New York", state="CA", postal_code="10118", phone="(212) 555-2368", country="US"
+    )
+    assert c_state_heal.address.state == "NY"
+    assert CrossHealingAction.ADDRESS_ZIP_STATE_HEALED_FROM_PHONE_NPA.value in c_state_heal.cross_healing_actions
+
+    # Mismatch where ZIP state does not match phone state
+    c_unhealed = standardize_contact(
+        street1="350 Fifth Ave", city="New York", state="NY", postal_code="90210", phone="(212) 555-2368", country="US"
+    )
+    assert c_unhealed.address.postal_code == "90210"
+
+    # F. Standardized Address -> Phone healing (e.g., state inferred from ZIP heals 7-digit local phone, plus fax)
+    c_addr_to_phone = standardize_contact(
+        street1="350 Fifth Ave", city="New York", postal_code="10118", phone="555-2368", fax="555-2369", country="US"
+    )
+    assert c_addr_to_phone.phone.e164 == "+12125552368"
+    assert c_addr_to_phone.fax is not None and c_addr_to_phone.fax.e164 == "+12125552369"
+    assert CrossHealingAction.PHONE_HEALED_FROM_STANDARDIZED_ADDRESS.value in c_addr_to_phone.cross_healing_actions
+
+    # Empty address with valid phone (overall_confidence fallback to phone confidence)
+    c_phone_only = standardize_contact(phone="(415) 555-2671")
+    assert c_phone_only.overall_confidence == c_phone_only.phone.confidence
+
+    # Completely empty contact
+    c_empty = standardize_contact()
+    assert c_empty.entity_key is None
+
+    # Batch standardize contacts
+    batch_res = batch_standardize_contacts(
+        [{"street1": "350 Fifth Ave", "city": "New York", "state": "NY", "postal_code": "10118", "phone": "555-2368"}]
+    )
+    assert len(batch_res) == 1 and batch_res[0].phone.e164 == "+12125552368"
+
+    # G. Regression tests for v2.0.0 cross-healing & UK 11-digit trunk prefix ordering
+    import address_standardizer as addr_pkg
+    import entity_standardizer as ent_pkg
+    import entity_standardizer.__main__ as ent_main
+    import pytest
+
+    assert ent_main.main is not None
+    assert ent_pkg.is_native_available() == addr_pkg.is_native_available()
+    assert ent_pkg.cluster_contact_records is not None
+    assert ent_pkg.ContactCluster is not None
+    assert ent_pkg.PhoneCluster is not None
+    assert ent_pkg.PhoneComparisonResult is not None
+    assert ent_pkg.AddressValidationResult is not None
+    assert ent_pkg.generate_phonetic_address_key is not None
+    assert ent_pkg.autocomplete_address is not None
+    assert ent_pkg.explain_phone is not None
+    assert "standardize_arrow" in dir(addr_pkg)
+    assert "create_app" in dir(addr_pkg)
+    assert "AddressSchema" in dir(addr_pkg)
+    assert addr_pkg.arrow is not None
+    assert addr_pkg.server is not None
+    assert addr_pkg.schemas is not None
+    assert callable(addr_pkg.standardize_arrow)
+    assert callable(addr_pkg.create_app)
+    assert addr_pkg.AddressSchema is not None
+    with pytest.raises(AttributeError):
+        _ = addr_pkg.nonexistent_attr_xyz
+
+    # Verify PEP 562 __getattr__ returns None when optional dependency import raises ImportError
+    import importlib
+    import subprocess
+    import sys
+
+    saved_create_app = addr_pkg.__dict__.get("create_app")
+    try:
+        addr_pkg.__dict__.pop("create_app", None)
+        orig_import_module = importlib.import_module
+
+        def _fail_import(name: str, package: str | None = None):
+            if name == "address_standardizer.server":
+                raise ImportError("simulated missing fastapi")
+            return orig_import_module(name, package)
+
+        importlib.import_module = _fail_import  # type: ignore[assignment]
+        try:
+            assert addr_pkg.create_app is None
+        finally:
+            importlib.import_module = orig_import_module  # type: ignore[assignment]
+    finally:
+        if saved_create_app is not None:
+            addr_pkg.__dict__["create_app"] = saved_create_app
+
+    # Verify cold import in a fresh process does not load heavy optional integrations
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys, entity_standardizer, address_standardizer, phone_standardizer; "
+                "heavy = ('pyarrow', 'polars', 'duckdb', 'fastapi', 'pydantic'); "
+                "loaded = [m for m in heavy if m in sys.modules]; "
+                "assert not loaded, f'Unexpectedly loaded: {loaded}'; "
+                "assert 'standardize_arrow' in dir(address_standardizer); "
+                "assert address_standardizer.arrow is not None"
+            ),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+
+
+    # Unformatted 11-digit UK numbers must not be hijacked by NANP area codes (e.g. 212, 207)
+    p_uk_bham = standardize_phone("01212345678")
+    assert p_uk_bham.is_valid is True and p_uk_bham.e164 == "+441212345678" and p_uk_bham.country_iso2 == "GB"
+    p_uk_lon = standardize_phone("02079460912")
+    assert p_uk_lon.is_valid is True and p_uk_lon.e164 == "+442079460912" and p_uk_lon.country_iso2 == "GB"
+
+    # Empty address must not corrupt UK mobile 0781 into US MA (+1781) or record ADDRESS_COUNTRY_INFERRED_FROM_PHONE
+    c_uk_mob_empty = standardize_contact(phone="0781 234 5678", default_country="GB")
+    assert c_uk_mob_empty.phone.e164 == "+447812345678" and c_uk_mob_empty.phone.country_iso2 == "GB"
+    assert c_uk_mob_empty.cross_healing_actions == []
+
+    c_uk_intl_empty = standardize_contact(phone="+44 20 7946 0912")
+    assert c_uk_intl_empty.phone.e164 == "+442079460912"
+    assert CrossHealingAction.ADDRESS_COUNTRY_INFERRED_FROM_PHONE.value not in c_uk_intl_empty.cross_healing_actions
+
+    # Domestic US addresses (single-line and structured) must not have country overwritten by foreign phone
+    c_us_single_uk_ph = standardize_contact(street1="123 Main St, New York, NY 10001", phone="+44 20 7946 0912")
+    assert c_us_single_uk_ph.address.country == "USA" and c_us_single_uk_ph.address.is_us is True
+    assert PhoneRiskFlag.ADDRESS_COUNTRY_MISMATCH in c_us_single_uk_ph.phone.risk_flags
+    assert CrossHealingAction.ADDRESS_COUNTRY_INFERRED_FROM_PHONE.value not in c_us_single_uk_ph.cross_healing_actions
+
+    c_us_struct_uk_ph = standardize_contact(
+        street1="123 Main St", city="New York", state="NY", postal_code="10001", phone="+44 20 7946 0912"
+    )
+    assert c_us_struct_uk_ph.address.country == "USA" and c_us_struct_uk_ph.address.is_us is True
+    assert PhoneRiskFlag.ADDRESS_COUNTRY_MISMATCH in c_us_struct_uk_ph.phone.risk_flags
+
+    # Single-line UK address healing formatted UK phone (020 7946 0912) and embedded phone in street1
+    c_uk_single_heal = standardize_contact(street1="10 Downing St, London SW1A 2AA", phone="020 7946 0912")
+    assert c_uk_single_heal.address.country == "GBR"
+    assert c_uk_single_heal.phone.e164 == "+442079460912" and c_uk_single_heal.phone.country_iso2 == "GB"
+    assert CrossHealingAction.PHONE_HEALED_FROM_STANDARDIZED_ADDRESS.value in c_uk_single_heal.cross_healing_actions
+
+    c_uk_rescued_heal = standardize_contact(street1="10 Downing St, London SW1A 2AA Tel: 020 7946 0912")
+    assert c_uk_rescued_heal.address.country == "GBR"
+    assert c_uk_rescued_heal.phone.e164 == "+442079460912" and c_uk_rescued_heal.phone.country_iso2 == "GB"
+    assert CrossHealingAction.PHONE_RESCUED_FROM_ADDRESS_FIELD.value in c_uk_rescued_heal.cross_healing_actions
+    assert CrossHealingAction.PHONE_HEALED_FROM_STANDARDIZED_ADDRESS.value in c_uk_rescued_heal.cross_healing_actions
+
+    # Step 4 retry of _try_rescue_phone_from_street when 7-digit local phone needs state inferred from ZIP
+    c_rescue_step4 = standardize_contact(street1="350 Fifth Ave Tel: 555-2368", city="New York", postal_code="10118")
+    assert c_rescue_step4.phone.e164 == "+12125552368"
+    assert c_rescue_step4.address.street1 == "350 5TH AVE"
+    assert CrossHealingAction.PHONE_RESCUED_FROM_ADDRESS_FIELD.value in c_rescue_step4.cross_healing_actions
+    assert CrossHealingAction.PHONE_HEALED_FROM_STANDARDIZED_ADDRESS.value in c_rescue_step4.cross_healing_actions
+
+    # Single-line international addresses with trailing phones must not pollute state or fail rescue
+    c_fr_comma_ph = standardize_contact(street1="10 Rue de Rivoli, 75001 Paris, France, 01 42 68 55 00")
+    assert c_fr_comma_ph.phone.e164 == "+33142685500" and c_fr_comma_ph.address.country == "FRA"
+    assert c_fr_comma_ph.address.state == "" and c_fr_comma_ph.address.city == "PARIS"
+
+    c_fr_tel_single = standardize_contact(street1="10 Rue de Rivoli, 75001 Paris Tel: 01 42 68 55 00")
+    assert c_fr_tel_single.phone.e164 == "+33142685500" and c_fr_tel_single.address.country == "FRA"
+    assert c_fr_tel_single.address.city == "PARIS" and c_fr_tel_single.address.postal_code == "75001"
+
+    c_de_tel_single = standardize_contact(street1="Friedrichstrasse 100, 10117 Berlin Tel: 030 1234567")
+    assert c_de_tel_single.phone.e164 == "+49301234567" and c_de_tel_single.address.country == "DEU"
+
+    # Non-US default_country on street address without explicit country must not default to USA or corrupt phone
+    c_uk_def_mob = standardize_contact(street1="10 High St", phone="0781 234 5678", default_country="GB")
+    assert c_uk_def_mob.address.country == "GBR"
+    assert c_uk_def_mob.phone.e164 == "+447812345678" and c_uk_def_mob.phone.country_iso2 == "GB"
+    assert c_uk_def_mob.cross_healing_actions == []
+
+    c_uk_def_no_ph = standardize_contact(street1="10 High St", default_country="GB")
+    assert c_uk_def_no_ph.address.country == "GBR"
+
+    # Single-line US address with trailing <City> <5-digit ZIP> (with or without comma, no state) must not be overwritten by foreign phone
+    import address_standardizer.us_street_parser as usp
+
+    saved_usa = usp.usaddress
+    try:
+        for us_mod in (saved_usa, None):
+            usp.usaddress = us_mod
+            c_us_zip_uk_ph = standardize_contact(street1="123 Main St, Austin 78701", phone="+44 20 7946 0912")
+            assert c_us_zip_uk_ph.address.country == "USA" and c_us_zip_uk_ph.address.state == "TX"
+            assert c_us_zip_uk_ph.address.city == "AUSTIN" and c_us_zip_uk_ph.address.postal_code == "78701"
+            assert c_us_zip_uk_ph.phone.region_code == "London"
+            assert PhoneRiskFlag.ADDRESS_COUNTRY_MISMATCH in c_us_zip_uk_ph.phone.risk_flags
+
+            c_us_nocomma = standardize_contact(street1="123 Main St Austin 78701", phone="+44 20 7946 0912")
+            assert c_us_nocomma.address.street1 == "123 MAIN ST" and c_us_nocomma.address.city == "AUSTIN"
+            assert c_us_nocomma.address.state == "TX" and c_us_nocomma.address.country == "USA"
+            assert PhoneRiskFlag.ADDRESS_COUNTRY_MISMATCH in c_us_nocomma.phone.risk_flags
+
+            c_us_ny = standardize_contact(street1="123 Main St, New York 10001", phone="+44 20 7946 0912")
+            assert c_us_ny.address.street1 == "123 MAIN ST" and c_us_ny.address.city == "NEW YORK"
+            assert c_us_ny.address.state == "NY" and c_us_ny.address.country == "USA"
+
+            c_us_stl = standardize_contact(street1="123 Main St St. Louis 63101", phone="+44 20 7946 0912")
+            assert c_us_stl.address.street1 == "123 MAIN ST" and c_us_stl.address.city == "ST LOUIS"
+            assert c_us_stl.address.state == "MO" and c_us_stl.address.country == "USA"
+
+            c_us_pob = standardize_contact(street1="PO Box 100 Austin 78701", phone="+44 20 7946 0912")
+            assert c_us_pob.address.street1 == "PO BOX 100" and c_us_pob.address.city == "AUSTIN"
+            assert c_us_pob.address.state == "TX" and c_us_pob.address.country == "USA"
+    finally:
+        usp.usaddress = saved_usa
+
+    c_stl_struct = standardize_contact(
+        street1="123 Main St", city="St. Louis", postal_code="63101", phone="+44 20 7946 0912"
+    )
+    assert c_stl_struct.address.country == "USA" and c_stl_struct.address.state == "MO"
+    assert PhoneRiskFlag.ADDRESS_COUNTRY_MISMATCH in c_stl_struct.phone.risk_flags
+
+    c_aus_def_gb = standardize_contact(
+        street1="123 Main St", city="Austin", postal_code="78701", default_country="GB"
+    )
+    assert c_aus_def_gb.address.country == "USA" and c_aus_def_gb.address.state == "TX"
+
+    # European 5-digit postal codes (metro, non-US ZIP, or mismatched US ZIP city) must not trigger false US mismatch
+    c_fr_paris = standardize_contact(
+        street1="10 Rue de Rivoli", city="Paris", postal_code="75001", phone="+33 1 42 68 55 00"
+    )
+    assert c_fr_paris.address.country == "FRA"
+    assert PhoneRiskFlag.ADDRESS_COUNTRY_MISMATCH not in c_fr_paris.phone.risk_flags
+    assert CrossHealingAction.ADDRESS_COUNTRY_INFERRED_FROM_PHONE.value in c_fr_paris.cross_healing_actions
+    assert CrossHealingAction.PHONE_HEALED_FROM_STANDARDIZED_ADDRESS.value not in c_fr_paris.cross_healing_actions
+
+    c_fr_vers = standardize_contact(
+        street1="10 Rue de la Paroisse", city="Versailles", postal_code="78000", phone="+33 1 42 68 55 00"
+    )
+    assert c_fr_vers.address.country == "FRA"
+    assert PhoneRiskFlag.ADDRESS_COUNTRY_MISMATCH not in c_fr_vers.phone.risk_flags
+
+    c_es_toledo = standardize_contact(
+        street1="Calle Mayor 1", city="Toledo", postal_code="45001", phone="+34 925 22 33 44"
+    )
+    assert c_es_toledo.address.country == "ESP"
+    assert PhoneRiskFlag.ADDRESS_COUNTRY_MISMATCH not in c_es_toledo.phone.risk_flags
+
+    c_es_toledo_single = standardize_contact(street1="Calle Mayor 1, Toledo 45001", phone="+34 925 22 33 44")
+    assert c_es_toledo_single.address.country == "ESP"
+    assert PhoneRiskFlag.ADDRESS_COUNTRY_MISMATCH not in c_es_toledo_single.phone.risk_flags
+
+    c_fr_lyon_single = standardize_contact(street1="10 Avenue Victor Hugo, Lyon 69002", phone="+33 4 72 10 30 30")
+    assert c_fr_lyon_single.address.country == "FRA"
+    assert PhoneRiskFlag.ADDRESS_COUNTRY_MISMATCH not in c_fr_lyon_single.phone.risk_flags
+    assert c_fr_lyon_single.address.street1 == "10 AV VICTOR HUGO"
+
+    # Batch E.164 dispatch parity for 11-digit UK domestic numbers (both native and pure Python)
+    from phone_standardizer import _native_dispatch as nd
+
+    assert nd.standardize_batch_e164_dispatch(["01212345678", "02079460912"], "1") == [
+        "+441212345678",
+        "+442079460912",
+    ]
+    saved_mod = nd._native_mod
+    try:
+        nd._native_mod = None
+        assert nd.standardize_batch_e164_dispatch(["01212345678", "02079460912"], "1") == [
+            "+441212345678",
+            "+442079460912",
+        ]
+    finally:
+        nd._native_mod = saved_mod
+
+    # Semicolon/comma/pipe extension parity (7-digit extensions without space, multi-phone after extension, Rust vs Python)
+    for raw_ext_phone, exp_ext in [
+        ("212-555-0199; x1234567", "1234567"),
+        ("212-555-0199; ext1234567", "1234567"),
+        ("212-555-0199; xt1234567", "1234567"),
+        ("212-555-0199; x123; 415-555-2671", "123"),
+    ]:
+        p_ext = standardize_phone(raw_ext_phone)
+        assert p_ext.is_valid is True and p_ext.e164 == "+12125550199" and p_ext.extension == exp_ext
+
+    ext_batch_inputs = [
+        "212-555-0199;x123",
+        "212-555-0199;xt123",
+        "212-555-0199;xt. 45",
+        "212-555-0199,x123",
+        "212-555-0199|x123",
+        "+298 123456;ext. 45",
+        "212-555-0199; x123; 415-555-2671",
+    ]
+    expected_ext_batch = [
+        "+12125550199",
+        "+12125550199",
+        "+12125550199",
+        "+12125550199",
+        "+12125550199",
+        "+298123456",
+        "+12125550199",
+    ]
+    assert nd.standardize_batch_e164_dispatch(ext_batch_inputs, "1") == expected_ext_batch
+    try:
+        nd._native_mod = None
+        assert nd.standardize_batch_e164_dispatch(ext_batch_inputs, "1") == expected_ext_batch
+    finally:
+        nd._native_mod = saved_mod
+
+    # Free-text phone extraction preserves semicolon extensions
+    extracted_semi = extract_phones_from_text("Call us at +1-212-555-0199; ext=123 or 212-555-0199; ext. 45")
+    assert [(r.e164, r.extension) for r in extracted_semi] == [
+        ("+12125550199", "123"),
+        ("+12125550199", "45"),
+    ]
+
+    # Rescuing misplaced phones with extensions from street1 and street2
+    c_rescue_ext1 = standardize_contact(
+        street1="123 Main St, Tel: 212-555-0199 ext 123", city="New York", state="NY", postal_code="10001"
+    )
+    assert c_rescue_ext1.phone.e164 == "+12125550199" and c_rescue_ext1.phone.extension == "123"
+    assert c_rescue_ext1.address.street1 == "123 MAIN ST" and c_rescue_ext1.address.street2 == ""
+
+    c_rescue_ext2 = standardize_contact(
+        street1="123 Main St", street2="212-555-0199 ext 123", city="New York", state="NY", postal_code="10001"
+    )
+    assert c_rescue_ext2.phone.e164 == "+12125550199" and c_rescue_ext2.phone.extension == "123"
+    assert c_rescue_ext2.address.street1 == "123 MAIN ST" and c_rescue_ext2.address.street2 == ""
+
+    # Inferring missing US state from phone NPA when city matches state (and rejecting mismatched city)
+    c_infer_st = standardize_contact(street1="350 Fifth Ave", city="New York", phone="212-555-0199")
+    assert c_infer_st.address.state == "NY"
+    assert CrossHealingAction.ADDRESS_ZIP_STATE_HEALED_FROM_PHONE_NPA.value in c_infer_st.cross_healing_actions
+
+    c_infer_st_stlouis = standardize_contact(street1="100 Market St", city="St. Louis", phone="314-555-0199")
+    assert c_infer_st_stlouis.address.state == "MO"
+    assert CrossHealingAction.ADDRESS_ZIP_STATE_HEALED_FROM_PHONE_NPA.value in c_infer_st_stlouis.cross_healing_actions
+
+    c_mismatch_city = standardize_contact(street1="233 S Wacker Dr", city="Chicago", phone="212-555-0199")
+    assert c_mismatch_city.address.state == ""
 

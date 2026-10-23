@@ -44,6 +44,53 @@ export interface PhoneDeduplicateRequest {
   fuzzy_threshold?: number;
 }
 
+export interface AddressStandardizeRequest {
+  street1?: string | null;
+  street2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postal_code?: string | null;
+  country?: string;
+}
+
+export interface ContactStandardizeRequest {
+  street1?: string | null;
+  street2?: string | null;
+  city?: string | null;
+  state?: string | null;
+  postal_code?: string | null;
+  country?: string | null;
+  phone?: string | null;
+  fax?: string | null;
+  default_country?: string;
+}
+
+export interface StandardizedAddress {
+  street1: string;
+  street2: string;
+  city: string;
+  state: string;
+  postal_code: string;
+  country: string;
+  normalized_address_key: string | null;
+  building_key: string | null;
+  phonetic_key: string | null;
+  address_status: string;
+  raw_street_address: string;
+  is_us: boolean;
+  is_private_residence: boolean;
+  is_registered_agent_hub: boolean;
+}
+
+export interface StandardizedContact {
+  address: StandardizedAddress;
+  phone: StandardizedPhone;
+  fax: StandardizedPhone | null;
+  entity_key: string | null;
+  cross_healing_actions: string[];
+  overall_confidence: number;
+}
+
 export interface StandardizedPhone {
   raw_input: string;
   e164: string | null;

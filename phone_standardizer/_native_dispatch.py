@@ -163,6 +163,30 @@ def standardize_batch_e164_dispatch(
             if len(digits) == 11 and digits.startswith("1"):
                 results.append(f"+{digits}")
                 continue
+            if (
+                len(digits) == 11
+                and cleaned.isdigit()
+                and digits.startswith(
+                    (
+                        "01",
+                        "020",
+                        "023",
+                        "024",
+                        "028",
+                        "029",
+                        "071",
+                        "072",
+                        "073",
+                        "074",
+                        "075",
+                        "077",
+                        "078",
+                        "079",
+                    )
+                )
+            ):
+                results.append(f"+44{digits[1:]}")
+                continue
             results.append(None)
             continue
         elif digits.startswith("0") and len(digits) >= 8:
@@ -170,4 +194,23 @@ def standardize_batch_e164_dispatch(
         combined = f"{default_calling_code}{digits}"
         results.append(f"+{combined}" if len(combined) <= 15 else None)
     return results
+
+
+def standardize_batch_with_country_dispatch(
+    pairs: list[tuple[str, str]],
+) -> list[str | None]:
+    """High-throughput heterogeneous country batch E.164 normalization using Rust if available."""
+    if _native_mod is not None:
+        inputs = [raw for raw, _ in pairs]
+        countries = [cc for _, cc in pairs]
+        return list(_native_mod.standardize_batch_with_country_rs(inputs, countries, "1"))
+    from phone_standardizer.registry import get_dial_plan
+
+    out: list[str | None] = []
+    for raw, country_or_cc in pairs:
+        plan = get_dial_plan(country_or_cc)
+        cc = plan.calling_code if plan is not None else country_or_cc
+        out.append(standardize_batch_e164_dispatch([raw], cc)[0])
+    return out
+
 

@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Address Review</title>
+<style nonce="__CSP_NONCE__">
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --text: #1b1f24; --muted: #5b6573; --line: #d8dde4;
+  --accent: #1f5fbf; --ok: #1f7a3d; --warn: #9a6200; --bad: #b3261e; --bar: #cfe0f7;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14171b; --panel: #1c2026; --text: #e6e9ee; --muted: #9aa5b3; --line: #2e353f;
+    --accent: #6ea4f0; --ok: #5cc27d; --warn: #e0a64a; --bad: #f07a72; --bar: #2c4468;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.45 system-ui, sans-serif; }
+header { padding: 12px 16px; background: var(--panel); border-bottom: 1px solid var(--line);
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+header h1 { font-size: 16px; margin: 0 12px 0 0; }
+main { display: grid; grid-template-columns: minmax(220px, 320px) 1fr; gap: 12px; padding: 12px 16px; }
+@media (max-width: 760px) { main { grid-template-columns: 1fr; } }
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px; }
+h2 { font-size: 14px; margin: 0 0 8px; }
+h3 { font-size: 13px; margin: 14px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+input, textarea, button { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line);
+  border-radius: 4px; padding: 6px 8px; }
+input[type=password] { min-width: 220px; }
+button { cursor: pointer; }
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button.danger { color: var(--bad); border-color: var(--bad); }
+button:disabled { opacity: .5; cursor: default; }
+ul { list-style: none; margin: 0; padding: 0; }
+li.item { padding: 8px; border: 1px solid transparent; border-bottom-color: var(--line); cursor: pointer; }
+li.item:hover, li.item.sel { border-color: var(--accent); border-radius: 4px; }
+.muted { color: var(--muted); }
+.tag { display: inline-block; font-size: 11px; padding: 1px 6px; border: 1px solid var(--line); border-radius: 10px;
+  margin: 0 4px 2px 0; }
+.tag.err { color: var(--bad); border-color: var(--bad); }
+.tag.warn { color: var(--warn); border-color: var(--warn); }
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 3px 6px; border-bottom: 1px solid var(--line); vertical-align: top; }
+td.mono, .mono { font-family: ui-monospace, Consolas, monospace; font-size: 12px; }
+.grid { display: grid; grid-template-columns: 110px 1fr; gap: 6px 8px; align-items: center; }
+.bar { height: 8px; background: var(--line); border-radius: 4px; overflow: hidden; }
+.bar > span { display: block; height: 100%; background: var(--accent); }
+.msg { margin: 8px 0; min-height: 1.4em; }
+.msg.err { color: var(--bad); }
+.msg.ok { color: var(--ok); }
+.row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+textarea { width: 100%; min-height: 56px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Address review</h1>
+  <label for="key" class="muted">API key</label>
+  <input id="key" type="password" autocomplete="off" placeholder="X-API-Key (kept in memory only)">
+  <label for="steward" class="muted">Steward</label>
+  <input id="steward" type="text" maxlength="64" placeholder="needed only if your key has no name">
+  <button id="load" class="primary" type="button">Load pending</button>
+  <span id="status" class="muted"></span>
+</header>
+<main>
+  <section class="panel">
+    <h2>Pending records</h2>
+    <ul id="list"></ul>
+    <p id="empty" class="muted">Nothing loaded yet.</p>
+  </section>
+  <section class="panel" id="detail" hidden>
+    <h2 id="title"></h2>
+    <div id="tags"></div>
+    <h3>Original input</h3>
+    <table id="raw"></table>
+    <h3>Proposed result and confidence</h3>
+    <table id="proposed"></table>
+    <h3>What the engine did</h3>
+    <table id="trace"></table>
+    <h3>Other readings</h3>
+    <table id="alts"></table>
+    <h3>Decision</h3>
+    <div class="grid" id="form"></div>
+    <label for="comment" class="muted">Commentary</label>
+    <textarea id="comment" maxlength="2000"></textarea>
+    <div class="row">
+      <button id="approve" class="primary" type="button">Approve as proposed</button>
+      <button id="modify" type="button">Save modification</button>
+      <button id="reject" class="danger" type="button">Reject</button>
+    </div>
+    <p id="msg" class="msg" role="status"></p>
+  </section>
+</main>
+<script nonce="__CSP_NONCE__">
+"use strict";
+(function () {
+  var FIELDS = ["street1", "street2", "city", "state", "postal_code", "country"];
+  var records = [];
+  var current = null;
+  var inputs = {};
+  var $ = function (id) { return document.getElementById(id); };
+
+  // Every piece of text coming from the server is inserted with textContent, never as markup.
+  function el(tag, text, cls) {
+    var node = document.createElement(tag);
+    if (text !== undefined && text !== null) { node.textContent = String(text); }
+    if (cls) { node.className = cls; }
+    return node;
+  }
+  function clear(node) { while (node.firstChild) { node.removeChild(node.firstChild); } }
+  function say(text, kind) { var m = $("msg"); m.textContent = text; m.className = "msg " + (kind || ""); }
+
+  function request(method, path, body) {
+    var headers = { "X-API-Key": $("key").value };
+    var init = { method: method, headers: headers };
+    if (body !== undefined) { headers["Content-Type"] = "application/json"; init.body = JSON.stringify(body); }
+    return fetch(path, init).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (data) {
+        if (!res.ok) {
+          var detail = data && data.detail;
+          throw new Error(typeof detail === "string" ? detail : "HTTP " + res.status);
+        }
+        return data;
+      });
+    });
+  }
+
+  function kv(table, rows) {
+    clear(table);
+    rows.forEach(function (r) {
+      var tr = el("tr");
+      tr.appendChild(el("th", r[0]));
+      tr.appendChild(el("td", r[1], "mono"));
+      table.appendChild(tr);
+    });
+  }
+
+  function renderList() {
+    var list = $("list");
+    clear(list);
+    $("empty").hidden = records.length > 0;
+    $("empty").textContent = "No pending records.";
+    records.forEach(function (rec) {
+      var li = el("li", null, "item" + (current && current.audit_id === rec.audit_id ? " sel" : ""));
+      var p = rec.proposed_standardized_payload || {};
+      li.appendChild(el("div", [p.street1, p.city, p.state].filter(Boolean).join(", ") || "(no address)"));
+      li.appendChild(el("div", rec.record_id + "  score " + Number(rec.confidence_score).toFixed(2), "muted mono"));
+      li.addEventListener("click", function () { select(rec); });
+      list.appendChild(li);
+    });
+  }
+
+  function select(rec) {
+    current = rec;
+    renderList();
+    $("detail").hidden = false;
+    $("title").textContent = "Record " + rec.record_id;
+    var tags = $("tags");
+    clear(tags);
+    (rec.failure_reason_codes || []).forEach(function (code) {
+      tags.appendChild(el("span", code, "tag " + (code.indexOf("ERR_") === 0 ? "err" : "warn")));
+    });
+    var raw = rec.raw_input_payload || {};
+    kv($("raw"), FIELDS.map(function (f) { return [f, raw[f] || ""]; }));
+    var conf = rec.field_confidence || {};
+    var proposed = rec.proposed_standardized_payload || {};
+    var table = $("proposed");
+    clear(table);
+    FIELDS.forEach(function (f) {
+      var tr = el("tr");
+      tr.appendChild(el("th", f));
+      tr.appendChild(el("td", proposed[f] || "", "mono"));
+      var td = el("td");
+      if (typeof conf[f] === "number") {
+        td.appendChild(el("span", conf[f].toFixed(2), "mono"));
+        var bar = el("div", null, "bar");
+        var fill = el("span");
+        fill.style.width = Math.round(conf[f] * 100) + "%";  // CSSOM, allowed by the page's CSP
+        bar.appendChild(fill);
+        td.appendChild(bar);
+      }
+      tr.appendChild(td);
+      table.appendChild(tr);
+    });
+    var trace = $("trace");
+    clear(trace);
+    var head = el("tr");
+    ["field", "rule", "before", "after"].forEach(function (h) { head.appendChild(el("th", h)); });
+    trace.appendChild(head);
+    (rec.explanation || []).forEach(function (r) {
+      var tr = el("tr");
+      tr.appendChild(el("td", r.field));
+      tr.appendChild(el("td", r.rule, "mono"));
+      tr.appendChild(el("td", r.before, "mono"));
+      tr.appendChild(el("td", r.after, "mono"));
+      trace.appendChild(tr);
+    });
+    var alts = $("alts");
+    clear(alts);
+    var alist = rec.alternatives || [];
+    if (!alist.length) { alts.appendChild(el("tr")).appendChild(el("td", "None.", "muted")); }
+    alist.forEach(function (a) {
+      var tr = el("tr");
+      tr.appendChild(el("td", JSON.stringify(a.changes), "mono"));
+      tr.appendChild(el("td", a.reason));
+      tr.appendChild(el("td", Number(a.score).toFixed(2), "mono"));
+      var use = el("button", "Use");
+      use.type = "button";
+      use.addEventListener("click", function () {
+        Object.keys(a.changes).forEach(function (f) { if (inputs[f]) { inputs[f].value = a.changes[f]; } });
+      });
+      var cell = el("td");
+      cell.appendChild(use);
+      tr.appendChild(cell);
+      alts.appendChild(tr);
+    });
+    var form = $("form");
+    clear(form);
+    inputs = {};
+    FIELDS.forEach(function (f) {
+      var label = el("label", f, "muted");
+      label.setAttribute("for", "f_" + f);
+      var input = el("input");
+      input.id = "f_" + f;
+      input.type = "text";
+      input.value = (rec.final_committed_payload && rec.final_committed_payload[f]) || proposed[f] || "";
+      inputs[f] = input;
+      form.appendChild(label);
+      form.appendChild(input);
+    });
+    $("comment").value = "";
+    say("");
+  }
+
+  function decide(decision) {
+    if (!current) { return; }
+    var body = { decision: decision, commentary: $("comment").value };
+    if ($("steward").value) { body.steward_id = $("steward").value; }
+    if (decision === "modify") {
+      body.overrides = {};
+      FIELDS.forEach(function (f) { body.overrides[f] = inputs[f].value; });
+    }
+    var id = current.audit_id;
+    say("Saving...");
+    request("POST", "/v1/audit/" + encodeURIComponent(id) + "/override", body).then(function (updated) {
+      records = records.filter(function (r) { return r.audit_id !== id; });
+      current = null;
+      $("detail").hidden = true;
+      renderList();
+      $("status").textContent = "Saved " + updated.review_status + ". " + records.length + " pending.";
+    }).catch(function (err) { say(err.message, "err"); });
+  }
+
+  $("load").addEventListener("click", function () {
+    $("status").textContent = "Loading...";
+    request("GET", "/v1/audit?status=PENDING&limit=100").then(function (data) {
+      records = data.records || [];
+      current = null;
+      $("detail").hidden = true;
+      renderList();
+      $("status").textContent = records.length + " pending.";
+    }).catch(function (err) { $("status").textContent = err.message; });
+  });
+  $("approve").addEventListener("click", function () { decide("approve"); });
+  $("modify").addEventListener("click", function () { decide("modify"); });
+  $("reject").addEventListener("click", function () { decide("reject"); });
+})();
+</script>
+</body>
+</html>

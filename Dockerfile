@@ -11,6 +11,8 @@ WORKDIR /build
 COPY pyproject.toml Cargo.toml Cargo.lock README.md LICENSE ./
 COPY src ./src
 COPY phone_standardizer ./phone_standardizer
+COPY address_standardizer ./address_standardizer
+COPY entity_standardizer ./entity_standardizer
 
 RUN pip install --no-cache-dir maturin wheel setuptools && \
     maturin build --release --locked --out /dist/native && \
@@ -22,7 +24,7 @@ WORKDIR /app
 COPY --from=builder /dist/native/*.whl /tmp/native/
 COPY --from=builder /dist/py/*.whl /tmp/py/
 
-RUN pip install --no-cache-dir "$(ls /tmp/py/phone_standardizer-*.whl | head -n 1)[server,mcp]" && \
+RUN pip install --no-cache-dir "$(ls /tmp/py/entity_standardizer-*.whl | head -n 1)[server,mcp]" && \
     python -m zipfile -e "$(ls /tmp/native/*.whl | head -n 1)" /tmp/native_x && \
     cp -r /tmp/native_x/_phone_standardizer_rs "$(python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')/" && \
     rm -rf /tmp/native /tmp/native_x /tmp/py && \

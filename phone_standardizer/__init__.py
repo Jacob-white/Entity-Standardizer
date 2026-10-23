@@ -10,6 +10,18 @@ from phone_standardizer._native_dispatch import (
     get_engine_info,
     is_native_available,
     standardize_batch_e164_dispatch,
+    standardize_batch_with_country_dispatch,
+)
+from address_standardizer.models import StandardizedAddress
+from address_standardizer.standardizer import standardize_address
+from phone_standardizer.joint import (
+    CrossHealingAction,
+    StandardizedContact,
+    StandardizedEntity,
+    batch_standardize_contacts,
+    batch_standardize_entities,
+    standardize_contact,
+    standardize_entity,
 )
 from phone_standardizer.arrow import (
     register_duckdb_udfs,
@@ -68,7 +80,11 @@ from phone_standardizer.models import (
     PhoneRoutingTier,
     StandardizedPhone,
 )
-from phone_standardizer.nanp import resolve_nanp_npa
+from phone_standardizer.nanp import (
+    infer_nanp_npa_from_context,
+    resolve_international_region,
+    resolve_nanp_npa,
+)
 from phone_standardizer.normalization import (
     decode_vanity_phone,
     extract_extension,
@@ -91,13 +107,14 @@ from phone_standardizer.standardizer import (
     validate_phone,
 )
 
-__version__ = "1.4.0"
+__version__ = "2.0.0"
 
 __all__ = [
     "CallingWindowResult",
     "ContactCluster",
     "CountryDialPlan",
     "CountryDialRegistry",
+    "CrossHealingAction",
     "HealingAction",
     "LRUCache",
     "MultiTierCache",
@@ -108,9 +125,14 @@ __all__ = [
     "PhoneRoutingTier",
     "PhoneStewardshipLedger",
     "SQLiteCache",
+    "StandardizedAddress",
+    "StandardizedContact",
+    "StandardizedEntity",
     "StandardizedPhone",
     "__version__",
     "are_keypad_adjacent",
+    "batch_standardize_contacts",
+    "batch_standardize_entities",
     "batch_standardize_phones",
     "clear_cache",
     "cluster_contact_records",
@@ -141,6 +163,7 @@ __all__ = [
     "has_repeating_subscriber_digits",
     "has_sequential_subscriber_digits",
     "infer_country_from_postal_code",
+    "infer_nanp_npa_from_context",
     "is_fictitious_number",
     "is_native_available",
     "make_cache_key",
@@ -148,11 +171,16 @@ __all__ = [
     "normalize_country_iso2",
     "register_duckdb_udfs",
     "resolve_carrier_hint",
+    "resolve_international_region",
     "resolve_locality",
     "resolve_nanp_npa",
     "resolve_timezones",
+    "standardize_address",
     "standardize_arrow",
     "standardize_batch_e164_dispatch",
+    "standardize_batch_with_country_dispatch",
+    "standardize_contact",
+    "standardize_entity",
     "standardize_phone",
     "standardize_polars",
     "stream_standardize_csv",

@@ -1,4 +1,7 @@
 use pyo3::prelude::*;
+use pyo3::types::PyDict;
+
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Map an ASCII letter (A-Z, a-z) to its ITU-T E.161 telephone keypad digit.
 #[inline]
@@ -143,21 +146,25 @@ fn strip_extension_single_rs(primary: &str) -> &str {
         .trim_start();
     let lower = trimmed.to_ascii_lowercase();
     for marker in [
-        ";ext=", ";isub=", "(ext.", "(ext:", "(ext-", "(ext ", " ext.", " ext:", " ext-", " ext#",
-        " ext ", " extension", " ext", " xt.", " xt:", " xt-", " xt ", " xt", " x.", " x",
-        "ext.", "ext", "xt.", "xt", "x.", "x", "#", ",", "p", "w",
+        ";ext=", "; ext=", ";isub=", "; isub=", "(ext.", "(ext:", "(ext-", "(ext ", " ext.", " ext:", " ext-", " ext#",
+        " ext=", " ext ", " extension", " ext", " xt.", " xt:", " xt-", " xt ", " xt", " x.", " x",
+        " #", "ext.", "ext", "xt.", "xt", "x.", "x", "#", ",", ";", "p", "w",
     ] {
         if let Some(idx) = lower.rfind(marker) {
-            if matches!(marker, "ext." | "ext" | "xt." | "xt" | "x." | "x" | "#" | "," | "p" | "w") {
+            if matches!(marker, "ext." | "ext" | "xt." | "xt" | "x." | "x" | "#") {
+                if idx == 0 || !matches!(lower.as_bytes()[idx - 1], b'0'..=b'9' | b';' | b',' | b'|') {
+                    continue;
+                }
+            } else if matches!(marker, "," | ";" | "p" | "w") {
                 if idx == 0 || !lower.as_bytes()[idx - 1].is_ascii_digit() {
                     continue;
                 }
             }
             let tail = &lower[idx + marker.len()..];
             let tail_clean = tail.trim_matches(|c: char| {
-                matches!(c, ' ' | ')' | '!' | ':' | '-' | '#' | ',' | 'p' | 'w')
+                matches!(c, ' ' | ')' | '!' | ':' | '-' | '=' | '#' | ',' | ';' | 'p' | 'w')
             });
-            let max_ext_len = if matches!(marker, "," | "p" | "w") {
+            let max_ext_len = if matches!(marker, "," | ";" | "p" | "w") {
                 7
             } else {
                 10
@@ -174,9 +181,29 @@ fn strip_extension_single_rs(primary: &str) -> &str {
                     }
                 }
                 return trimmed[..idx]
-                    .trim_end_matches(|c: char| matches!(c, '!' | '?' | ',' | ';' | '|' | ' ' | '\t' | '\n' | '\r'))
+                    .trim_end_matches(|c: char| matches!(c, '!' | '?' | ',' | ';' | '|' | '-' | ' ' | '\t' | '\n' | '\r'))
                     .trim();
             }
+        }
+    }
+    let tb = trimmed.as_bytes();
+    if tb.len() >= 14
+        && tb.len() <= 18
+        && matches!(tb[0], b'2'..=b'9')
+        && tb[1].is_ascii_digit()
+        && tb[2].is_ascii_digit()
+        && tb[3] == b'-'
+        && matches!(tb[4], b'2'..=b'9')
+        && tb[5].is_ascii_digit()
+        && tb[6].is_ascii_digit()
+        && tb[7] == b'-'
+        && tb[8..12].iter().all(|b| b.is_ascii_digit())
+    {
+        if tb[12] == b'-' && tb[13..].iter().all(|b| b.is_ascii_digit()) {
+            return &trimmed[..12];
+        }
+        if (15..=17).contains(&tb.len()) && tb[12..].iter().all(|b| b.is_ascii_digit()) {
+            return &trimmed[..12];
         }
     }
     trimmed
@@ -210,6 +237,22 @@ fn is_clean_nanp_segment_rs(seg: &str) -> bool {
     db.len() == 11 && db[0] == b'1' && matches!(db[1], b'2'..=b'9') && matches!(db[4], b'2'..=b'9')
 }
 
+fn starts_with_extension_marker_rs(after: &str) -> bool {
+    if after.starts_with('#') {
+        return true;
+    }
+    for prefix in ["extension", "ext.", "ext", "xt.", "xt", "x.", "x", "isub"] {
+        if let Some(rem) = after.strip_prefix(prefix) {
+            if rem.starts_with(|c: char| {
+                c.is_ascii_digit() || matches!(c, ' ' | '\t' | ':' | '-' | '=' | '#' | '.')
+            }) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// If input contains multiple complete phone numbers separated by ';', '/', '|', '&', ',', or whitespace, return the primary phone.
 fn split_primary_phone_rs(input: &str) -> &str {
     let bytes = input.as_bytes();
@@ -217,7 +260,7 @@ fn split_primary_phone_rs(input: &str) -> &str {
     for (idx, &b) in bytes.iter().enumerate() {
         if b == b';' || b == b'/' || b == b'&' || b == b'|' {
             let after = input[idx + 1..].trim_start().to_ascii_lowercase();
-            if !after.starts_with("ext=") && !after.starts_with("isub=") {
+            if !starts_with_extension_marker_rs(&after) {
                 split_indices.push(idx);
             }
         }
@@ -232,7 +275,8 @@ fn split_primary_phone_rs(input: &str) -> &str {
         let p1_trim = part1.trim();
         let d0 = part0.chars().filter(|c| c.is_ascii_digit()).count();
         let d1 = p1_trim.chars().filter(|c| c.is_ascii_digit()).count();
-        if d0 >= 7 && (d1 >= 7 || (d0 >= 10 && p1_trim.len() == 4 && d1 == 4)) {
+        let has_alpha1 = p1_trim.chars().any(|c| c.is_ascii_alphabetic());
+        if d0 >= 7 && (d1 >= 7 || (bytes[idx0] == b'/' && d0 >= 9 && (1..=6).contains(&d1) && !has_alpha1)) {
             return split_primary_phone_rs(part0.trim());
         }
     }
@@ -303,6 +347,25 @@ fn split_primary_phone_rs(input: &str) -> &str {
             return t[..tenth_end].trim();
         }
     }
+    let tb = t.as_bytes();
+    if tb.len() >= 20
+        && matches!(tb[0], b'2'..=b'9')
+        && tb[1].is_ascii_digit()
+        && tb[2].is_ascii_digit()
+        && tb[3] == b'-'
+        && matches!(tb[4], b'2'..=b'9')
+        && tb[5].is_ascii_digit()
+        && tb[6].is_ascii_digit()
+        && tb[7] == b'-'
+        && tb[8..12].iter().all(|b| b.is_ascii_digit())
+        && tb[12] == b'-'
+    {
+        let rest = &t[13..];
+        let rest_digits = rest.chars().filter(|c| c.is_ascii_digit()).count();
+        if rest.chars().all(|c| c.is_ascii_digit() || c == '-') && (7..=10).contains(&rest_digits) {
+            return &t[..12];
+        }
+    }
     input
 }
 
@@ -331,20 +394,25 @@ fn strip_extension_rs(input: &str) -> &str {
     strip_extension_single_rs(primary)
 }
 
-/// Return True if input contains a run of at least 3 consecutive ASCII alphabetic characters.
+/// Return True if input contains a vanity word or trailing '401k' keypad alias.
 fn has_vanity_word_rs(input: &str) -> bool {
     let mut run = 0usize;
+    let mut prev_run = 0usize;
     for ch in input.chars() {
         if ch.is_ascii_alphabetic() {
             run += 1;
-            if run >= 3 {
+            if run >= 3 || (prev_run >= 1 && prev_run + run >= 3) {
                 return true;
             }
+        } else if ch == '-' || ch == ' ' {
+            prev_run = run;
+            run = 0;
         } else {
+            prev_run = 0;
             run = 0;
         }
     }
-    false
+    input.to_ascii_lowercase().ends_with("401k")
 }
 
 /// High-throughput batch E.164 normalizer for raw phone strings.
@@ -440,6 +508,18 @@ pub fn standardize_batch_e164_rs(
                 if digits.len() == 11 && digits.starts_with('1') {
                     return Some(format!("+{digits}"));
                 }
+                if digits.len() == 11
+                    && trimmed.chars().all(|c| c.is_ascii_digit())
+                    && [
+                        "01", "020", "023", "024", "028", "029", "071", "072", "073", "074",
+                        "075", "077", "078", "079",
+                    ]
+                    .iter()
+                    .any(|p| digits.starts_with(p))
+                {
+                    let nsn = &digits[1..];
+                    return Some(format!("+44{nsn}"));
+                }
                 return None;
             } else if digits.starts_with('0') && digits.len() >= 8 {
                 let stripped_trunk = &digits[1..];
@@ -460,14 +540,290 @@ pub fn standardize_batch_e164_rs(
         .collect()
 }
 
-#[pymodule]
-fn _phone_standardizer_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn iso2_to_calling_code_rs(iso2: &str) -> Option<&'static str> {
+    match iso2.trim().to_ascii_uppercase().as_str() {
+        "US" | "CA" | "PR" | "VI" | "GU" | "AS" | "MP" | "BM" | "KY" | "BS" | "BB" | "JM" | "TT" | "DO" | "SX" => Some("1"),
+        "RU" | "KZ" => Some("7"),
+        "EG" => Some("20"),
+        "ZA" => Some("27"),
+        "GR" => Some("30"),
+        "NL" => Some("31"),
+        "BE" => Some("32"),
+        "FR" => Some("33"),
+        "ES" => Some("34"),
+        "HU" => Some("36"),
+        "IT" => Some("39"),
+        "RO" => Some("40"),
+        "CH" => Some("41"),
+        "AT" => Some("43"),
+        "GB" | "UK" | "JE" | "GG" | "IM" => Some("44"),
+        "DK" => Some("45"),
+        "SE" => Some("46"),
+        "NO" => Some("47"),
+        "PL" => Some("48"),
+        "DE" => Some("49"),
+        "PE" => Some("51"),
+        "MX" => Some("52"),
+        "AR" => Some("54"),
+        "BR" => Some("55"),
+        "CL" => Some("56"),
+        "CO" => Some("57"),
+        "VE" => Some("58"),
+        "MY" => Some("60"),
+        "AU" => Some("61"),
+        "ID" => Some("62"),
+        "PH" => Some("63"),
+        "NZ" => Some("64"),
+        "SG" => Some("65"),
+        "TH" => Some("66"),
+        "JP" => Some("81"),
+        "KR" => Some("82"),
+        "VN" => Some("84"),
+        "CN" => Some("86"),
+        "TR" => Some("90"),
+        "IN" => Some("91"),
+        "PK" => Some("92"),
+        "LK" => Some("94"),
+        "IR" => Some("98"),
+        "MA" => Some("212"),
+        "NG" => Some("234"),
+        "KE" => Some("254"),
+        "PT" => Some("351"),
+        "LU" => Some("352"),
+        "IE" => Some("353"),
+        "FI" => Some("358"),
+        "LT" => Some("370"),
+        "UA" => Some("380"),
+        "CZ" => Some("420"),
+        "HK" => Some("852"),
+        "TW" => Some("886"),
+        "SA" => Some("966"),
+        "AE" => Some("971"),
+        "IL" => Some("972"),
+        _ => None,
+    }
+}
+
+#[pyfunction]
+fn standardize_batch_with_country_rs(
+    inputs: Vec<String>,
+    countries: Vec<String>,
+    default_calling_code: &str,
+) -> Vec<Option<String>> {
+    inputs
+        .into_iter()
+        .enumerate()
+        .map(|(i, raw)| {
+            let cc = countries
+                .get(i)
+                .and_then(|c| iso2_to_calling_code_rs(c))
+                .unwrap_or(default_calling_code);
+            let mut single = standardize_batch_e164_rs(vec![raw], cc);
+            single.pop().flatten()
+        })
+        .collect()
+}
+
+#[inline]
+fn soundex_code(c: char) -> char {
+    match c {
+        'B' | 'F' | 'P' | 'V' => '1',
+        'C' | 'G' | 'J' | 'K' | 'Q' | 'S' | 'X' | 'Z' => '2',
+        'D' | 'T' => '3',
+        'L' => '4',
+        'M' | 'N' => '5',
+        'R' => '6',
+        _ => '0',
+    }
+}
+
+pub fn soundex(token: &str) -> String {
+    let clean: Vec<char> = token
+        .to_uppercase()
+        .chars()
+        .filter(|c| c.is_ascii_uppercase())
+        .collect();
+
+    let Some(&first) = clean.first() else {
+        return String::new();
+    };
+
+    let mut code = String::with_capacity(4);
+    code.push(first);
+    let mut prev_code = soundex_code(first);
+
+    for &c in &clean[1..] {
+        let curr = soundex_code(c);
+        if curr != '0' {
+            if curr != prev_code {
+                code.push(curr);
+                if code.len() == 4 {
+                    break;
+                }
+            }
+            prev_code = curr;
+        } else if matches!(c, 'A' | 'E' | 'I' | 'O' | 'U' | 'Y') {
+            prev_code = '0';
+        }
+    }
+
+    while code.len() < 4 {
+        code.push('0');
+    }
+    code
+}
+
+#[pyfunction]
+pub fn compute_soundex(token: &str) -> String {
+    soundex(token)
+}
+
+pub fn damerau_levenshtein(s1: &str, s2: &str) -> usize {
+    if s1 == s2 {
+        return 0;
+    }
+    let chars1: Vec<char> = s1.chars().collect();
+    let chars2: Vec<char> = s2.chars().collect();
+    let len1 = chars1.len();
+    let len2 = chars2.len();
+    if len1 == 0 {
+        return len2;
+    }
+    if len2 == 0 {
+        return len1;
+    }
+
+    let inf = len1 + len2;
+    let mut da: std::collections::HashMap<char, usize> = std::collections::HashMap::new();
+    let mut h = vec![vec![0usize; len2 + 2]; len1 + 2];
+
+    h[0][0] = inf;
+    for i in 0..=len1 {
+        h[i + 1][0] = inf;
+        h[i + 1][1] = i;
+    }
+    for j in 0..=len2 {
+        h[0][j + 1] = inf;
+        h[1][j + 1] = j;
+    }
+
+    for i in 1..=len1 {
+        let mut db = 0;
+        for j in 1..=len2 {
+            let i1 = *da.get(&chars2[j - 1]).unwrap_or(&0);
+            let j1 = db;
+            let cost = if chars1[i - 1] == chars2[j - 1] {
+                db = j;
+                0
+            } else {
+                1
+            };
+
+            let deletion = h[i][j + 1] + 1;
+            let insertion = h[i + 1][j] + 1;
+            let substitution = h[i][j] + cost;
+            let transposition = h[i1][j1] + (i - i1 - 1) + 1 + (j - j1 - 1);
+
+            h[i + 1][j + 1] = deletion.min(insertion).min(substitution).min(transposition);
+        }
+        da.insert(chars1[i - 1], i);
+    }
+
+    h[len1 + 1][len2 + 1]
+}
+
+#[pyfunction]
+pub fn damerau_levenshtein_distance(s1: &str, s2: &str) -> usize {
+    damerau_levenshtein(s1, s2)
+}
+
+#[pyfunction]
+pub fn normalize_ascii_whitespace_rs(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut last_space = true;
+    for ch in s.chars() {
+        if ch.is_ascii_alphanumeric() {
+            out.push(ch.to_ascii_uppercase());
+            last_space = false;
+        } else if (ch.is_whitespace() || matches!(ch, ',' | '.' | '-' | '#')) && !last_space {
+            out.push(' ');
+            last_space = true;
+        }
+    }
+    if out.ends_with(' ') {
+        out.pop();
+    }
+    out
+}
+
+#[pyfunction]
+pub fn normalize_batch_ascii_rs(inputs: Vec<String>) -> Vec<String> {
+    inputs
+        .into_iter()
+        .map(|s| normalize_ascii_whitespace_rs(&s))
+        .collect()
+}
+
+#[pyfunction]
+pub fn get_engine_name() -> &'static str {
+    "Rust_PyO3"
+}
+
+#[pyfunction]
+pub fn is_native() -> bool {
+    true
+}
+
+#[pyfunction]
+pub fn get_capabilities(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
+    let dict = PyDict::new(py);
+    dict.set_item("engine", "Rust_PyO3")?;
+    dict.set_item("is_native", true)?;
+    dict.set_item("version", VERSION)?;
+    dict.set_item("pure_python", false)?;
+    dict.set_item(
+        "native_functions",
+        vec![
+            "compute_soundex",
+            "damerau_levenshtein_distance",
+            "normalize_ascii_whitespace_rs",
+            "normalize_batch_ascii_rs",
+            "fold_vanity_digits_rs",
+            "fold_unicode_digits_rs",
+            "extract_digits_rs",
+            "damerau_levenshtein_distance_rs",
+            "standardize_batch_e164_rs",
+            "standardize_batch_with_country_rs",
+        ],
+    )?;
+    Ok(dict)
+}
+
+fn register_all_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(fold_vanity_digits_rs, m)?)?;
     m.add_function(wrap_pyfunction!(fold_unicode_digits_rs, m)?)?;
     m.add_function(wrap_pyfunction!(extract_digits_rs, m)?)?;
     m.add_function(wrap_pyfunction!(damerau_levenshtein_distance_rs, m)?)?;
     m.add_function(wrap_pyfunction!(standardize_batch_e164_rs, m)?)?;
+    m.add_function(wrap_pyfunction!(standardize_batch_with_country_rs, m)?)?;
+    m.add_function(wrap_pyfunction!(compute_soundex, m)?)?;
+    m.add_function(wrap_pyfunction!(damerau_levenshtein_distance, m)?)?;
+    m.add_function(wrap_pyfunction!(normalize_ascii_whitespace_rs, m)?)?;
+    m.add_function(wrap_pyfunction!(normalize_batch_ascii_rs, m)?)?;
+    m.add_function(wrap_pyfunction!(get_engine_name, m)?)?;
+    m.add_function(wrap_pyfunction!(is_native, m)?)?;
+    m.add_function(wrap_pyfunction!(get_capabilities, m)?)?;
     Ok(())
+}
+
+#[pymodule]
+fn _phone_standardizer_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    register_all_functions(m)
+}
+
+#[pymodule]
+fn _address_standardizer_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    register_all_functions(m)
 }
 
 #[cfg(test)]
@@ -535,6 +891,24 @@ mod tests {
                 "1956468217,8307763662,9564682169".to_string(),
                 "212 937 8444 917 363 9568".to_string(),
                 "786 244-7346 786 458-8491".to_string(),
+                "877-6EN-CORE".to_string(),
+                "855-508-401k".to_string(),
+                "860-521-401k".to_string(),
+                "415-984-1915-1".to_string(),
+                "415-984-1915-1921".to_string(),
+                "315-627-0474225".to_string(),
+                "800-965-2576-949-365-177".to_string(),
+                "312-558-9400-800-969-3987".to_string(),
+                "212-687-5650-6246633423".to_string(),
+                "01212345678".to_string(),
+                "02079460912".to_string(),
+                "212-555-0199;x123".to_string(),
+                "212-555-0199;xt123".to_string(),
+                "212-555-0199;xt. 45".to_string(),
+                "212-555-0199,x123".to_string(),
+                "212-555-0199|x123".to_string(),
+                "+298 123456;ext. 45".to_string(),
+                "212-555-0199; x123; 415-555-2671".to_string(),
             ],
             "1",
         );
@@ -574,7 +948,70 @@ mod tests {
                 Some("+18307763662".to_string()),
                 Some("+12129378444".to_string()),
                 Some("+17862447346".to_string()),
+                Some("+18776362673".to_string()),
+                Some("+18555084015".to_string()),
+                Some("+18605214015".to_string()),
+                Some("+14159841915".to_string()),
+                Some("+14159841915".to_string()),
+                Some("+13156270474".to_string()),
+                Some("+18009652576".to_string()),
+                Some("+13125589400".to_string()),
+                Some("+12126875650".to_string()),
+                Some("+441212345678".to_string()),
+                Some("+442079460912".to_string()),
+                Some("+12125550199".to_string()),
+                Some("+12125550199".to_string()),
+                Some("+12125550199".to_string()),
+                Some("+12125550199".to_string()),
+                Some("+12125550199".to_string()),
+                Some("+298123456".to_string()),
+                Some("+12125550199".to_string()),
             ]
+        );
+    }
+
+    #[test]
+    fn test_soundex_standard_names() {
+        assert_eq!(soundex("Robert"), "R163");
+        assert_eq!(soundex("Rupert"), "R163");
+        assert_eq!(soundex("Rubin"), "R150");
+        assert_eq!(soundex("Washington"), "W252");
+    }
+
+    #[test]
+    fn test_soundex_ashcraft_tymczak_pfister() {
+        assert_eq!(soundex("Ashcraft"), "A261");
+        assert_eq!(soundex("Ashcroft"), "A261");
+        assert_eq!(soundex("Tymczak"), "T522");
+        assert_eq!(soundex("Pfister"), "P236");
+    }
+
+    #[test]
+    fn test_soundex_edge_cases() {
+        assert_eq!(soundex(""), "");
+        assert_eq!(soundex("12345-!@#"), "");
+        assert_eq!(soundex("A"), "A000");
+        assert_eq!(compute_soundex("Main"), "M500");
+    }
+
+    #[test]
+    fn test_damerau_levenshtein_address_tokens() {
+        assert_eq!(damerau_levenshtein("STREET", "STREET"), 0);
+        assert_eq!(damerau_levenshtein("STREET", "STERET"), 1);
+        assert_eq!(damerau_levenshtein("AVENUE", "AVNEUE"), 1);
+        assert_eq!(damerau_levenshtein("BOULEVARD", "BLVD"), 5);
+    }
+
+    #[test]
+    fn test_damerau_levenshtein_edge_cases_and_whitespace() {
+        assert_eq!(damerau_levenshtein("", ""), 0);
+        assert_eq!(damerau_levenshtein("ABC", ""), 3);
+        assert_eq!(damerau_levenshtein("", "ABC"), 3);
+        assert_eq!(damerau_levenshtein("CA", "AC"), 1);
+        assert_eq!(damerau_levenshtein("ABC", "CA"), 2);
+        assert_eq!(
+            normalize_ascii_whitespace_rs("  123  Main, St. #4B - "),
+            "123 MAIN ST 4B"
         );
     }
 }

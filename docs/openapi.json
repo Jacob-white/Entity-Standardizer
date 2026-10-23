@@ -1,0 +1,1105 @@
+{
+  "components": {
+    "schemas": {
+      "AutocompleteRequest": {
+        "description": "Payload for real-time typeahead address suggestion.",
+        "properties": {
+          "latitude": {
+            "anyOf": [
+              {
+                "maximum": 90.0,
+                "minimum": -90.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Client latitude for proximity ranking",
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "maximum": 180.0,
+                "minimum": -180.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Client longitude for proximity ranking",
+            "title": "Longitude"
+          },
+          "max_results": {
+            "default": 10,
+            "description": "Max suggestions to return",
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Max Results",
+            "type": "integer"
+          },
+          "query": {
+            "description": "Partial address input string",
+            "minLength": 1,
+            "title": "Query",
+            "type": "string"
+          },
+          "radius_miles": {
+            "anyOf": [
+              {
+                "exclusiveMinimum": 0.0,
+                "maximum": 25000.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Proximity radius bounding in miles",
+            "title": "Radius Miles"
+          },
+          "state_filter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "US State postal filter (e.g. CA, NY)",
+            "title": "State Filter"
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "title": "AutocompleteRequest",
+        "type": "object"
+      },
+      "AutocompleteResponse": {
+        "description": "List of autocomplete suggestions.",
+        "properties": {
+          "count": {
+            "title": "Count",
+            "type": "integer"
+          },
+          "suggestions": {
+            "items": {
+              "$ref": "#/components/schemas/AutocompleteSuggestionItem"
+            },
+            "title": "Suggestions",
+            "type": "array"
+          }
+        },
+        "required": [
+          "suggestions",
+          "count"
+        ],
+        "title": "AutocompleteResponse",
+        "type": "object"
+      },
+      "AutocompleteSuggestionItem": {
+        "description": "Individual autocomplete suggestion.",
+        "properties": {
+          "city": {
+            "title": "City",
+            "type": "string"
+          },
+          "distance_meters": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Distance Meters"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "postal_code": {
+            "title": "Postal Code",
+            "type": "string"
+          },
+          "prompt_message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Prompt Message"
+          },
+          "secondary_prompt_required": {
+            "title": "Secondary Prompt Required",
+            "type": "boolean"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "street_line": {
+            "title": "Street Line",
+            "type": "string"
+          },
+          "suggested_secondary_units": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Suggested Secondary Units",
+            "type": "array"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "street_line",
+          "city",
+          "state",
+          "postal_code",
+          "secondary_prompt_required",
+          "suggested_secondary_units"
+        ],
+        "title": "AutocompleteSuggestionItem",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "StandardizeRequest": {
+        "description": "Input payload for single address standardization.",
+        "example": {
+          "address": "1600 Pennsylvania Ave NW, Washington, DC 20500",
+          "enable_fuzzy": true,
+          "enable_geocoding": true
+        },
+        "properties": {
+          "address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Single-line address string",
+            "title": "Address"
+          },
+          "allow_locality": {
+            "default": false,
+            "description": "Allow locality-only / city-level fallback",
+            "title": "Allow Locality",
+            "type": "boolean"
+          },
+          "alternatives": {
+            "default": 0,
+            "description": "Add up to N next-best interpretations of an ambiguous input as `alternatives`.",
+            "maximum": 5.0,
+            "minimum": 0.0,
+            "title": "Alternatives",
+            "type": "integer"
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "City / Locality name",
+            "title": "City"
+          },
+          "correct_state_from_zip": {
+            "default": false,
+            "description": "Replace a US state that contradicts the ZIP with the ZIP's state (reported as WARN_STATE_CORRECTED_FROM_ZIP). Off by default: a mismatching state is kept and the address is flagged ERR_ZIP_STATE_MISMATCH / UNDELIVERABLE.",
+            "title": "Correct State From Zip",
+            "type": "boolean"
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": "USA",
+            "description": "Country name or ISO-3166 code",
+            "title": "Country"
+          },
+          "enable_fuzzy": {
+            "default": true,
+            "description": "Enable Levenshtein typo correction",
+            "title": "Enable Fuzzy",
+            "type": "boolean"
+          },
+          "enable_geocoding": {
+            "default": true,
+            "description": "Enable offline rooftop/TIGER geocoding",
+            "title": "Enable Geocoding",
+            "type": "boolean"
+          },
+          "include_explanation": {
+            "default": false,
+            "description": "Add `explanation` (ordered change records) and `field_confidence` (per-field, heuristic) to the response.",
+            "title": "Include Explanation",
+            "type": "boolean"
+          },
+          "include_metadata": {
+            "default": true,
+            "description": "Include delivery intelligence and spatial metadata",
+            "title": "Include Metadata",
+            "type": "boolean"
+          },
+          "postal_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Postal / ZIP code",
+            "title": "Postal Code"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "State / Province code",
+            "title": "State"
+          },
+          "street1": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Primary street line",
+            "title": "Street1"
+          },
+          "street2": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Secondary unit (Suite, Apt, Floor)",
+            "title": "Street2"
+          }
+        },
+        "title": "StandardizeRequest",
+        "type": "object"
+      },
+      "StandardizeResponse": {
+        "additionalProperties": true,
+        "description": "Standardized USPS Pub 28 / ISO address output schema.",
+        "properties": {
+          "accuracy_radius_meters": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accuracy Radius Meters"
+          },
+          "address_status": {
+            "title": "Address Status",
+            "type": "string"
+          },
+          "alternatives": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alternatives"
+          },
+          "building_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Building Key"
+          },
+          "care_of": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Care Of"
+          },
+          "census_tract": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Census Tract"
+          },
+          "city": {
+            "title": "City",
+            "type": "string"
+          },
+          "cmra": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cmra"
+          },
+          "confidence_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Confidence Score"
+          },
+          "corporate_risk_flags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Corporate Risk Flags"
+          },
+          "corporate_risk_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Corporate Risk Score"
+          },
+          "country": {
+            "title": "Country",
+            "type": "string"
+          },
+          "country_iso3": {
+            "title": "Country Iso3",
+            "type": "string"
+          },
+          "deliverability": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deliverability"
+          },
+          "dpv_footnotes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Dpv Footnotes"
+          },
+          "explanation": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Explanation"
+          },
+          "field_confidence": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Field Confidence"
+          },
+          "fips_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Fips Code"
+          },
+          "full_rooftop_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Full Rooftop Address"
+          },
+          "is_private_residence": {
+            "default": false,
+            "title": "Is Private Residence",
+            "type": "boolean"
+          },
+          "is_registered_agent_hub": {
+            "default": false,
+            "title": "Is Registered Agent Hub",
+            "type": "boolean"
+          },
+          "is_us": {
+            "title": "Is Us",
+            "type": "boolean"
+          },
+          "latitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latitude"
+          },
+          "longitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Longitude"
+          },
+          "normalized_address_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Normalized Address Key"
+          },
+          "phonetic_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Phonetic Key"
+          },
+          "postal_code": {
+            "title": "Postal Code",
+            "type": "string"
+          },
+          "precision": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Precision"
+          },
+          "rdi": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rdi"
+          },
+          "rooftop_address": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rooftop Address"
+          },
+          "routing_tier": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Routing Tier"
+          },
+          "state": {
+            "title": "State",
+            "type": "string"
+          },
+          "street1": {
+            "title": "Street1",
+            "type": "string"
+          },
+          "street2": {
+            "title": "Street2",
+            "type": "string"
+          },
+          "vacant": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Vacant"
+          }
+        },
+        "required": [
+          "street1",
+          "street2",
+          "city",
+          "state",
+          "postal_code",
+          "country",
+          "country_iso3",
+          "address_status",
+          "is_us"
+        ],
+        "title": "StandardizeResponse",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "High-performance universal address standardization, pure offline rooftop geocoding, CASS Cycle N deliverability verification, and real-time typeahead autocomplete daemon.",
+    "title": "Address Standardizer Microservice API",
+    "version": "3.3.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/health": {
+      "get": {
+        "description": "Returns microservice health, engine capability matrix, and cache telemetry.",
+        "operationId": "health_health_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Health and readiness probe",
+        "tags": [
+          "Diagnostics"
+        ]
+      }
+    },
+    "/metrics": {
+      "get": {
+        "description": "Returns runtime throughput, request counts, and execution latencies.",
+        "operationId": "get_metrics_metrics_get",
+        "parameters": [
+          {
+            "description": "Metric format: 'json' or 'prometheus'",
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Metric format: 'json' or 'prometheus'",
+              "title": "Format"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Service telemetry and metrics",
+        "tags": [
+          "Diagnostics"
+        ]
+      }
+    },
+    "/ready": {
+      "get": {
+        "description": "Readiness: 200 when the cache, audit ledger and reference database are usable, else 503 (names only).",
+        "operationId": "ready_ready_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Readiness probe",
+        "tags": [
+          "Diagnostics"
+        ]
+      }
+    },
+    "/v1/autocomplete": {
+      "get": {
+        "description": "GET endpoint for interactive typeahead address search.",
+        "operationId": "autocomplete_get_v1_autocomplete_get",
+        "parameters": [
+          {
+            "description": "Partial address query",
+            "in": "query",
+            "name": "q",
+            "required": true,
+            "schema": {
+              "description": "Partial address query",
+              "minLength": 1,
+              "title": "Q",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Max results",
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 10,
+              "description": "Max results",
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Optional state filter",
+            "in": "query",
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional state filter",
+              "title": "State"
+            }
+          },
+          {
+            "description": "Optional user latitude",
+            "in": "query",
+            "name": "lat",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 90,
+                  "minimum": -90,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional user latitude",
+              "title": "Lat"
+            }
+          },
+          {
+            "description": "Optional user longitude",
+            "in": "query",
+            "name": "lon",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maximum": 180,
+                  "minimum": -180,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional user longitude",
+              "title": "Lon"
+            }
+          },
+          {
+            "description": "Optional radius in miles",
+            "in": "query",
+            "name": "radius_miles",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "exclusiveMinimum": 0,
+                  "maximum": 25000,
+                  "type": "number"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional radius in miles",
+              "title": "Radius Miles"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutocompleteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Typeahead address autocomplete (GET)",
+        "tags": [
+          "Autocomplete"
+        ]
+      },
+      "post": {
+        "description": "Real-time typeahead address suggestion with secondary unit prompting and proximity biasing.",
+        "operationId": "autocomplete_post_v1_autocomplete_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutocompleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AutocompleteResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Typeahead address autocomplete",
+        "tags": [
+          "Autocomplete"
+        ]
+      }
+    },
+    "/v1/batch": {
+      "post": {
+        "description": "Batch standardize a collection of addresses with support for JSON arrays and streaming NDJSON.",
+        "operationId": "batch_standardize_v1_batch_post",
+        "parameters": [
+          {
+            "description": "Optional format: 'json' or 'ndjson'",
+            "in": "query",
+            "name": "format",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional format: 'json' or 'ndjson'",
+              "title": "Format"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "High-throughput batch standardization",
+        "tags": [
+          "Standardization"
+        ]
+      }
+    },
+    "/v1/standardize": {
+      "post": {
+        "description": "Standardize a single address string or structured address fields with sub-2ms latency.\n\nDeclared as a plain function so FastAPI runs the CPU-bound work in its threadpool instead of\nblocking the event loop (and every other request, including /health).",
+        "operationId": "standardize_single_v1_standardize_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StandardizeRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StandardizeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Standardize single address",
+        "tags": [
+          "Standardization"
+        ]
+      }
+    }
+  }
+}

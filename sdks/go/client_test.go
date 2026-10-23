@@ -81,6 +81,42 @@ func TestClientStandardizeAndBatch(t *testing.T) {
 				Countries: []CountryDialPlan{{ISO2: "US", CallingCode: "1"}},
 			})
 			return
+		case "/v1/address":
+			_ = json.NewEncoder(w).Encode(StandardizedAddress{
+				Street1:              "350 5TH AVE",
+				City:                 "NEW YORK",
+				State:                "NY",
+				PostalCode:           "10118",
+				Country:              "USA",
+				NormalizedAddressKey: strPtr("350 5TH AVE|NEW YORK|NY|10118|USA"),
+				BuildingKey:          strPtr("350 5TH AVE|NEW YORK|NY|10118|USA"),
+				PhoneticKey:          strPtr("350|F130|N620|NY|10118"),
+				AddressStatus:        "standardized",
+				RawStreetAddress:     "350 Fifth Ave",
+				IsUS:                 true,
+			})
+			return
+		case "/v1/contact":
+			_ = json.NewEncoder(w).Encode(StandardizedContact{
+				Address: StandardizedAddress{
+					Street1:       "350 5TH AVE",
+					City:          "NEW YORK",
+					State:         "NY",
+					PostalCode:    "10118",
+					Country:       "USA",
+					AddressStatus: "standardized",
+					IsUS:          true,
+				},
+				Phone: StandardizedPhone{
+					RawInput: "555-2368",
+					E164:     strPtr("+12125552368"),
+					IsValid:  true,
+				},
+				EntityKey:           strPtr("350 5TH AVE|NEW YORK|NY|10118|USA||+12125552368"),
+				CrossHealingActions: []string{"PHONE_HEALED_FROM_STANDARDIZED_ADDRESS"},
+				OverallConfidence:   0.97,
+			})
+			return
 		}
 		w.WriteHeader(http.StatusNotFound)
 	}))
@@ -136,5 +172,26 @@ func TestClientStandardizeAndBatch(t *testing.T) {
 	if err != nil || listRes.Count != 249 {
 		t.Fatalf("unexpected list countries result: %+v, err=%v", listRes, err)
 	}
+
+	addrRes, err := client.StandardizeAddress(context.Background(), AddressStandardizeRequest{
+		Street1:    "350 Fifth Ave",
+		City:       "New York",
+		State:      "NY",
+		PostalCode: "10118",
+	})
+	if err != nil || addrRes.Street1 != "350 5TH AVE" || !addrRes.IsUS {
+		t.Fatalf("unexpected address result: %+v, err=%v", addrRes, err)
+	}
+
+	contactRes, err := client.StandardizeContact(context.Background(), ContactStandardizeRequest{
+		Street1:    "350 Fifth Ave",
+		City:       "New York",
+		PostalCode: "10118",
+		Phone:      "555-2368",
+	})
+	if err != nil || contactRes.Phone.E164 == nil || *contactRes.Phone.E164 != "+12125552368" || contactRes.Address.State != "NY" {
+		t.Fatalf("unexpected contact result: %+v, err=%v", contactRes, err)
+	}
 }
+
 

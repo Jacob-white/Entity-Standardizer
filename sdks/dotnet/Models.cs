@@ -306,3 +306,120 @@ public sealed class PhoneExplainReport
     public PhoneExplanation? Explanation { get; set; }
 }
 
+public sealed class AddressStandardizeRequest
+{
+    [JsonPropertyName("street1")]
+    public string? Street1 { get; set; }
+
+    [JsonPropertyName("street2")]
+    public string? Street2 { get; set; }
+
+    [JsonPropertyName("city")]
+    public string? City { get; set; }
+
+    [JsonPropertyName("state")]
+    public string? State { get; set; }
+
+    [JsonPropertyName("postal_code")]
+    public string? PostalCode { get; set; }
+
+    [JsonPropertyName("country")]
+    public string Country { get; set; } = "US";
+}
+
+public sealed class ContactStandardizeRequest
+{
+    [JsonPropertyName("street1")]
+    public string? Street1 { get; set; }
+
+    [JsonPropertyName("street2")]
+    public string? Street2 { get; set; }
+
+    [JsonPropertyName("city")]
+    public string? City { get; set; }
+
+    [JsonPropertyName("state")]
+    public string? State { get; set; }
+
+    [JsonPropertyName("postal_code")]
+    public string? PostalCode { get; set; }
+
+    [JsonPropertyName("country")]
+    public string? Country { get; set; }
+
+    [JsonPropertyName("phone")]
+    public string? Phone { get; set; }
+
+    [JsonPropertyName("fax")]
+    public string? Fax { get; set; }
+
+    [JsonPropertyName("default_country")]
+    public string DefaultCountry { get; set; } = "US";
+}
+
+public sealed class StandardizedAddress
+{
+    [JsonPropertyName("street1")]
+    public string Street1 { get; set; } = "";
+
+    [JsonPropertyName("street2")]
+    public string Street2 { get; set; } = "";
+
+    [JsonPropertyName("city")]
+    public string City { get; set; } = "";
+
+    [JsonPropertyName("state")]
+    public string State { get; set; } = "";
+
+    [JsonPropertyName("postal_code")]
+    public string PostalCode { get; set; } = "";
+
+    [JsonPropertyName("country")]
+    public string Country { get; set; } = "";
+
+    [JsonPropertyName("normalized_address_key")]
+    public string? NormalizedAddressKey { get; set; }
+
+    [JsonPropertyName("building_key")]
+    public string? BuildingKey { get; set; }
+
+    [JsonPropertyName("phonetic_key")]
+    public string? PhoneticKey { get; set; }
+
+    [JsonPropertyName("address_status")]
+    public string AddressStatus { get; set; } = "";
+
+    [JsonPropertyName("raw_street_address")]
+    public string RawStreetAddress { get; set; } = "";
+
+    [JsonPropertyName("is_us")]
+    public bool IsUs { get; set; }
+
+    [JsonPropertyName("is_private_residence")]
+    public bool IsPrivateResidence { get; set; }
+
+    [JsonPropertyName("is_registered_agent_hub")]
+    public bool IsRegisteredAgentHub { get; set; }
+}
+
+public sealed class StandardizedContact
+{
+    [JsonPropertyName("address")]
+    public StandardizedAddress? Address { get; set; }
+
+    [JsonPropertyName("phone")]
+    public StandardizedPhone? Phone { get; set; }
+
+    [JsonPropertyName("fax")]
+    public StandardizedPhone? Fax { get; set; }
+
+    [JsonPropertyName("entity_key")]
+    public string? EntityKey { get; set; }
+
+    [JsonPropertyName("cross_healing_actions")]
+    public List<string> CrossHealingActions { get; set; } = new();
+
+    [JsonPropertyName("overall_confidence")]
+    public double OverallConfidence { get; set; }
+}
+
