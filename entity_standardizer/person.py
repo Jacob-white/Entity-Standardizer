@@ -116,7 +116,6 @@ _SURNAME_PARTICLES: frozenset[str] = frozenset(
         "MC",
         "MAC",
         "AL",
-        "BEN",
         "BIN",
         "IBN",
     }
@@ -241,6 +240,8 @@ _TITLE_MULTI_EXPANSIONS: tuple[tuple[tuple[str, ...], str], ...] = (
     (("VICE", "PRES"), "VICE PRESIDENT"),
     (("GEN", "MGR"), "GENERAL MANAGER"),
     (("MANAGING", "DIR"), "MANAGING DIRECTOR"),
+    (("BIZ", "DEV"), "BUSINESS DEVELOPMENT"),
+    (("BUSINESS", "DEV"), "BUSINESS DEVELOPMENT"),
 )
 
 _TITLE_TOKEN_EXPANSIONS: dict[str, str] = {
@@ -352,15 +353,29 @@ class StandardizedJobTitle:
         }
 
 
+_SPACED_DOTTED_CRED_RE = re.compile(r"(?<![A-Za-z0-9])(?:[A-Za-z]{1,2}\.\s*){2,}")
+
+
+def _collapse_dotted_cred(match: re.Match[str]) -> str:
+    collapsed = re.sub(r"[^A-Za-z0-9]", "", match.group(0)).upper()
+    if collapsed in _CREDENTIALS:
+        return f" {collapsed} "
+    return match.group(0)
+
+
 def _clean_token(tok: str) -> str:
     """Strip punctuation periods from a single word token and uppercase it."""
-    return re.sub(r"[^A-Za-z0-9'\-]", "", tok).upper().strip("'-")
+    cleaned = re.sub(r"[^A-Za-z0-9'\-]", "", tok).upper().strip("'-")
+    if cleaned and cleaned not in _GENERATIONAL_SUFFIXES and any(c.isdigit() for c in cleaned):
+        return ""
+    return cleaned
 
 
 def _tokenize_segment(segment: str) -> list[str]:
     """Tokenize a name segment into cleaned uppercase tokens."""
+    norm_seg = _SPACED_DOTTED_CRED_RE.sub(_collapse_dotted_cred, segment)
     out: list[str] = []
-    for raw_tok in segment.split():
+    for raw_tok in norm_seg.split():
         cleaned = _clean_token(raw_tok)
         if cleaned:
             out.append(cleaned)
@@ -373,7 +388,7 @@ def standardize_person(raw_input: str | None) -> StandardizedPerson:
         return StandardizedPerson(raw_input="")
 
     cleaned_raw = str(raw_input).strip()
-    if not cleaned_raw:
+    if not cleaned_raw or re.match(r"^\d+\s+", cleaned_raw):
         return StandardizedPerson(raw_input=str(raw_input))
 
     actions: list[str] = []
@@ -435,7 +450,7 @@ def standardize_person(raw_input: str | None) -> StandardizedPerson:
     last_name: str | None = None
 
     if len(core_segments) >= 2:
-        # "Last, First [Middle]" (or "Smith, Jr., Robert J.") inversion
+        # "Last, First [Middle]" (or "Smith, Jr., Robert J." or "Smith Jr., Robert J.") inversion
         last_toks = list(core_segments[0])
         given_toks: list[str] = []
         for seg_toks in core_segments[1:]:
@@ -445,20 +460,27 @@ def standardize_person(raw_input: str | None) -> StandardizedPerson:
             salutation = _SALUTATIONS[last_toks.pop(0)]
             actions.append("SALUTATION_EXTRACTED")
 
+        while len(last_toks) > 1 and last_toks[-1] in _GENERATIONAL_SUFFIXES:
+            generational_suffix = _GENERATIONAL_SUFFIXES[last_toks.pop()]
+            actions.append("GENERATIONAL_SUFFIX_EXTRACTED")
+
         while given_toks[0] in _SALUTATIONS and len(given_toks) > 1:
             salutation = _SALUTATIONS[given_toks.pop(0)]
             actions.append("SALUTATION_EXTRACTED")
 
+        given_trailing_creds: list[str] = []
         while len(given_toks) > 1 and (
             given_toks[-1] in _CREDENTIALS or given_toks[-1] in _GENERATIONAL_SUFFIXES
         ):
             tail = given_toks.pop()
             if tail in _CREDENTIALS:
-                credentials.append(_CREDENTIALS[tail])
-                actions.append("CREDENTIALS_EXTRACTED")
+                given_trailing_creds.insert(0, _CREDENTIALS[tail])
             else:
                 generational_suffix = _GENERATIONAL_SUFFIXES[tail]
                 actions.append("GENERATIONAL_SUFFIX_EXTRACTED")
+        if given_trailing_creds:
+            credentials.extend(given_trailing_creds)
+            actions.append("CREDENTIALS_EXTRACTED")
 
         last_name = " ".join(last_toks)
         first_name = given_toks[0]
@@ -595,7 +617,6 @@ def _classify_department(norm_title: str, tokens: set[str]) -> str:
             "ENGINEER",
             "ENGINEERING",
             "DEVELOPER",
-            "DEVELOPMENT",
             "DATA",
             "INFORMATION",
             "SECURITY",
@@ -725,8 +746,13 @@ def standardize_job_title(raw_input: str | None) -> StandardizedJobTitle:
     if not cleaned_raw:
         return StandardizedJobTitle(raw_input=str(raw_input))
 
+    from entity_standardizer.company import _DOTTED_INITIALISM_RE
+
     actions: list[str] = []
     working = re.sub(r"&", " AND ", cleaned_raw)
+    working = _DOTTED_INITIALISM_RE.sub(
+        lambda m: f" {re.sub(r'[^A-Za-z]', '', m.group(0)).upper()} ", working
+    )
     working = re.sub(r"[^\w\s\-]", " ", working)
     raw_tokens = [t.upper().strip("-") for t in working.split() if t.strip("-")]
     if not raw_tokens:
