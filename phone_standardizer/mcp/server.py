@@ -1,4 +1,4 @@
-"""JSON-RPC 2.0 Model Context Protocol (MCP) stdio handler for Phone Standardizer."""
+"""JSON-RPC 2.0 Model Context Protocol (MCP) stdio handler for Entity & Phone Standardizer."""
 
 from __future__ import annotations
 
@@ -7,6 +7,9 @@ import sys
 from typing import Any
 
 from address_standardizer.standardizer import standardize_address
+from entity_standardizer.company import standardize_company
+from entity_standardizer.person import standardize_person
+from entity_standardizer.web import standardize_email, standardize_social, standardize_url
 from phone_standardizer.audit import explain_phone
 from phone_standardizer.dedup import compare_phones, deduplicate_phones
 from phone_standardizer.joint import standardize_contact
@@ -111,8 +114,65 @@ MCP_TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "standardize_company",
+        "description": "Standardize an organization or company name (ISO 20275 legal suffixes, DBA/FKA, branch unit, and keys).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+                "country": {"type": "string"},
+            },
+            "required": ["name"],
+        },
+    },
+    {
+        "name": "standardize_person",
+        "description": "Parse and standardize a person full name (salutation, nickname, Last-First un-inversion, root name, credentials).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string"},
+            },
+            "required": ["name"],
+        },
+    },
+    {
+        "name": "standardize_email",
+        "description": "Standardize an email address (RFC 5321/5322, IDNA, subaddress, Gmail dot canonicalization, domain typo healing).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "email": {"type": "string"},
+            },
+            "required": ["email"],
+        },
+    },
+    {
+        "name": "standardize_url",
+        "description": "Standardize a website URL (HTTPS upgrade, www/tracking parameter removal, eTLD+1 registrable domain).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string"},
+            },
+            "required": ["url"],
+        },
+    },
+    {
+        "name": "standardize_social",
+        "description": "Standardize a social profile URL or @handle (LinkedIn, X/Twitter, GitHub, Instagram, Facebook, YouTube).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "profile": {"type": "string"},
+                "platform": {"type": "string"},
+            },
+            "required": ["profile"],
+        },
+    },
+    {
         "name": "standardize_contact",
-        "description": "Jointly standardize an entity's physical address and telephone number with bidirectional cross-healing.",
+        "description": "Jointly standardize an entity's address, phone, organization, person, title, and web pillars with cross-healing.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -124,6 +184,12 @@ MCP_TOOLS: list[dict[str, Any]] = [
                 "country": {"type": "string"},
                 "phone": {"type": "string"},
                 "fax": {"type": "string"},
+                "organization": {"type": "string"},
+                "person_name": {"type": "string"},
+                "job_title": {"type": "string"},
+                "email": {"type": "string"},
+                "website": {"type": "string"},
+                "social": {"type": "string"},
                 "default_country": {"type": "string", "default": "US"},
             },
         },
@@ -244,6 +310,41 @@ def handle_mcp_request(request: dict[str, Any]) -> dict[str, Any]:
                 "id": req_id,
                 "result": {"content": [{"type": "text", "text": json.dumps(addr_res.as_dict())}]},
             }
+        if tool_name == "standardize_company":
+            comp_res = standardize_company(args.get("name"), country=args.get("country"))
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {"content": [{"type": "text", "text": json.dumps(comp_res.to_dict())}]},
+            }
+        if tool_name == "standardize_person":
+            per_res = standardize_person(args.get("name"))
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {"content": [{"type": "text", "text": json.dumps(per_res.to_dict())}]},
+            }
+        if tool_name == "standardize_email":
+            email_res = standardize_email(args.get("email"))
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {"content": [{"type": "text", "text": json.dumps(email_res.to_dict())}]},
+            }
+        if tool_name == "standardize_url":
+            url_res = standardize_url(args.get("url"))
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {"content": [{"type": "text", "text": json.dumps(url_res.to_dict())}]},
+            }
+        if tool_name == "standardize_social":
+            soc_res = standardize_social(args.get("profile"), platform=args.get("platform"))
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {"content": [{"type": "text", "text": json.dumps(soc_res.to_dict())}]},
+            }
         if tool_name == "standardize_contact":
             contact_res = standardize_contact(
                 street1=args.get("street1"),
@@ -254,6 +355,12 @@ def handle_mcp_request(request: dict[str, Any]) -> dict[str, Any]:
                 country=args.get("country"),
                 phone=args.get("phone"),
                 fax=args.get("fax"),
+                organization=args.get("organization"),
+                person_name=args.get("person_name"),
+                job_title=args.get("job_title"),
+                email=args.get("email"),
+                website=args.get("website"),
+                social=args.get("social"),
                 default_country=args.get("default_country", "US"),
             )
             return {

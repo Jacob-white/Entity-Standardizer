@@ -25,21 +25,24 @@ A unified, high-performance multi-national **Entity, Address, and Telephone Stan
 ## 🌟 Highlights & Enterprise Capabilities
 
 1. **Unified Package Namespace (`entity_standardizer`, `address_standardizer`, `phone_standardizer`)**:
-   - Import everything from `entity_standardizer` (`standardize_contact`, `standardize_entity`, `standardize_address`, `standardize_phone`, `cluster_contact_records`) while preserving 100% backward compatibility for `import address_standardizer` and `import phone_standardizer`.
-2. **Bidirectional Address ↔ Phone Cross-Healing (`standardize_contact` / `standardize_entity`)**:
-   - **Phone Rescue from Address Lines** (`PHONE_RESCUED_FROM_ADDRESS_FIELD`): Extracts misplaced telephone numbers from `street1` or `street2` (`"350 Fifth Ave Tel: (212) 555-2368"`) before address standardization.
-   - **Address Country Inference from Phone** (`ADDRESS_COUNTRY_INFERRED_FROM_PHONE`): Uses international E.164 calling codes (`+44`, `+33`, `+81`) to disambiguate international addresses when country is omitted.
-   - **US ZIP/State Mismatch Healing from Phone NPA** (`ADDRESS_ZIP_STATE_HEALED_FROM_PHONE_NPA`): Resolves conflicting US state vs. ZIP5 pairs when the phone's NANP area code confirms the true state.
-   - **7-Digit Local & Domestic Phone Healing from Standardized Address** (`PHONE_HEALED_FROM_STANDARDIZED_ADDRESS`): Uses the standardized address's inferred state/country to heal 7-digit US local numbers and domestic international numbers.
-3. **USPS Publication 28, UPU S42 & Spatial Rooftop Address Standardization**:
+   - Import everything from `entity_standardizer` (`standardize_contact`, `standardize_entity`, `standardize_address`, `standardize_phone`, `standardize_company`, `standardize_person`, `standardize_job_title`, `standardize_email`, `standardize_url`, `standardize_social`, `cluster_contact_records`) while preserving 100% backward compatibility for `import address_standardizer` and `import phone_standardizer`.
+2. **Multi-Pillar Entity Cross-Healing (`standardize_contact` / `standardize_entity`)**:
+   - **Phone, Email & URL Rescue from Misplaced Fields** (`PHONE_RESCUED_FROM_ADDRESS_FIELD`, `EMAIL_RESCUED_FROM_FIELD`, `URL_RESCUED_FROM_FIELD`): Extracts misplaced phones, emails, and URLs from address, organization, or person fields before standardization.
+   - **Person Rescue & Domain-to-Organization Attribution** (`PERSON_RESCUED_FROM_EMAIL_OR_CARE_OF`, `ORGANIZATION_INFERRED_FROM_DOMAIN`, `EMAIL_WEBSITE_DOMAIN_MATCH` / `MISMATCH`): Infers missing person names from `C/O` lines or email display names/local parts and attributes corporate domains to organization brand stems.
+   - **Cross-Pillar Country & State Healing** (`COUNTRY_INFERRED_FROM_ENTITY_PILLARS`, `ADDRESS_COUNTRY_INFERRED_FROM_PHONE`, `ADDRESS_ZIP_STATE_HEALED_FROM_PHONE_NPA`, `PHONE_HEALED_FROM_STANDARDIZED_ADDRESS`): Uses unambiguous ISO 20275 legal suffixes (`GmbH` $\to$ `DE`, `PLC` $\to$ `GB`, `Pty Ltd` $\to$ `AU`), ccTLD domains, E.164 calling codes, and NANP area codes to mutually heal addresses and telephone numbers.
+3. **Organization, Person, Job Title, Email, URL & Social Standardization**:
+   - **Company/Organization** (`standardize_company`): ISO 20275 ELF legal suffix canonicalization, DBA/FKA/branch extraction, `&` $\leftrightarrow$ `AND` and initialism normalization (`I. B. M.` $\to$ `IBM`), and deterministic `company_key` / `brand_key`.
+   - **Person & Job Title** (`standardize_person`, `standardize_job_title`): Salutation, nickname, compound surname, suffix, and credential (`PhD`, `MD`, `JD`, `CPA`) parsing, `Last, First` un-inversion, nickname-to-root resolution (`Bob` $\to$ `ROBERT` for `person_root_key`), and title seniority/department classification.
+   - **Email, Website & Social** (`standardize_email`, `standardize_url`, `standardize_social`): RFC 5321/5322 normalization, IDNA/Punycode, `+subaddress` and Gmail dot canonicalization, webmail typo healing (`gmial.com` $\to$ `gmail.com`), URL tracking parameter removal (`utm_*`, `fbclid`, `gclid`), eTLD+1 domain extraction, and canonical social handles (`LINKEDIN`, `X`, `GITHUB`, `INSTAGRAM`, `FACEBOOK`, `YOUTUBE`).
+4. **USPS Publication 28, UPU S42 & Spatial Rooftop Address Standardization**:
    - Deterministic street suffix/directional/secondary unit normalization, typo recovery, DPV/RDI/CMRA delivery intelligence, registered-agent corporate hub detection, H3 spatial indexing, and deterministic `normalized_address_key`, `building_key`, and `phonetic_key` generation.
-4. **Universal 249 ISO-3166-1 Country & ITU-T Dial-Plan Registry**:
+5. **Universal 249 ISO-3166-1 Country & ITU-T Dial-Plan Registry**:
    - Deterministic dial-plan metadata (`CountryDialPlan`) for every ISO-3166-1 jurisdiction, producing **ITU-T E.164**, **ITU-T E.123 National**, **ITU-T E.123 International**, and **IETF RFC 3966 URI** formats alongside NANP 25-country / 50-state attribution.
-5. **Trunk, Legacy Mobile Prefix & ITU-T E.161 Vanity Healer**:
+6. **Trunk, Legacy Mobile Prefix & ITU-T E.161 Vanity Healer**:
    - Strips redundant `(0)` or leading `0` trunk prefixes, heals Mexican `+52 1` and Argentine `15` $\to$ `+54 9` mobile prefixes, folds Unicode digits, decodes vanity numbers (`1-800-FLOWERS`), and separates extensions.
-6. **Fraud, IRSF & Synthetic Range Guardrails**:
+7. **Fraud, IRSF & Synthetic Range Guardrails**:
    - Detects fictitious ranges (`555-0100`..`0199`, UK Ofcom TV numbers), repeating/sequential bogus digits, premium-rate IRSF risk (`PREMIUM_RATE_IRSF_RISK`), and cross-border address/phone mismatches (`ADDRESS_COUNTRY_MISMATCH`).
-7. **Entity Resolution & Multi-Platform Ecosystem**:
+8. **Entity Resolution & Multi-Platform Ecosystem**:
    - Clusters noisy contact records (`cluster_contact_records`, `compare_phones`, `deduplicate_phones`), provides `mask_phone()` privacy redaction, lazy-loaded Apache Arrow / Polars / DuckDB vectorized UDFs, and parity-tested TypeScript/React, Go, and .NET SDKs.
 
 ---
@@ -49,22 +52,33 @@ A unified, high-performance multi-national **Entity, Address, and Telephone Stan
 ```python
 from entity_standardizer import (
     standardize_address,
+    standardize_company,
     standardize_contact,
+    standardize_email,
+    standardize_person,
     standardize_phone,
+    standardize_url,
     mask_phone,
 )
 
-# 1. Joint Contact Standardization & Bidirectional Cross-Healing
+# 1. Joint Multi-Pillar Contact Standardization & Cross-Healing
 contact = standardize_contact(
     street1="350 Fifth Ave Tel: 555-2368",
     city="New York",
     postal_code="10118",
+    organization="The Acme Holdings, Inc. (DBA Acme Cloud)",
+    person_name="Smith, Jr., Dr. Bob J., MD",
+    job_title="SVP of Eng",
+    email="Bob.Smith+crm@gmial.com",
+    website="http://www.acme.com/?utm_source=linkedin",
 )
 assert contact.address.street1 == "350 5TH AVE"
-assert contact.address.state == "NY"
 assert contact.phone.e164 == "+12125552368"
-assert "PHONE_RESCUED_FROM_ADDRESS_FIELD" in contact.cross_healing_actions
-assert "PHONE_HEALED_FROM_STANDARDIZED_ADDRESS" in contact.cross_healing_actions
+assert contact.organization.company_key == "ACME HOLDINGS|INC"
+assert contact.person.person_root_key == "SMITH|ROBERT"
+assert contact.job_title.department == "ENGINEERING"
+assert contact.email.email == "bobsmith@gmail.com"
+assert contact.website.domain == "acme.com"
 
 # 2. Standalone Address Standardization (USPS Pub 28 / UPU S42)
 addr = standardize_address("1600 Pennsylvania Ave NW", city="Washington", state="DC", postal_code="20500")
@@ -90,8 +104,16 @@ assert mask_phone("+1 (415) 555-2671", strategy="partial") == "+1******2671"
 ## 💻 Command Line Interface (CLI), FastAPI Microservice & MCP Tools
 
 ```bash
-# Joint contact standardization (Address + Phone cross-healing)
-entity-standardizer contact --street1 "350 Fifth Ave" --city "New York" --postal-code "10118" --phone "555-2368"
+# Joint multi-pillar contact standardization
+entity-standardizer contact --street1 "350 Fifth Ave" --city "New York" --postal-code "10118" --phone "555-2368" --organization "The Acme Inc." --person "Smith, Bob" --email "bob@acme.com"
+
+# Standardize organization, person, job title, email, URL, or social profile
+entity-standardizer company "The I. B. M. Corporation (d/b/a IBM)"
+entity-standardizer person "Dr. Robert (Bob) J. Smith, Jr., MD"
+entity-standardizer title "SVP of Engineering"
+entity-standardizer email "Jane.Doe+tag@gmial.com"
+entity-standardizer url "http://www.acme.co.uk/?utm_source=newsletter"
+entity-standardizer social "@openai" --platform X
 
 # Standardize a physical address
 entity-standardizer address "350 Fifth Ave" --city "New York" --state "NY" --postal-code "10118"
@@ -105,10 +127,10 @@ entity-standardizer country JP
 # Stream-process a CSV file
 entity-standardizer batch input.csv output.csv --phone-col phone --country-col country
 
-# Run the FastAPI HTTP service (/v1/standardize, /v1/address, /v1/contact, /v1/compare, /v1/deduplicate, /v1/batch)
+# Run the FastAPI HTTP service (/v1/standardize, /v1/address, /v1/company, /v1/person, /v1/email, /v1/url, /v1/social, /v1/contact, ...)
 uvicorn phone_standardizer.server:app --host 0.0.0.0 --port 8000
 
-# Run the Model Context Protocol (MCP) server (standardize_phone, standardize_address, standardize_contact, ...)
+# Run the Model Context Protocol (MCP) server (13 tools across phone, address, company, person, email, url, social, contact)
 entity-standardizer-mcp
 ```
 

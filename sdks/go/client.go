@@ -139,7 +139,52 @@ func (c *Client) StandardizeAddress(ctx context.Context, req AddressStandardizeR
 	return &out, nil
 }
 
-// StandardizeContact performs bidirectional Phone + Address cross-healing via POST /v1/contact.
+// StandardizeCompany standardizes an organization or company name via POST /v1/company.
+func (c *Client) StandardizeCompany(ctx context.Context, req CompanyStandardizeRequest) (*StandardizedCompany, error) {
+	var out StandardizedCompany
+	if err := c.postJSON(ctx, "/v1/company", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// StandardizePerson standardizes a person full name via POST /v1/person.
+func (c *Client) StandardizePerson(ctx context.Context, req PersonStandardizeRequest) (*StandardizedPerson, error) {
+	var out StandardizedPerson
+	if err := c.postJSON(ctx, "/v1/person", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// StandardizeEmail standardizes an email address via POST /v1/email.
+func (c *Client) StandardizeEmail(ctx context.Context, req EmailStandardizeRequest) (*StandardizedEmail, error) {
+	var out StandardizedEmail
+	if err := c.postJSON(ctx, "/v1/email", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// StandardizeUrl standardizes a website URL via POST /v1/url.
+func (c *Client) StandardizeUrl(ctx context.Context, req UrlStandardizeRequest) (*StandardizedUrl, error) {
+	var out StandardizedUrl
+	if err := c.postJSON(ctx, "/v1/url", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// StandardizeSocial standardizes a social profile URL or @handle via POST /v1/social.
+func (c *Client) StandardizeSocial(ctx context.Context, req SocialStandardizeRequest) (*StandardizedSocial, error) {
+	var out StandardizedSocial
+	if err := c.postJSON(ctx, "/v1/social", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// StandardizeContact performs multi-pillar entity cross-healing via POST /v1/contact.
 func (c *Client) StandardizeContact(ctx context.Context, req ContactStandardizeRequest) (*StandardizedContact, error) {
 	var out StandardizedContact
 	if err := c.postJSON(ctx, "/v1/contact", req, &out); err != nil {
@@ -147,4 +192,3 @@ func (c *Client) StandardizeContact(ctx context.Context, req ContactStandardizeR
 	}
 	return &out, nil
 }
-

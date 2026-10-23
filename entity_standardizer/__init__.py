@@ -1,4 +1,4 @@
-"""Entity Standardizer: Unified Address + Phone Standardization & Cross-Healing Engine."""
+"""Entity Standardizer: Unified Multi-Pillar Address, Phone, Company, Person & Web Standardization Engine."""
 
 from __future__ import annotations
 
@@ -15,18 +15,13 @@ from address_standardizer import (
 )
 from phone_standardizer import (
     ContactCluster,
-    CrossHealingAction,
     HealingAction,
     PhoneCluster,
     PhoneComparisonResult,
     PhoneLineType,
     PhoneRiskFlag,
     PhoneRoutingTier,
-    StandardizedContact,
-    StandardizedEntity,
     StandardizedPhone,
-    batch_standardize_contacts,
-    batch_standardize_entities,
     batch_standardize_phones,
     cluster_contact_records,
     compare_phones,
@@ -39,10 +34,39 @@ from phone_standardizer import (
     get_engine_info,
     is_native_available,
     mask_phone,
-    standardize_contact,
-    standardize_entity,
     standardize_phone,
     validate_phone,
+)
+from phone_standardizer.joint import (
+    CrossHealingAction,
+    StandardizedContact,
+    StandardizedEntity,
+    batch_standardize_contacts,
+    batch_standardize_entities,
+    standardize_contact,
+    standardize_entity,
+)
+from entity_standardizer.company import (
+    StandardizedCompany,
+    StandardizedOrganization,
+    standardize_company,
+    standardize_organization,
+)
+from entity_standardizer.person import (
+    StandardizedJobTitle,
+    StandardizedPerson,
+    standardize_job_title,
+    standardize_person,
+)
+from entity_standardizer.web import (
+    StandardizedEmail,
+    StandardizedSocial,
+    StandardizedUrl,
+    StandardizedWebsite,
+    standardize_email,
+    standardize_social,
+    standardize_url,
+    standardize_website,
 )
 
 __version__ = "2.0.0"
@@ -58,9 +82,17 @@ __all__ = [
     "PhoneRiskFlag",
     "PhoneRoutingTier",
     "StandardizedAddress",
+    "StandardizedCompany",
     "StandardizedContact",
+    "StandardizedEmail",
     "StandardizedEntity",
+    "StandardizedJobTitle",
+    "StandardizedOrganization",
+    "StandardizedPerson",
     "StandardizedPhone",
+    "StandardizedSocial",
+    "StandardizedUrl",
+    "StandardizedWebsite",
     "__version__",
     "autocomplete_address",
     "batch_standardize",
@@ -82,9 +114,17 @@ __all__ = [
     "is_native_available",
     "mask_phone",
     "standardize_address",
+    "standardize_company",
     "standardize_contact",
+    "standardize_email",
     "standardize_entity",
+    "standardize_job_title",
+    "standardize_organization",
+    "standardize_person",
     "standardize_phone",
+    "standardize_social",
+    "standardize_url",
+    "standardize_website",
     "validate_address",
     "validate_phone",
 ]

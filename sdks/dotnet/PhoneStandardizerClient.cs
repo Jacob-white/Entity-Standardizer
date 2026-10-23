@@ -80,6 +80,41 @@ public sealed class PhoneStandardizerClient
         return await PostJsonAsync<AddressStandardizeRequest, StandardizedAddress>("/v1/address", request, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<StandardizedCompany?> StandardizeCompanyAsync(
+        CompanyStandardizeRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        return await PostJsonAsync<CompanyStandardizeRequest, StandardizedCompany>("/v1/company", request, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<StandardizedPerson?> StandardizePersonAsync(
+        PersonStandardizeRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        return await PostJsonAsync<PersonStandardizeRequest, StandardizedPerson>("/v1/person", request, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<StandardizedEmail?> StandardizeEmailAsync(
+        EmailStandardizeRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        return await PostJsonAsync<EmailStandardizeRequest, StandardizedEmail>("/v1/email", request, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<StandardizedUrl?> StandardizeUrlAsync(
+        UrlStandardizeRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        return await PostJsonAsync<UrlStandardizeRequest, StandardizedUrl>("/v1/url", request, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<StandardizedSocial?> StandardizeSocialAsync(
+        SocialStandardizeRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        return await PostJsonAsync<SocialStandardizeRequest, StandardizedSocial>("/v1/social", request, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<StandardizedContact?> StandardizeContactAsync(
         ContactStandardizeRequest request,
         CancellationToken cancellationToken = default)
@@ -100,4 +135,3 @@ public sealed class PhoneStandardizerClient
         return JsonSerializer.Deserialize<TResponse>(body);
     }
 }
-

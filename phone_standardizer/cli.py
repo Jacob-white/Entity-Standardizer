@@ -1,4 +1,4 @@
-"""Command Line Interface (CLI) for Phone Standardizer."""
+"""Command Line Interface (CLI) for Entity & Phone Standardizer."""
 
 from __future__ import annotations
 
@@ -8,6 +8,9 @@ import sys
 from typing import Sequence
 
 from address_standardizer.standardizer import standardize_address
+from entity_standardizer.company import standardize_company
+from entity_standardizer.person import standardize_job_title, standardize_person
+from entity_standardizer.web import standardize_email, standardize_social, standardize_url
 from phone_standardizer.batch import stream_standardize_csv
 from phone_standardizer.dedup import compare_phones, deduplicate_phones
 from phone_standardizer.joint import standardize_contact
@@ -19,7 +22,7 @@ def build_parser() -> argparse.ArgumentParser:
     """Construct the CLI argument parser."""
     parser = argparse.ArgumentParser(
         prog="phone-standardizer",
-        description="Universal multi-national phone number standardization, validation, and formatting CLI.",
+        description="Universal multi-national entity, address, phone, company, person, and web standardization CLI.",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
@@ -63,10 +66,36 @@ def build_parser() -> argparse.ArgumentParser:
     addr_cmd.add_argument("--postal-code", default=None, help="ZIP or postal code.")
     addr_cmd.add_argument("-c", "--country", default="US", help="ISO country code or name (default: US).")
 
+    # company command
+    company_cmd = sub.add_parser("company", help="Standardize an organization or company name and output JSON.")
+    company_cmd.add_argument("name", help="Raw organization or company name.")
+    company_cmd.add_argument("-c", "--country", default=None, help="Optional ISO country hint.")
+
+    # person command
+    person_cmd = sub.add_parser("person", help="Standardize a person full name and output JSON.")
+    person_cmd.add_argument("name", help="Raw person full name.")
+
+    # title command
+    title_cmd = sub.add_parser("title", help="Standardize a job title and classify seniority and department.")
+    title_cmd.add_argument("title", help="Raw job title string.")
+
+    # email command
+    email_cmd = sub.add_parser("email", help="Standardize an email address and output JSON.")
+    email_cmd.add_argument("email", help="Raw email address string.")
+
+    # url command
+    url_cmd = sub.add_parser("url", help="Standardize a website URL and extract registrable domain.")
+    url_cmd.add_argument("url", help="Raw website URL string.")
+
+    # social command
+    social_cmd = sub.add_parser("social", help="Standardize a social profile URL or @handle.")
+    social_cmd.add_argument("profile", help="Raw social URL or @handle string.")
+    social_cmd.add_argument("-p", "--platform", default=None, help="Optional social platform hint.")
+
     # contact command
     contact_cmd = sub.add_parser(
         "contact",
-        help="Jointly standardize an entity's address and phone number with bidirectional cross-healing.",
+        help="Jointly standardize an entity's address, phone, company, person, title, and web pillars.",
     )
     contact_cmd.add_argument("--street1", default=None, help="Primary street address line.")
     contact_cmd.add_argument("--street2", default=None, help="Secondary unit/suite line.")
@@ -76,6 +105,12 @@ def build_parser() -> argparse.ArgumentParser:
     contact_cmd.add_argument("-c", "--country", default=None, help="Optional ISO country hint.")
     contact_cmd.add_argument("--phone", default=None, help="Raw telephone number.")
     contact_cmd.add_argument("--fax", default=None, help="Raw fax number.")
+    contact_cmd.add_argument("--organization", default=None, help="Raw company or organization name.")
+    contact_cmd.add_argument("--person-name", default=None, help="Raw contact person full name.")
+    contact_cmd.add_argument("--job-title", default=None, help="Raw contact job title.")
+    contact_cmd.add_argument("--email", default=None, help="Raw contact email address.")
+    contact_cmd.add_argument("--website", default=None, help="Raw contact website URL.")
+    contact_cmd.add_argument("--social", default=None, help="Raw contact social URL or @handle.")
     contact_cmd.add_argument("-d", "--default-country", default="US", help="Fallback ISO country (default: US).")
 
     return parser
@@ -135,6 +170,36 @@ def main(argv: Sequence[str] | None = None) -> int:
         sys.stdout.write(json.dumps(addr_res.as_dict(), indent=2) + "\n")
         return 0
 
+    if args.command == "company":
+        comp_res = standardize_company(args.name, country=args.country)
+        sys.stdout.write(json.dumps(comp_res.to_dict(), indent=2) + "\n")
+        return 0
+
+    if args.command == "person":
+        per_res = standardize_person(args.name)
+        sys.stdout.write(json.dumps(per_res.to_dict(), indent=2) + "\n")
+        return 0
+
+    if args.command == "title":
+        title_res = standardize_job_title(args.title)
+        sys.stdout.write(json.dumps(title_res.to_dict(), indent=2) + "\n")
+        return 0
+
+    if args.command == "email":
+        email_res = standardize_email(args.email)
+        sys.stdout.write(json.dumps(email_res.to_dict(), indent=2) + "\n")
+        return 0
+
+    if args.command == "url":
+        url_res = standardize_url(args.url)
+        sys.stdout.write(json.dumps(url_res.to_dict(), indent=2) + "\n")
+        return 0
+
+    if args.command == "social":
+        soc_res = standardize_social(args.profile, platform=args.platform)
+        sys.stdout.write(json.dumps(soc_res.to_dict(), indent=2) + "\n")
+        return 0
+
     if args.command == "contact":
         contact_res = standardize_contact(
             street1=args.street1,
@@ -145,6 +210,12 @@ def main(argv: Sequence[str] | None = None) -> int:
             country=args.country,
             phone=args.phone,
             fax=args.fax,
+            organization=args.organization,
+            person_name=args.person_name,
+            job_title=args.job_title,
+            email=args.email,
+            website=args.website,
+            social=args.social,
             default_country=args.default_country,
         )
         sys.stdout.write(json.dumps(contact_res.to_dict(), indent=2) + "\n")

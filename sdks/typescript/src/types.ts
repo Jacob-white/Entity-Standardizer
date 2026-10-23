@@ -1,5 +1,5 @@
 /**
- * Public TypeScript interfaces for Phone Standardizer Client & React SDK.
+ * Public TypeScript interfaces for Entity & Phone Standardizer Client & React SDK.
  */
 
 export type PhoneLineType =
@@ -53,6 +53,28 @@ export interface AddressStandardizeRequest {
   country?: string;
 }
 
+export interface CompanyStandardizeRequest {
+  name: string;
+  country?: string | null;
+}
+
+export interface PersonStandardizeRequest {
+  name: string;
+}
+
+export interface EmailStandardizeRequest {
+  email: string;
+}
+
+export interface UrlStandardizeRequest {
+  url: string;
+}
+
+export interface SocialStandardizeRequest {
+  profile: string;
+  platform?: string | null;
+}
+
 export interface ContactStandardizeRequest {
   street1?: string | null;
   street2?: string | null;
@@ -62,6 +84,12 @@ export interface ContactStandardizeRequest {
   country?: string | null;
   phone?: string | null;
   fax?: string | null;
+  organization?: string | null;
+  person_name?: string | null;
+  job_title?: string | null;
+  email?: string | null;
+  website?: string | null;
+  social?: string | null;
   default_country?: string;
 }
 
@@ -82,10 +110,111 @@ export interface StandardizedAddress {
   is_registered_agent_hub: boolean;
 }
 
+export interface StandardizedCompany {
+  raw_input: string;
+  legal_name: string | null;
+  base_name: string | null;
+  brand_stem: string | null;
+  legal_suffix: string | null;
+  dba_name: string | null;
+  fka_name: string | null;
+  branch_unit: string | null;
+  inferred_country_iso2: string | null;
+  company_key: string | null;
+  brand_key: string | null;
+  phonetic_key: string | null;
+  is_valid: boolean;
+  confidence: number;
+  healing_actions: string[];
+}
+
+export interface StandardizedPerson {
+  raw_input: string;
+  salutation: string | null;
+  first_name: string | null;
+  root_first_name: string | null;
+  middle_name: string | null;
+  last_name: string | null;
+  nickname: string | null;
+  generational_suffix: string | null;
+  credentials: string[];
+  full_name: string | null;
+  person_key: string | null;
+  person_root_key: string | null;
+  phonetic_key: string | null;
+  is_valid: boolean;
+  confidence: number;
+  healing_actions: string[];
+}
+
+export interface StandardizedJobTitle {
+  raw_input: string;
+  normalized_title: string | null;
+  seniority_level: string | null;
+  department: string | null;
+  is_valid: boolean;
+  confidence: number;
+  healing_actions: string[];
+}
+
+export interface StandardizedEmail {
+  raw_input: string;
+  email: string | null;
+  local_part: string | null;
+  raw_local_part: string | null;
+  subaddress: string | null;
+  domain: string | null;
+  display_name: string | null;
+  email_type: string | null;
+  is_free_provider: boolean;
+  is_role_account: boolean;
+  is_disposable: boolean;
+  inferred_country_iso2: string | null;
+  email_key: string | null;
+  is_valid: boolean;
+  confidence: number;
+  healing_actions: string[];
+}
+
+export interface StandardizedUrl {
+  raw_input: string;
+  url: string | null;
+  scheme: string | null;
+  host: string | null;
+  domain: string | null;
+  subdomain: string | null;
+  public_suffix: string | null;
+  brand_stem: string | null;
+  path: string | null;
+  inferred_country_iso2: string | null;
+  url_key: string | null;
+  is_valid: boolean;
+  confidence: number;
+  healing_actions: string[];
+}
+
+export interface StandardizedSocial {
+  raw_input: string;
+  platform: string | null;
+  profile_type: string | null;
+  handle: string | null;
+  url: string | null;
+  social_key: string | null;
+  is_valid: boolean;
+  confidence: number;
+  healing_actions: string[];
+}
+
 export interface StandardizedContact {
   address: StandardizedAddress;
   phone: StandardizedPhone;
   fax: StandardizedPhone | null;
+  organization: StandardizedCompany | null;
+  person: StandardizedPerson | null;
+  job_title: StandardizedJobTitle | null;
+  email: StandardizedEmail | null;
+  website: StandardizedUrl | null;
+  social: StandardizedSocial | null;
   entity_key: string | null;
   cross_healing_actions: string[];
   overall_confidence: number;

@@ -1,11 +1,14 @@
 /**
- * Typed HTTP Client & Offline As-You-Type Formatter for Phone Standardizer.
+ * Typed HTTP Client & Offline As-You-Type Formatter for Entity & Phone Standardizer.
  */
 
 import {
   AddressStandardizeRequest,
+  CompanyStandardizeRequest,
   ContactStandardizeRequest,
   CountryDialPlan,
+  EmailStandardizeRequest,
+  PersonStandardizeRequest,
   PhoneBatchRequest,
   PhoneCluster,
   PhoneCompareRequest,
@@ -13,9 +16,16 @@ import {
   PhoneDeduplicateRequest,
   PhoneExplainReport,
   PhoneStandardizeRequest,
+  SocialStandardizeRequest,
   StandardizedAddress,
+  StandardizedCompany,
   StandardizedContact,
+  StandardizedEmail,
+  StandardizedPerson,
   StandardizedPhone,
+  StandardizedSocial,
+  StandardizedUrl,
+  UrlStandardizeRequest,
 } from "./types.js";
 
 export interface ClientOptions {
@@ -206,6 +216,86 @@ export class PhoneStandardizerClient {
     return (await res.json()) as StandardizedAddress;
   }
 
+  async standardizeCompany(
+    req: CompanyStandardizeRequest,
+    options?: RequestOptions
+  ): Promise<StandardizedCompany> {
+    const res = await this.fetchImpl(`${this.baseUrl}/v1/company`, {
+      method: "POST",
+      headers: this.headers,
+      body: JSON.stringify(req),
+      signal: options?.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Standardize company failed with status ${res.status}`);
+    }
+    return (await res.json()) as StandardizedCompany;
+  }
+
+  async standardizePerson(
+    req: PersonStandardizeRequest,
+    options?: RequestOptions
+  ): Promise<StandardizedPerson> {
+    const res = await this.fetchImpl(`${this.baseUrl}/v1/person`, {
+      method: "POST",
+      headers: this.headers,
+      body: JSON.stringify(req),
+      signal: options?.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Standardize person failed with status ${res.status}`);
+    }
+    return (await res.json()) as StandardizedPerson;
+  }
+
+  async standardizeEmail(
+    req: EmailStandardizeRequest,
+    options?: RequestOptions
+  ): Promise<StandardizedEmail> {
+    const res = await this.fetchImpl(`${this.baseUrl}/v1/email`, {
+      method: "POST",
+      headers: this.headers,
+      body: JSON.stringify(req),
+      signal: options?.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Standardize email failed with status ${res.status}`);
+    }
+    return (await res.json()) as StandardizedEmail;
+  }
+
+  async standardizeUrl(
+    req: UrlStandardizeRequest,
+    options?: RequestOptions
+  ): Promise<StandardizedUrl> {
+    const res = await this.fetchImpl(`${this.baseUrl}/v1/url`, {
+      method: "POST",
+      headers: this.headers,
+      body: JSON.stringify(req),
+      signal: options?.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Standardize url failed with status ${res.status}`);
+    }
+    return (await res.json()) as StandardizedUrl;
+  }
+
+  async standardizeSocial(
+    req: SocialStandardizeRequest,
+    options?: RequestOptions
+  ): Promise<StandardizedSocial> {
+    const res = await this.fetchImpl(`${this.baseUrl}/v1/social`, {
+      method: "POST",
+      headers: this.headers,
+      body: JSON.stringify(req),
+      signal: options?.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Standardize social failed with status ${res.status}`);
+    }
+    return (await res.json()) as StandardizedSocial;
+  }
+
   async standardizeContact(
     req: ContactStandardizeRequest,
     options?: RequestOptions
@@ -222,4 +312,3 @@ export class PhoneStandardizerClient {
     return (await res.json()) as StandardizedContact;
   }
 }
-

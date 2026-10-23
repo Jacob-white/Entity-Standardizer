@@ -12,17 +12,6 @@ from phone_standardizer._native_dispatch import (
     standardize_batch_e164_dispatch,
     standardize_batch_with_country_dispatch,
 )
-from address_standardizer.models import StandardizedAddress
-from address_standardizer.standardizer import standardize_address
-from phone_standardizer.joint import (
-    CrossHealingAction,
-    StandardizedContact,
-    StandardizedEntity,
-    batch_standardize_contacts,
-    batch_standardize_entities,
-    standardize_contact,
-    standardize_entity,
-)
 from phone_standardizer.arrow import (
     register_duckdb_udfs,
     standardize_arrow,
@@ -106,6 +95,39 @@ from phone_standardizer.standardizer import (
     standardize_phone,
     validate_phone,
 )
+from address_standardizer.models import StandardizedAddress
+from address_standardizer.standardizer import standardize_address
+from phone_standardizer.joint import (
+    CrossHealingAction,
+    StandardizedContact,
+    StandardizedEntity,
+    batch_standardize_contacts,
+    batch_standardize_entities,
+    standardize_contact,
+    standardize_entity,
+)
+from entity_standardizer.company import (
+    StandardizedCompany,
+    StandardizedOrganization,
+    standardize_company,
+    standardize_organization,
+)
+from entity_standardizer.person import (
+    StandardizedJobTitle,
+    StandardizedPerson,
+    standardize_job_title,
+    standardize_person,
+)
+from entity_standardizer.web import (
+    StandardizedEmail,
+    StandardizedSocial,
+    StandardizedUrl,
+    StandardizedWebsite,
+    standardize_email,
+    standardize_social,
+    standardize_url,
+    standardize_website,
+)
 
 __version__ = "2.0.0"
 
@@ -126,9 +148,17 @@ __all__ = [
     "PhoneStewardshipLedger",
     "SQLiteCache",
     "StandardizedAddress",
+    "StandardizedCompany",
     "StandardizedContact",
+    "StandardizedEmail",
     "StandardizedEntity",
+    "StandardizedJobTitle",
+    "StandardizedOrganization",
+    "StandardizedPerson",
     "StandardizedPhone",
+    "StandardizedSocial",
+    "StandardizedUrl",
+    "StandardizedWebsite",
     "__version__",
     "are_keypad_adjacent",
     "batch_standardize_contacts",
@@ -179,10 +209,18 @@ __all__ = [
     "standardize_arrow",
     "standardize_batch_e164_dispatch",
     "standardize_batch_with_country_dispatch",
+    "standardize_company",
     "standardize_contact",
+    "standardize_email",
     "standardize_entity",
+    "standardize_job_title",
+    "standardize_organization",
+    "standardize_person",
     "standardize_phone",
     "standardize_polars",
+    "standardize_social",
+    "standardize_url",
+    "standardize_website",
     "stream_standardize_csv",
     "stream_standardize_jsonl",
     "strip_leading_label",

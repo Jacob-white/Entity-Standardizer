@@ -1,4 +1,4 @@
-"""FastAPI HTTP Microservice for Phone Standardizer."""
+"""FastAPI HTTP Microservice for Entity & Phone Standardizer."""
 
 from __future__ import annotations
 
@@ -8,6 +8,9 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from address_standardizer.standardizer import standardize_address
+from entity_standardizer.company import standardize_company
+from entity_standardizer.person import standardize_person
+from entity_standardizer.web import standardize_email, standardize_social, standardize_url
 from phone_standardizer.audit import explain_phone
 from phone_standardizer.batch import batch_standardize_phones
 from phone_standardizer.dedup import compare_phones, deduplicate_phones
@@ -59,8 +62,40 @@ class AddressStandardizeRequest(BaseModel):
     country: str = Field(default="US", description="ISO country code or name.")
 
 
+class CompanyStandardizeRequest(BaseModel):
+    """Request payload for /v1/company."""
+
+    name: str = Field(..., description="Raw organization or company name.")
+    country: str | None = Field(default=None, description="Optional ISO country hint.")
+
+
+class PersonStandardizeRequest(BaseModel):
+    """Request payload for /v1/person."""
+
+    name: str = Field(..., description="Raw person full name.")
+
+
+class EmailStandardizeRequest(BaseModel):
+    """Request payload for /v1/email."""
+
+    email: str = Field(..., description="Raw email address string.")
+
+
+class UrlStandardizeRequest(BaseModel):
+    """Request payload for /v1/url."""
+
+    url: str = Field(..., description="Raw website URL string.")
+
+
+class SocialStandardizeRequest(BaseModel):
+    """Request payload for /v1/social."""
+
+    profile: str = Field(..., description="Raw social URL or @handle string.")
+    platform: str | None = Field(default=None, description="Optional social platform hint.")
+
+
 class ContactStandardizeRequest(BaseModel):
-    """Request payload for /v1/contact (joint Phone + Address cross-healing)."""
+    """Request payload for /v1/contact (joint multi-pillar entity cross-healing)."""
 
     street1: str | None = Field(default=None, description="Primary street line.")
     street2: str | None = Field(default=None, description="Secondary unit line.")
@@ -70,6 +105,12 @@ class ContactStandardizeRequest(BaseModel):
     country: str | None = Field(default=None, description="Optional ISO country hint.")
     phone: str | None = Field(default=None, description="Raw phone number.")
     fax: str | None = Field(default=None, description="Optional raw fax number.")
+    organization: str | None = Field(default=None, description="Optional raw company or organization name.")
+    person_name: str | None = Field(default=None, description="Optional raw contact person full name.")
+    job_title: str | None = Field(default=None, description="Optional raw contact job title.")
+    email: str | None = Field(default=None, description="Optional raw contact email address.")
+    website: str | None = Field(default=None, description="Optional raw contact website URL.")
+    social: str | None = Field(default=None, description="Optional raw contact social URL or @handle.")
     default_country: str = Field(default="US", description="Fallback ISO country code.")
 
 
@@ -78,7 +119,7 @@ def create_app() -> FastAPI:
     app = FastAPI(
         title="Phone Standardizer API",
         version="2.0.0",
-        description="Universal multi-national phone standardization, ITU-T E.164/E.123 formatting, and NANP attribution service.",
+        description="Universal multi-national entity, address, phone, company, person, and web standardization service.",
     )
 
     @app.get("/health")
@@ -160,6 +201,26 @@ def create_app() -> FastAPI:
         )
         return res.as_dict()
 
+    @app.post("/v1/company")
+    def company_endpoint(req: CompanyStandardizeRequest) -> dict[str, Any]:
+        return standardize_company(req.name, country=req.country).to_dict()
+
+    @app.post("/v1/person")
+    def person_endpoint(req: PersonStandardizeRequest) -> dict[str, Any]:
+        return standardize_person(req.name).to_dict()
+
+    @app.post("/v1/email")
+    def email_endpoint(req: EmailStandardizeRequest) -> dict[str, Any]:
+        return standardize_email(req.email).to_dict()
+
+    @app.post("/v1/url")
+    def url_endpoint(req: UrlStandardizeRequest) -> dict[str, Any]:
+        return standardize_url(req.url).to_dict()
+
+    @app.post("/v1/social")
+    def social_endpoint(req: SocialStandardizeRequest) -> dict[str, Any]:
+        return standardize_social(req.profile, platform=req.platform).to_dict()
+
     @app.post("/v1/contact")
     def contact_endpoint(req: ContactStandardizeRequest) -> dict[str, Any]:
         res = standardize_contact(
@@ -171,6 +232,12 @@ def create_app() -> FastAPI:
             country=req.country,
             phone=req.phone,
             fax=req.fax,
+            organization=req.organization,
+            person_name=req.person_name,
+            job_title=req.job_title,
+            email=req.email,
+            website=req.website,
+            social=req.social,
             default_country=req.default_country,
         )
         return res.to_dict()

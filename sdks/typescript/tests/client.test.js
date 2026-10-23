@@ -174,6 +174,116 @@ test("PhoneStandardizerClient and PhoneInputController interact with API", async
         }),
       };
     }
+    if (u.endsWith("/v1/company")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          raw_input: "Acme Holdings, Inc.",
+          legal_name: "ACME HOLDINGS INC",
+          base_name: "ACME HOLDINGS",
+          brand_stem: "ACME",
+          legal_suffix: "INC",
+          dba_name: null,
+          fka_name: null,
+          branch_unit: null,
+          inferred_country_iso2: null,
+          company_key: "ACME HOLDINGS|INC",
+          brand_key: "ACME",
+          phonetic_key: "A250|H435",
+          is_valid: true,
+          confidence: 0.98,
+          healing_actions: ["LEGAL_SUFFIX_NORMALIZED"],
+        }),
+      };
+    }
+    if (u.endsWith("/v1/person")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          raw_input: "Dr. Bob Smith, PhD",
+          salutation: "DR",
+          first_name: "BOB",
+          root_first_name: "ROBERT",
+          middle_name: null,
+          last_name: "SMITH",
+          nickname: null,
+          generational_suffix: null,
+          credentials: ["PHD"],
+          full_name: "BOB SMITH",
+          person_key: "SMITH|BOB||",
+          person_root_key: "SMITH|ROBERT",
+          phonetic_key: "S530|R163",
+          is_valid: true,
+          confidence: 0.98,
+          healing_actions: ["CREDENTIALS_EXTRACTED", "SALUTATION_EXTRACTED", "NICKNAME_RESOLVED_TO_ROOT"],
+        }),
+      };
+    }
+    if (u.endsWith("/v1/email")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          raw_input: "jane.doe+work@gmail.com",
+          email: "janedoe@gmail.com",
+          local_part: "janedoe",
+          raw_local_part: "jane.doe+work",
+          subaddress: "work",
+          domain: "gmail.com",
+          display_name: null,
+          email_type: "FREE_WEBMAIL",
+          is_free_provider: true,
+          is_role_account: false,
+          is_disposable: false,
+          inferred_country_iso2: null,
+          email_key: "janedoe@gmail.com",
+          is_valid: true,
+          confidence: 0.99,
+          healing_actions: ["SUBADDRESS_EXTRACTED", "GMAIL_DOTS_CANONICALIZED"],
+        }),
+      };
+    }
+    if (u.endsWith("/v1/url")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          raw_input: "http://www.acme.co.uk/?utm_source=x",
+          url: "https://acme.co.uk",
+          scheme: "https",
+          host: "acme.co.uk",
+          domain: "acme.co.uk",
+          subdomain: null,
+          public_suffix: "co.uk",
+          brand_stem: "ACME",
+          path: "/",
+          inferred_country_iso2: "GB",
+          url_key: "acme.co.uk",
+          is_valid: true,
+          confidence: 0.98,
+          healing_actions: ["SCHEME_UPGRADED_HTTPS", "WWW_STRIPPED", "TRACKING_PARAMS_STRIPPED"],
+        }),
+      };
+    }
+    if (u.endsWith("/v1/social")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          raw_input: "https://twitter.com/openai",
+          platform: "X",
+          profile_type: "USER",
+          handle: "openai",
+          url: "https://x.com/openai",
+          social_key: "X|openai",
+          is_valid: true,
+          confidence: 0.98,
+          healing_actions: ["TWITTER_CANONICALIZED_TO_X"],
+        }),
+      };
+    }
     if (u.endsWith("/v1/contact")) {
       return {
         ok: true,
@@ -222,6 +332,12 @@ test("PhoneStandardizerClient and PhoneInputController interact with API", async
             healing_actions: ["AREA_CODE_INFERRED_FROM_ADDRESS"],
           },
           fax: null,
+          organization: null,
+          person: null,
+          job_title: null,
+          email: null,
+          website: null,
+          social: null,
           entity_key: "350 5TH AVE|NEW YORK|NY|10118|USA||+12125552368",
           cross_healing_actions: ["PHONE_HEALED_FROM_STANDARDIZED_ADDRESS"],
           overall_confidence: 0.97,
@@ -276,6 +392,22 @@ test("PhoneStandardizerClient and PhoneInputController interact with API", async
   assert.equal(addr.street1, "350 5TH AVE");
   assert.equal(addr.is_us, true);
 
+  const comp = await client.standardizeCompany({ name: "Acme Holdings, Inc." });
+  assert.equal(comp.legal_suffix, "INC");
+  assert.equal(comp.brand_stem, "ACME");
+
+  const person = await client.standardizePerson({ name: "Dr. Bob Smith, PhD" });
+  assert.equal(person.root_first_name, "ROBERT");
+
+  const email = await client.standardizeEmail({ email: "jane.doe+work@gmail.com" });
+  assert.equal(email.email, "janedoe@gmail.com");
+
+  const urlRes = await client.standardizeUrl({ url: "http://www.acme.co.uk/?utm_source=x" });
+  assert.equal(urlRes.domain, "acme.co.uk");
+
+  const socRes = await client.standardizeSocial({ profile: "https://twitter.com/openai" });
+  assert.equal(socRes.platform, "X");
+
   const contact = await client.standardizeContact({
     street1: "350 Fifth Ave",
     city: "New York",
@@ -297,10 +429,29 @@ test("PhoneStandardizerClient and PhoneInputController interact with API", async
     /Standardize address failed with status 500/
   );
   await assert.rejects(
+    () => failingClient.standardizeCompany({ name: "Acme" }),
+    /Standardize company failed with status 500/
+  );
+  await assert.rejects(
+    () => failingClient.standardizePerson({ name: "Jane Doe" }),
+    /Standardize person failed with status 500/
+  );
+  await assert.rejects(
+    () => failingClient.standardizeEmail({ email: "jane@acme.com" }),
+    /Standardize email failed with status 500/
+  );
+  await assert.rejects(
+    () => failingClient.standardizeUrl({ url: "https://acme.com" }),
+    /Standardize url failed with status 500/
+  );
+  await assert.rejects(
+    () => failingClient.standardizeSocial({ profile: "@acme" }),
+    /Standardize social failed with status 500/
+  );
+  await assert.rejects(
     () => failingClient.standardizeContact({ street1: "350 Fifth Ave", phone: "555-2368" }),
     /Standardize contact failed with status 500/
   );
-
 
   let callbackRecord = null;
   const controller = new PhoneInputController({
@@ -394,4 +545,3 @@ test("usePhoneInput React hook and stale requestId cancellation work determinist
   assert.equal(staleResult, null);
   assert.equal(hook.controller.record.e164, "+12125550199");
 });
-

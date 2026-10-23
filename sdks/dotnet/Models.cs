@@ -327,6 +327,42 @@ public sealed class AddressStandardizeRequest
     public string Country { get; set; } = "US";
 }
 
+public sealed class CompanyStandardizeRequest
+{
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = "";
+
+    [JsonPropertyName("country")]
+    public string? Country { get; set; }
+}
+
+public sealed class PersonStandardizeRequest
+{
+    [JsonPropertyName("name")]
+    public string Name { get; set; } = "";
+}
+
+public sealed class EmailStandardizeRequest
+{
+    [JsonPropertyName("email")]
+    public string Email { get; set; } = "";
+}
+
+public sealed class UrlStandardizeRequest
+{
+    [JsonPropertyName("url")]
+    public string Url { get; set; } = "";
+}
+
+public sealed class SocialStandardizeRequest
+{
+    [JsonPropertyName("profile")]
+    public string Profile { get; set; } = "";
+
+    [JsonPropertyName("platform")]
+    public string? Platform { get; set; }
+}
+
 public sealed class ContactStandardizeRequest
 {
     [JsonPropertyName("street1")]
@@ -352,6 +388,24 @@ public sealed class ContactStandardizeRequest
 
     [JsonPropertyName("fax")]
     public string? Fax { get; set; }
+
+    [JsonPropertyName("organization")]
+    public string? Organization { get; set; }
+
+    [JsonPropertyName("person_name")]
+    public string? PersonName { get; set; }
+
+    [JsonPropertyName("job_title")]
+    public string? JobTitle { get; set; }
+
+    [JsonPropertyName("email")]
+    public string? Email { get; set; }
+
+    [JsonPropertyName("website")]
+    public string? Website { get; set; }
+
+    [JsonPropertyName("social")]
+    public string? Social { get; set; }
 
     [JsonPropertyName("default_country")]
     public string DefaultCountry { get; set; } = "US";
@@ -402,6 +456,255 @@ public sealed class StandardizedAddress
     public bool IsRegisteredAgentHub { get; set; }
 }
 
+public sealed class StandardizedCompany
+{
+    [JsonPropertyName("raw_input")]
+    public string RawInput { get; set; } = "";
+
+    [JsonPropertyName("legal_name")]
+    public string? LegalName { get; set; }
+
+    [JsonPropertyName("base_name")]
+    public string? BaseName { get; set; }
+
+    [JsonPropertyName("brand_stem")]
+    public string? BrandStem { get; set; }
+
+    [JsonPropertyName("legal_suffix")]
+    public string? LegalSuffix { get; set; }
+
+    [JsonPropertyName("dba_name")]
+    public string? DbaName { get; set; }
+
+    [JsonPropertyName("fka_name")]
+    public string? FkaName { get; set; }
+
+    [JsonPropertyName("branch_unit")]
+    public string? BranchUnit { get; set; }
+
+    [JsonPropertyName("inferred_country_iso2")]
+    public string? InferredCountryIso2 { get; set; }
+
+    [JsonPropertyName("company_key")]
+    public string? CompanyKey { get; set; }
+
+    [JsonPropertyName("brand_key")]
+    public string? BrandKey { get; set; }
+
+    [JsonPropertyName("phonetic_key")]
+    public string? PhoneticKey { get; set; }
+
+    [JsonPropertyName("is_valid")]
+    public bool IsValid { get; set; }
+
+    [JsonPropertyName("confidence")]
+    public double Confidence { get; set; }
+
+    [JsonPropertyName("healing_actions")]
+    public List<string> HealingActions { get; set; } = new();
+}
+
+public sealed class StandardizedPerson
+{
+    [JsonPropertyName("raw_input")]
+    public string RawInput { get; set; } = "";
+
+    [JsonPropertyName("salutation")]
+    public string? Salutation { get; set; }
+
+    [JsonPropertyName("first_name")]
+    public string? FirstName { get; set; }
+
+    [JsonPropertyName("root_first_name")]
+    public string? RootFirstName { get; set; }
+
+    [JsonPropertyName("middle_name")]
+    public string? MiddleName { get; set; }
+
+    [JsonPropertyName("last_name")]
+    public string? LastName { get; set; }
+
+    [JsonPropertyName("nickname")]
+    public string? Nickname { get; set; }
+
+    [JsonPropertyName("generational_suffix")]
+    public string? GenerationalSuffix { get; set; }
+
+    [JsonPropertyName("credentials")]
+    public List<string> Credentials { get; set; } = new();
+
+    [JsonPropertyName("full_name")]
+    public string? FullName { get; set; }
+
+    [JsonPropertyName("person_key")]
+    public string? PersonKey { get; set; }
+
+    [JsonPropertyName("person_root_key")]
+    public string? PersonRootKey { get; set; }
+
+    [JsonPropertyName("phonetic_key")]
+    public string? PhoneticKey { get; set; }
+
+    [JsonPropertyName("is_valid")]
+    public bool IsValid { get; set; }
+
+    [JsonPropertyName("confidence")]
+    public double Confidence { get; set; }
+
+    [JsonPropertyName("healing_actions")]
+    public List<string> HealingActions { get; set; } = new();
+}
+
+public sealed class StandardizedJobTitle
+{
+    [JsonPropertyName("raw_input")]
+    public string RawInput { get; set; } = "";
+
+    [JsonPropertyName("normalized_title")]
+    public string? NormalizedTitle { get; set; }
+
+    [JsonPropertyName("seniority_level")]
+    public string? SeniorityLevel { get; set; }
+
+    [JsonPropertyName("department")]
+    public string? Department { get; set; }
+
+    [JsonPropertyName("is_valid")]
+    public bool IsValid { get; set; }
+
+    [JsonPropertyName("confidence")]
+    public double Confidence { get; set; }
+
+    [JsonPropertyName("healing_actions")]
+    public List<string> HealingActions { get; set; } = new();
+}
+
+public sealed class StandardizedEmail
+{
+    [JsonPropertyName("raw_input")]
+    public string RawInput { get; set; } = "";
+
+    [JsonPropertyName("email")]
+    public string? Email { get; set; }
+
+    [JsonPropertyName("local_part")]
+    public string? LocalPart { get; set; }
+
+    [JsonPropertyName("raw_local_part")]
+    public string? RawLocalPart { get; set; }
+
+    [JsonPropertyName("subaddress")]
+    public string? Subaddress { get; set; }
+
+    [JsonPropertyName("domain")]
+    public string? Domain { get; set; }
+
+    [JsonPropertyName("display_name")]
+    public string? DisplayName { get; set; }
+
+    [JsonPropertyName("email_type")]
+    public string? EmailType { get; set; }
+
+    [JsonPropertyName("is_free_provider")]
+    public bool IsFreeProvider { get; set; }
+
+    [JsonPropertyName("is_role_account")]
+    public bool IsRoleAccount { get; set; }
+
+    [JsonPropertyName("is_disposable")]
+    public bool IsDisposable { get; set; }
+
+    [JsonPropertyName("inferred_country_iso2")]
+    public string? InferredCountryIso2 { get; set; }
+
+    [JsonPropertyName("email_key")]
+    public string? EmailKey { get; set; }
+
+    [JsonPropertyName("is_valid")]
+    public bool IsValid { get; set; }
+
+    [JsonPropertyName("confidence")]
+    public double Confidence { get; set; }
+
+    [JsonPropertyName("healing_actions")]
+    public List<string> HealingActions { get; set; } = new();
+}
+
+public sealed class StandardizedUrl
+{
+    [JsonPropertyName("raw_input")]
+    public string RawInput { get; set; } = "";
+
+    [JsonPropertyName("url")]
+    public string? Url { get; set; }
+
+    [JsonPropertyName("scheme")]
+    public string? Scheme { get; set; }
+
+    [JsonPropertyName("host")]
+    public string? Host { get; set; }
+
+    [JsonPropertyName("domain")]
+    public string? Domain { get; set; }
+
+    [JsonPropertyName("subdomain")]
+    public string? Subdomain { get; set; }
+
+    [JsonPropertyName("public_suffix")]
+    public string? PublicSuffix { get; set; }
+
+    [JsonPropertyName("brand_stem")]
+    public string? BrandStem { get; set; }
+
+    [JsonPropertyName("path")]
+    public string? Path { get; set; }
+
+    [JsonPropertyName("inferred_country_iso2")]
+    public string? InferredCountryIso2 { get; set; }
+
+    [JsonPropertyName("url_key")]
+    public string? UrlKey { get; set; }
+
+    [JsonPropertyName("is_valid")]
+    public bool IsValid { get; set; }
+
+    [JsonPropertyName("confidence")]
+    public double Confidence { get; set; }
+
+    [JsonPropertyName("healing_actions")]
+    public List<string> HealingActions { get; set; } = new();
+}
+
+public sealed class StandardizedSocial
+{
+    [JsonPropertyName("raw_input")]
+    public string RawInput { get; set; } = "";
+
+    [JsonPropertyName("platform")]
+    public string? Platform { get; set; }
+
+    [JsonPropertyName("profile_type")]
+    public string? ProfileType { get; set; }
+
+    [JsonPropertyName("handle")]
+    public string? Handle { get; set; }
+
+    [JsonPropertyName("url")]
+    public string? Url { get; set; }
+
+    [JsonPropertyName("social_key")]
+    public string? SocialKey { get; set; }
+
+    [JsonPropertyName("is_valid")]
+    public bool IsValid { get; set; }
+
+    [JsonPropertyName("confidence")]
+    public double Confidence { get; set; }
+
+    [JsonPropertyName("healing_actions")]
+    public List<string> HealingActions { get; set; } = new();
+}
+
 public sealed class StandardizedContact
 {
     [JsonPropertyName("address")]
@@ -413,6 +716,24 @@ public sealed class StandardizedContact
     [JsonPropertyName("fax")]
     public StandardizedPhone? Fax { get; set; }
 
+    [JsonPropertyName("organization")]
+    public StandardizedCompany? Organization { get; set; }
+
+    [JsonPropertyName("person")]
+    public StandardizedPerson? Person { get; set; }
+
+    [JsonPropertyName("job_title")]
+    public StandardizedJobTitle? JobTitle { get; set; }
+
+    [JsonPropertyName("email")]
+    public StandardizedEmail? Email { get; set; }
+
+    [JsonPropertyName("website")]
+    public StandardizedUrl? Website { get; set; }
+
+    [JsonPropertyName("social")]
+    public StandardizedSocial? Social { get; set; }
+
     [JsonPropertyName("entity_key")]
     public string? EntityKey { get; set; }
 
@@ -422,4 +743,3 @@ public sealed class StandardizedContact
     [JsonPropertyName("overall_confidence")]
     public double OverallConfidence { get; set; }
 }
-
