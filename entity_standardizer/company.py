@@ -87,7 +87,9 @@ _GENERIC_BRAND_TAIL_WORDS: frozenset[str] = frozenset(
         "MANAGEMENT",
         "SERVICES",
         "CORPORATION",
+        "CORP",
         "COMPANY",
+        "CO",
     }
 )
 
@@ -124,8 +126,10 @@ _FKA_SPLIT_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Dotted initialisms like "I. B. M.", "I.B.M.", "S.A.R.L.", "S.r.l.", "B.V.", "L.L.C."
-_DOTTED_INITIALISM_RE = re.compile(r"(?<![A-Za-z0-9])(?:[A-Za-z]\.\s*){2,}")
+# Dotted initialisms like "I. B. M.", "I.B.M.", "I.B.M", "S.A.R.L.", "S.r.l.", "B.V.", "B.V", "L.L.C"
+_DOTTED_INITIALISM_RE = re.compile(
+    r"(?<![A-Za-z0-9])(?:(?:[A-Za-z]\.\s*){2,}(?:[A-Za-z](?![A-Za-z0-9.]))?|[A-Za-z]\.[A-Za-z](?![A-Za-z0-9.]))"
+)
 # Danish/Norwegian A/S legal form
 _AS_SLASH_RE = re.compile(r"\bA\s*/\s*S\b", re.IGNORECASE)
 
@@ -222,6 +226,15 @@ def _normalize_tokens(text: str, actions: list[str] | None = None) -> list[str]:
     return collapsed
 
 
+def _strip_trailing_co_and(base: list[str], canonical: str) -> list[str]:
+    """Strip trailing 'CO'/'COMPANY' and 'AND' preceding a primary corporate suffix like LTD or INC."""
+    if canonical != "CO" and len(base) > 1 and base[-1] in ("CO", "COMPANY"):
+        base = base[:-1]
+    if len(base) > 1 and base[-1] == "AND":
+        base = base[:-1]
+    return base
+
+
 def _extract_legal_suffix(
     tokens: list[str],
 ) -> tuple[list[str], str | None, str | None]:
@@ -233,18 +246,14 @@ def _extract_legal_suffix(
     for pattern, canonical, country_iso2 in _MULTI_TOKEN_LEGAL_SUFFIXES:
         pat_len = len(pattern)
         if len(tokens) > pat_len and tuple(tokens[-pat_len:]) == pattern:
-            base = tokens[:-pat_len]
-            if base and base[-1] == "AND" and len(base) > 1:
-                base = base[:-1]
+            base = _strip_trailing_co_and(tokens[:-pat_len], canonical)
             return base, canonical, country_iso2
 
     # 2. Check single-token legal suffixes
     last_tok = tokens[-1]
     if last_tok in _SINGLE_TOKEN_LEGAL_SUFFIXES:
         canonical, country_iso2 = _SINGLE_TOKEN_LEGAL_SUFFIXES[last_tok]
-        base = tokens[:-1]
-        if base and base[-1] == "AND" and len(base) > 1:
-            base = base[:-1]
+        base = _strip_trailing_co_and(tokens[:-1], canonical)
         return base, canonical, country_iso2
 
     # 3. Check prefix K.K. (e.g. "K.K. Sony" -> "KK SONY")
@@ -252,6 +261,23 @@ def _extract_legal_suffix(
         return tokens[1:], "KK", "JP"
 
     return tokens, None, None
+
+
+def _pop_trailing_branch(
+    text: str, actions: list[str]
+) -> tuple[str, str | None]:
+    """Extract a parenthesized or hyphenated trailing branch/division clause if present."""
+    m_p = _PAREN_BRANCH_RE.search(text)
+    if m_p and _BRANCH_KEYWORDS_RE.search(m_p.group(1)):
+        actions.append("BRANCH_UNIT_EXTRACTED")
+        return text[: m_p.start()].strip(), m_p.group(1).strip()
+
+    m_h = _TRAILING_HYPHEN_BRANCH_RE.search(text)
+    if m_h and _BRANCH_KEYWORDS_RE.search(m_h.group(1)):
+        actions.append("BRANCH_UNIT_EXTRACTED")
+        return text[: m_h.start()].strip(), m_h.group(1).strip()
+
+    return text, None
 
 
 def standardize_company(
@@ -287,20 +313,7 @@ def standardize_company(
         working = (working[: m_p_fka.start()] + " " + working[m_p_fka.end() :]).strip()
         actions.append("FKA_EXTRACTED")
 
-    # 2. Extract trailing hyphen or parenthesized branch/division unit
-    m_p_branch = _PAREN_BRANCH_RE.search(working)
-    if m_p_branch and _BRANCH_KEYWORDS_RE.search(m_p_branch.group(1)):
-        branch_raw = m_p_branch.group(1).strip()
-        working = working[: m_p_branch.start()].strip()
-        actions.append("BRANCH_UNIT_EXTRACTED")
-
-    m_h_branch = _TRAILING_HYPHEN_BRANCH_RE.search(working)
-    if m_h_branch and _BRANCH_KEYWORDS_RE.search(m_h_branch.group(1)):
-        branch_raw = m_h_branch.group(1).strip()
-        working = working[: m_h_branch.start()].strip()
-        actions.append("BRANCH_UNIT_EXTRACTED")
-
-    # 3. Split inline FKA and DBA clauses
+    # 2. Split inline FKA and DBA clauses
     m_fka = _FKA_SPLIT_RE.search(working)
     if m_fka:
         before_fka = working[: m_fka.start()].strip(" ,;-")
@@ -322,6 +335,14 @@ def standardize_company(
         dba_raw = after_dba
         working = before_dba
         actions.append("DBA_EXTRACTED")
+
+    # 3. Extract trailing hyphen or parenthesized branch/division unit from DBA, FKA, or legal name
+    if dba_raw is not None:
+        dba_raw, branch_raw = _pop_trailing_branch(dba_raw, actions)
+    if branch_raw is None and fka_raw is not None:
+        fka_raw, branch_raw = _pop_trailing_branch(fka_raw, actions)
+    if branch_raw is None:
+        working, branch_raw = _pop_trailing_branch(working, actions)
 
     # 4. Normalize tokens and extract legal suffix
     tokens = _normalize_tokens(working, actions)

@@ -127,16 +127,18 @@ StandardizedEntity = StandardizedContact
 
 def _try_rescue_email_from_text(
     text: str | None,
+    *,
+    allow_display_name: bool = False,
 ) -> tuple[StandardizedEmail | None, str | None]:
     """Attempt to rescue an embedded or angle-bracketed email from a text field."""
     if not text or "@" not in text:
         return None, text
     s = text.strip()
-    # Check full angle-bracketed string first (e.g. "Jane Doe <jane@acme.com>")
-    full_cand = standardize_email(s)
-    if full_cand.is_valid:
-        cleaned = full_cand.display_name or ""
-        return full_cand, cleaned or None
+    if allow_display_name:
+        full_cand = standardize_email(s)
+        if full_cand.is_valid:
+            cleaned = full_cand.display_name or ""
+            return full_cand, cleaned or None
 
     match = _EMBEDDED_EMAIL_RE.search(s)
     if match:
@@ -277,7 +279,9 @@ def standardize_contact(
             ("organization", eff_org),
             ("person_name", eff_person),
         ):
-            rescued_email, cleaned_val = _try_rescue_email_from_text(field_val)
+            rescued_email, cleaned_val = _try_rescue_email_from_text(
+                field_val, allow_display_name=(field_name == "person_name")
+            )
             if rescued_email is not None:
                 email_res = rescued_email
                 if field_name == "street1":
@@ -352,11 +356,27 @@ def standardize_contact(
         address_context=raw_ctx,
     )
 
+    inferred_country_from_pillars = False
+
     # 1. Rescue misplaced phone numbers from street1 / street2 when phone is missing/invalid
     if not phone_res.is_valid:
         rescued, new_s1, new_s2 = _try_rescue_phone_from_street(
             eff_s1, eff_s2, country, default_country, raw_ctx
         )
+        if (
+            rescued is None
+            and (country is None or not str(country).strip())
+            and pillar_country_iso2 is not None
+        ):
+            rescued, new_s1, new_s2 = _try_rescue_phone_from_street(
+                eff_s1,
+                eff_s2,
+                pillar_country_iso2,
+                pillar_country_iso2,
+                {**raw_ctx, "country": pillar_country_iso2},
+            )
+            if rescued is not None:
+                inferred_country_from_pillars = True
         if rescued is not None:
             phone_res = rescued
             eff_s1 = new_s1
@@ -371,7 +391,6 @@ def standardize_contact(
     default_iso2 = normalize_country_iso2(default_country) or "US"
     eff_country = country
     inferred_country_from_phone = False
-    inferred_country_from_pillars = False
     phone_raw_str = (phone or (phone_res.raw_input if phone_res.is_valid else "") or "").strip()
     phone_has_explicit_idd = phone_raw_str.startswith("+") or phone_raw_str.startswith("00")
 

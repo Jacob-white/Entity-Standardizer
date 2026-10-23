@@ -142,6 +142,32 @@ def test_company_dba_fka_and_branch_extraction() -> None:
     assert c4.legal_name == "FEDERAL EXPRESS CORP"
     assert c4.dba_name == "ABC AND XYZ"
 
+    # Undotted trailing letter in dotted initialism / suffix, Co., Ltd., and branch before inline DBA/FKA
+    c_llc_no_dot = standardize_company("Acme L.L.C")
+    assert c_llc_no_dot.legal_name == "ACME LLC"
+    assert c_llc_no_dot.legal_suffix == "LLC"
+
+    c_ibm_no_dot = standardize_company("I.B.M")
+    assert c_ibm_no_dot.legal_name == "IBM"
+
+    c_co_ltd = standardize_company("Samsung Electronics Co., Ltd.")
+    assert c_co_ltd.base_name == "SAMSUNG ELECTRONICS"
+    assert c_co_ltd.legal_suffix == "LTD"
+
+    c_branch_before_dba = standardize_company(
+        "Acme Holdings, Inc. - West Coast Division DBA Acme Industrial"
+    )
+    assert c_branch_before_dba.legal_name == "ACME HOLDINGS INC"
+    assert c_branch_before_dba.dba_name == "ACME INDUSTRIAL"
+    assert c_branch_before_dba.branch_unit == "WEST COAST DIVISION"
+
+    c_branch_on_fka = standardize_company(
+        "Block, Inc. f/k/a Square Inc. - Payments Division"
+    )
+    assert c_branch_on_fka.legal_name == "BLOCK INC"
+    assert c_branch_on_fka.fka_name == "SQUARE INC"
+    assert c_branch_on_fka.branch_unit == "PAYMENTS DIVISION"
+
 
 def test_person_and_job_title_standardization() -> None:
     assert standardize_person(None).is_valid is False
@@ -149,6 +175,7 @@ def test_person_and_job_title_standardization() -> None:
     assert standardize_person(", , ,").is_valid is False
     assert standardize_person("()").is_valid is False
     assert standardize_person("..., Jr.").is_valid is False
+    assert standardize_person("123 Main St").is_valid is False
 
     # Salutation, parenthetical nickname, middle initial, compound surname, suffix, credentials
     p1 = standardize_person("Dr. Robert (Bob) J. Van Der Beek, Jr., MD, PhD")
@@ -179,12 +206,24 @@ def test_person_and_job_title_standardization() -> None:
     assert "NICKNAME_RESOLVED_TO_ROOT" in p2.healing_actions
     assert p2.person_root_key == "SMITH|ROBERT"
 
-    # Salutation on first segment of Last, First and trailing suffix on given segment
-    p3 = standardize_person("Dr. Jones, William III")
+    # Salutation and suffix on first segment of Last, First and trailing suffix on given segment
+    p3 = standardize_person("Dr. Jones Jr., William III")
     assert p3.salutation == "DR"
     assert p3.last_name == "JONES"
     assert p3.first_name == "WILLIAM"
     assert p3.generational_suffix == "III"
+
+    # Spaced dotted credentials ("Ph. D.") and multiple middle initials ("H. W.") + Ben middle name
+    p_spaced_cred = standardize_person("George H. W. Bush, Ph. D.")
+    assert p_spaced_cred.first_name == "GEORGE"
+    assert p_spaced_cred.middle_name == "H W"
+    assert p_spaced_cred.last_name == "BUSH"
+    assert p_spaced_cred.credentials == ["PHD"]
+
+    p_ben = standardize_person("Robert Ben 99 Smith")
+    assert p_ben.first_name == "ROBERT"
+    assert p_ben.middle_name == "BEN"
+    assert p_ben.last_name == "SMITH"
 
     # Inline trailing credentials and generational suffix without commas
     p4 = standardize_person("Prof. Rev. Elizabeth Margaret Taylor Sr. JD CPA MBA")
@@ -221,9 +260,10 @@ def test_person_and_job_title_standardization() -> None:
     assert standardize_job_title("---").is_valid is False
 
     title_cases = [
-        ("CEO & Co-Founder", "CHIEF EXECUTIVE OFFICER AND CO-FOUNDER", "C_SUITE", "EXECUTIVE"),
+        ("C.E.O. & Co-Founder", "CHIEF EXECUTIVE OFFICER AND CO-FOUNDER", "C_SUITE", "EXECUTIVE"),
         ("Managing Partner", "MANAGING PARTNER", "OWNER_PARTNER", "EXECUTIVE"),
         ("Sr. VP of Eng", "SENIOR VICE PRESIDENT OF ENGINEER", "VP", "ENGINEERING"),
+        ("V.P. of Business Development", "VICE PRESIDENT OF BUSINESS DEVELOPMENT", "VP", "SALES"),
         ("Head of Finance & Accounting", "HEAD OF FINANCE AND ACCOUNTING", "DIRECTOR", "FINANCE"),
         ("Mktg Mgr", "MARKETING MANAGER", "MANAGER", "MARKETING"),
         ("Principal Sales Architect", "PRINCIPAL SALES ARCHITECT", "SENIOR", "ENGINEERING"),
@@ -495,6 +535,23 @@ def test_joint_multi_pillar_cross_healing() -> None:
         phone="12",
     )
     assert c_de_bad_phone.phone.is_valid is False
+
+    c_de_s2_phone = standardize_contact(
+        organization="Siemens GmbH",
+        street2="089 636 00",
+    )
+    assert c_de_s2_phone.phone.e164 == "+498963600"
+    assert CrossHealingAction.PHONE_RESCUED_FROM_ADDRESS_FIELD.value in c_de_s2_phone.cross_healing_actions
+    assert CrossHealingAction.COUNTRY_INFERRED_FROM_ENTITY_PILLARS.value in c_de_s2_phone.cross_healing_actions
+
+    c_s1_angle_email = standardize_contact(
+        street1="123 Main St <jane.doe@acme.com>",
+        city="Boston",
+        state="MA",
+        postal_code="02108",
+    )
+    assert c_s1_angle_email.email is not None and c_s1_angle_email.email.display_name is None
+    assert c_s1_angle_email.person is not None and c_s1_angle_email.person.full_name == "JANE DOE"
 
     # 6. Batch standardization with alias keys
     batch_res = batch_standardize_contacts(
