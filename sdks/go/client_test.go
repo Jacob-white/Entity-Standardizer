@@ -96,6 +96,55 @@ func TestClientStandardizeAndBatch(t *testing.T) {
 				IsUS:                 true,
 			})
 			return
+		case "/v1/company":
+			_ = json.NewEncoder(w).Encode(StandardizedCompany{
+				RawInput:    "Acme Holdings, Inc.",
+				LegalName:   strPtr("ACME HOLDINGS INC"),
+				BaseName:    strPtr("ACME HOLDINGS"),
+				BrandStem:   strPtr("ACME"),
+				LegalSuffix: strPtr("INC"),
+				IsValid:     true,
+				Confidence:  0.98,
+			})
+			return
+		case "/v1/person":
+			_ = json.NewEncoder(w).Encode(StandardizedPerson{
+				RawInput:      "Dr. Bob Smith",
+				Salutation:    strPtr("DR"),
+				FirstName:     strPtr("BOB"),
+				RootFirstName: strPtr("ROBERT"),
+				LastName:      strPtr("SMITH"),
+				IsValid:       true,
+				Confidence:    0.98,
+			})
+			return
+		case "/v1/email":
+			_ = json.NewEncoder(w).Encode(StandardizedEmail{
+				RawInput:  "jane@acme.com",
+				Email:     strPtr("jane@acme.com"),
+				Domain:    strPtr("acme.com"),
+				EmailType: strPtr("CORPORATE"),
+				IsValid:   true,
+			})
+			return
+		case "/v1/url":
+			_ = json.NewEncoder(w).Encode(StandardizedUrl{
+				RawInput:  "https://www.acme.com",
+				URL:       strPtr("https://acme.com"),
+				Domain:    strPtr("acme.com"),
+				BrandStem: strPtr("ACME"),
+				IsValid:   true,
+			})
+			return
+		case "/v1/social":
+			_ = json.NewEncoder(w).Encode(StandardizedSocial{
+				RawInput: "https://twitter.com/openai",
+				Platform: strPtr("X"),
+				Handle:   strPtr("openai"),
+				URL:      strPtr("https://x.com/openai"),
+				IsValid:  true,
+			})
+			return
 		case "/v1/contact":
 			_ = json.NewEncoder(w).Encode(StandardizedContact{
 				Address: StandardizedAddress{
@@ -183,6 +232,41 @@ func TestClientStandardizeAndBatch(t *testing.T) {
 		t.Fatalf("unexpected address result: %+v, err=%v", addrRes, err)
 	}
 
+	compRes, err := client.StandardizeCompany(context.Background(), CompanyStandardizeRequest{
+		Name: "Acme Holdings, Inc.",
+	})
+	if err != nil || compRes.BrandStem == nil || *compRes.BrandStem != "ACME" {
+		t.Fatalf("unexpected company result: %+v, err=%v", compRes, err)
+	}
+
+	perRes, err := client.StandardizePerson(context.Background(), PersonStandardizeRequest{
+		Name: "Dr. Bob Smith",
+	})
+	if err != nil || perRes.RootFirstName == nil || *perRes.RootFirstName != "ROBERT" {
+		t.Fatalf("unexpected person result: %+v, err=%v", perRes, err)
+	}
+
+	emailRes, err := client.StandardizeEmail(context.Background(), EmailStandardizeRequest{
+		Email: "jane@acme.com",
+	})
+	if err != nil || emailRes.Email == nil || *emailRes.Email != "jane@acme.com" {
+		t.Fatalf("unexpected email result: %+v, err=%v", emailRes, err)
+	}
+
+	urlRes, err := client.StandardizeUrl(context.Background(), UrlStandardizeRequest{
+		URL: "https://www.acme.com",
+	})
+	if err != nil || urlRes.Domain == nil || *urlRes.Domain != "acme.com" {
+		t.Fatalf("unexpected url result: %+v, err=%v", urlRes, err)
+	}
+
+	socRes, err := client.StandardizeSocial(context.Background(), SocialStandardizeRequest{
+		Profile: "https://twitter.com/openai",
+	})
+	if err != nil || socRes.Platform == nil || *socRes.Platform != "X" {
+		t.Fatalf("unexpected social result: %+v, err=%v", socRes, err)
+	}
+
 	contactRes, err := client.StandardizeContact(context.Background(), ContactStandardizeRequest{
 		Street1:    "350 Fifth Ave",
 		City:       "New York",
@@ -193,5 +277,3 @@ func TestClientStandardizeAndBatch(t *testing.T) {
 		t.Fatalf("unexpected contact result: %+v, err=%v", contactRes, err)
 	}
 }
-
-

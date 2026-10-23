@@ -154,6 +154,33 @@ type AddressStandardizeRequest struct {
 	Country    string `json:"country,omitempty"`
 }
 
+// CompanyStandardizeRequest is the request payload for POST /v1/company.
+type CompanyStandardizeRequest struct {
+	Name    string `json:"name"`
+	Country string `json:"country,omitempty"`
+}
+
+// PersonStandardizeRequest is the request payload for POST /v1/person.
+type PersonStandardizeRequest struct {
+	Name string `json:"name"`
+}
+
+// EmailStandardizeRequest is the request payload for POST /v1/email.
+type EmailStandardizeRequest struct {
+	Email string `json:"email"`
+}
+
+// UrlStandardizeRequest is the request payload for POST /v1/url.
+type UrlStandardizeRequest struct {
+	URL string `json:"url"`
+}
+
+// SocialStandardizeRequest is the request payload for POST /v1/social.
+type SocialStandardizeRequest struct {
+	Profile  string `json:"profile"`
+	Platform string `json:"platform,omitempty"`
+}
+
 // ContactStandardizeRequest is the request payload for POST /v1/contact.
 type ContactStandardizeRequest struct {
 	Street1        string `json:"street1,omitempty"`
@@ -164,6 +191,12 @@ type ContactStandardizeRequest struct {
 	Country        string `json:"country,omitempty"`
 	Phone          string `json:"phone,omitempty"`
 	Fax            string `json:"fax,omitempty"`
+	Organization   string `json:"organization,omitempty"`
+	PersonName     string `json:"person_name,omitempty"`
+	JobTitle       string `json:"job_title,omitempty"`
+	Email          string `json:"email,omitempty"`
+	Website        string `json:"website,omitempty"`
+	Social         string `json:"social,omitempty"`
 	DefaultCountry string `json:"default_country,omitempty"`
 }
 
@@ -185,14 +218,119 @@ type StandardizedAddress struct {
 	IsRegisteredAgentHub bool    `json:"is_registered_agent_hub"`
 }
 
-// StandardizedContact represents a unified cross-healed address and telephone contact from POST /v1/contact.
-type StandardizedContact struct {
-	Address             StandardizedAddress `json:"address"`
-	Phone               StandardizedPhone   `json:"phone"`
-	Fax                 *StandardizedPhone  `json:"fax"`
-	EntityKey           *string             `json:"entity_key"`
-	CrossHealingActions []string            `json:"cross_healing_actions"`
-	OverallConfidence   float64             `json:"overall_confidence"`
+// StandardizedCompany represents a standardized organization or company name returned by POST /v1/company.
+type StandardizedCompany struct {
+	RawInput            string   `json:"raw_input"`
+	LegalName           *string  `json:"legal_name"`
+	BaseName            *string  `json:"base_name"`
+	BrandStem           *string  `json:"brand_stem"`
+	LegalSuffix         *string  `json:"legal_suffix"`
+	DBAName             *string  `json:"dba_name"`
+	FKAName             *string  `json:"fka_name"`
+	BranchUnit          *string  `json:"branch_unit"`
+	InferredCountryISO2 *string  `json:"inferred_country_iso2"`
+	CompanyKey          *string  `json:"company_key"`
+	BrandKey            *string  `json:"brand_key"`
+	PhoneticKey         *string  `json:"phonetic_key"`
+	IsValid             bool     `json:"is_valid"`
+	Confidence          float64  `json:"confidence"`
+	HealingActions      []string `json:"healing_actions"`
 }
 
+// StandardizedPerson represents a standardized person full name returned by POST /v1/person.
+type StandardizedPerson struct {
+	RawInput           string   `json:"raw_input"`
+	Salutation         *string  `json:"salutation"`
+	FirstName          *string  `json:"first_name"`
+	RootFirstName      *string  `json:"root_first_name"`
+	MiddleName         *string  `json:"middle_name"`
+	LastName           *string  `json:"last_name"`
+	Nickname           *string  `json:"nickname"`
+	GenerationalSuffix *string  `json:"generational_suffix"`
+	Credentials        []string `json:"credentials"`
+	FullName           *string  `json:"full_name"`
+	PersonKey          *string  `json:"person_key"`
+	PersonRootKey      *string  `json:"person_root_key"`
+	PhoneticKey        *string  `json:"phonetic_key"`
+	IsValid            bool     `json:"is_valid"`
+	Confidence         float64  `json:"confidence"`
+	HealingActions     []string `json:"healing_actions"`
+}
 
+// StandardizedJobTitle represents a standardized job title.
+type StandardizedJobTitle struct {
+	RawInput        string   `json:"raw_input"`
+	NormalizedTitle *string  `json:"normalized_title"`
+	SeniorityLevel  *string  `json:"seniority_level"`
+	Department      *string  `json:"department"`
+	IsValid         bool     `json:"is_valid"`
+	Confidence      float64  `json:"confidence"`
+	HealingActions  []string `json:"healing_actions"`
+}
+
+// StandardizedEmail represents a standardized email address returned by POST /v1/email.
+type StandardizedEmail struct {
+	RawInput            string   `json:"raw_input"`
+	Email               *string  `json:"email"`
+	LocalPart           *string  `json:"local_part"`
+	RawLocalPart        *string  `json:"raw_local_part"`
+	Subaddress          *string  `json:"subaddress"`
+	Domain              *string  `json:"domain"`
+	DisplayName         *string  `json:"display_name"`
+	EmailType           *string  `json:"email_type"`
+	IsFreeProvider      bool     `json:"is_free_provider"`
+	IsRoleAccount       bool     `json:"is_role_account"`
+	IsDisposable        bool     `json:"is_disposable"`
+	InferredCountryISO2 *string  `json:"inferred_country_iso2"`
+	EmailKey            *string  `json:"email_key"`
+	IsValid             bool     `json:"is_valid"`
+	Confidence          float64  `json:"confidence"`
+	HealingActions      []string `json:"healing_actions"`
+}
+
+// StandardizedUrl represents a standardized website URL returned by POST /v1/url.
+type StandardizedUrl struct {
+	RawInput            string   `json:"raw_input"`
+	URL                 *string  `json:"url"`
+	Scheme              *string  `json:"scheme"`
+	Host                *string  `json:"host"`
+	Domain              *string  `json:"domain"`
+	Subdomain           *string  `json:"subdomain"`
+	PublicSuffix        *string  `json:"public_suffix"`
+	BrandStem           *string  `json:"brand_stem"`
+	Path                *string  `json:"path"`
+	InferredCountryISO2 *string  `json:"inferred_country_iso2"`
+	URLKey              *string  `json:"url_key"`
+	IsValid             bool     `json:"is_valid"`
+	Confidence          float64  `json:"confidence"`
+	HealingActions      []string `json:"healing_actions"`
+}
+
+// StandardizedSocial represents a standardized social media profile returned by POST /v1/social.
+type StandardizedSocial struct {
+	RawInput       string   `json:"raw_input"`
+	Platform       *string  `json:"platform"`
+	ProfileType    *string  `json:"profile_type"`
+	Handle         *string  `json:"handle"`
+	URL            *string  `json:"url"`
+	SocialKey      *string  `json:"social_key"`
+	IsValid        bool     `json:"is_valid"`
+	Confidence     float64  `json:"confidence"`
+	HealingActions []string `json:"healing_actions"`
+}
+
+// StandardizedContact represents a unified cross-healed entity contact from POST /v1/contact.
+type StandardizedContact struct {
+	Address             StandardizedAddress   `json:"address"`
+	Phone               StandardizedPhone     `json:"phone"`
+	Fax                 *StandardizedPhone    `json:"fax"`
+	Organization        *StandardizedCompany  `json:"organization"`
+	Person              *StandardizedPerson   `json:"person"`
+	JobTitle            *StandardizedJobTitle `json:"job_title"`
+	Email               *StandardizedEmail    `json:"email"`
+	Website             *StandardizedUrl      `json:"website"`
+	Social              *StandardizedSocial   `json:"social"`
+	EntityKey           *string               `json:"entity_key"`
+	CrossHealingActions []string              `json:"cross_healing_actions"`
+	OverallConfidence   float64               `json:"overall_confidence"`
+}

@@ -587,13 +587,33 @@ def test_fastapi_server_endpoints() -> None:
     assert r_contact.status_code == 200
     assert r_contact.json()["phone"]["e164"] == "+12125552368"
 
+    r_company = client.post("/v1/company", json={"name": "The Acme & Co., Inc."})
+    assert r_company.status_code == 200
+    assert r_company.json()["legal_suffix"] == "INC"
+
+    r_person = client.post("/v1/person", json={"name": "Dr. Robert (Bob) J. Smith, Jr., MD"})
+    assert r_person.status_code == 200
+    assert r_person.json()["first_name"] == "ROBERT"
+
+    r_email = client.post("/v1/email", json={"email": "Jane.Doe+tag@gmail.com"})
+    assert r_email.status_code == 200
+    assert r_email.json()["email"] == "janedoe@gmail.com"
+
+    r_url = client.post("/v1/url", json={"url": "www.acme.co.uk/?utm_source=x"})
+    assert r_url.status_code == 200
+    assert r_url.json()["domain"] == "acme.co.uk"
+
+    r_social = client.post("/v1/social", json={"profile": "@octocat", "platform": "GITHUB"})
+    assert r_social.status_code == 200
+    assert r_social.json()["url"] == "https://github.com/octocat"
+
 
 def test_mcp_server_requests() -> None:
     init_resp = handle_mcp_request({"jsonrpc": "2.0", "id": 1, "method": "initialize"})
     assert init_resp["result"]["serverInfo"]["name"] == "phone-standardizer-mcp"
 
     list_resp = handle_mcp_request({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
-    assert len(list_resp["result"]["tools"]) == 8
+    assert len(list_resp["result"]["tools"]) == 13
 
     call_std = handle_mcp_request(
         {
@@ -630,6 +650,23 @@ def test_mcp_server_requests() -> None:
         }
     )
     assert "+12125552368" in call_contact["result"]["content"][0]["text"]
+
+    for tool_id, tool_name, tool_args, expected_substr in [
+        (33, "standardize_company", {"name": "Siemens GmbH"}, '"inferred_country_iso2": "DE"'),
+        (34, "standardize_person", {"name": "Smith, Jr., Bob"}, '"person_root_key": "SMITH|ROBERT"'),
+        (35, "standardize_email", {"email": "user@gmial.com"}, '"email": "user@gmail.com"'),
+        (36, "standardize_url", {"url": "acme.com"}, '"url": "https://acme.com"'),
+        (37, "standardize_social", {"profile": "https://twitter.com/jack"}, '"platform": "X"'),
+    ]:
+        resp = handle_mcp_request(
+            {
+                "jsonrpc": "2.0",
+                "id": tool_id,
+                "method": "tools/call",
+                "params": {"name": tool_name, "arguments": tool_args},
+            }
+        )
+        assert expected_substr in resp["result"]["content"][0]["text"]
 
     call_country = handle_mcp_request(
         {
