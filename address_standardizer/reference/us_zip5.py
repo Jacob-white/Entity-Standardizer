@@ -11,7 +11,7 @@ import threading
 from pathlib import Path
 from typing import Dict, List, Optional, Union
 
-from address_standardizer.reference._match import fold_name
+from address_standardizer.reference._match import fold_name, name_tokens
 from address_standardizer.reference.base import ReferencePlace
 
 DATA_PATH = Path(__file__).resolve().parent / "data" / "us_zip5.tsv.gz"
@@ -75,6 +75,9 @@ class USZip5Provider:
                         key = fold_name(name)
                         if key:
                             self._by_place.setdefault(key, []).append(post)
+                        tok_key = " ".join(name_tokens(name))
+                        if tok_key and tok_key != key:
+                            self._by_place.setdefault(tok_key, []).append(post)
             self._loaded = True
 
     def covers_country(self, country: str) -> bool:
@@ -92,7 +95,7 @@ class USZip5Provider:
             return []
         self._ensure_loaded()
         key = fold_name(place_name)
-        zips = self._by_place.get(key, [])
+        zips = self._by_place.get(key) or self._by_place.get(" ".join(name_tokens(place_name)), [])
         if not admin1_code:
             return list(dict.fromkeys(zips))
         adm_up = admin1_code.strip().upper()

@@ -67,7 +67,7 @@ _VANITY_CANDIDATE_RE = re.compile(
 
 _TIME_RANGE_RE = re.compile(r"\b\d{1,2}:\d{2}\s*(?:AM|PM)\b", re.IGNORECASE)
 _MULTI_PHONE_SEMI_SLASH_RE = re.compile(
-    r"\s*(?:;|/|\||&)\s*(?!\s*(?:(?:ext\.?|extension|xt\.?|int\.?|interno|ramal|poste|dw|durchwahl|доб\.?|内線|x\.?|isub)\b|#))",
+    r"\s*(?:;|/|\||&)\s*(?!\s*(?:(?:ext\.?|extension|xt\.?|int\.?|interno|ramal|poste|dw|durchwahl|доб\.?|内線|x\.?|isub)(?:\b|[:\-=#.\s]*\d)|#))",
     re.IGNORECASE,
 )
 _SPACE_DOUBLE_NANP_RE = re.compile(

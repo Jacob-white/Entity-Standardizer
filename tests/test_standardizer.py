@@ -1430,7 +1430,70 @@ def test_joint_cross_healing_and_phase7_upgrades() -> None:
     finally:
         nd._native_mod = saved_mod
 
+    # Semicolon/comma/pipe extension parity (7-digit extensions without space, multi-phone after extension, Rust vs Python)
+    for raw_ext_phone, exp_ext in [
+        ("212-555-0199; x1234567", "1234567"),
+        ("212-555-0199; ext1234567", "1234567"),
+        ("212-555-0199; xt1234567", "1234567"),
+        ("212-555-0199; x123; 415-555-2671", "123"),
+    ]:
+        p_ext = standardize_phone(raw_ext_phone)
+        assert p_ext.is_valid is True and p_ext.e164 == "+12125550199" and p_ext.extension == exp_ext
 
+    ext_batch_inputs = [
+        "212-555-0199;x123",
+        "212-555-0199;xt123",
+        "212-555-0199;xt. 45",
+        "212-555-0199,x123",
+        "212-555-0199|x123",
+        "+298 123456;ext. 45",
+        "212-555-0199; x123; 415-555-2671",
+    ]
+    expected_ext_batch = [
+        "+12125550199",
+        "+12125550199",
+        "+12125550199",
+        "+12125550199",
+        "+12125550199",
+        "+298123456",
+        "+12125550199",
+    ]
+    assert nd.standardize_batch_e164_dispatch(ext_batch_inputs, "1") == expected_ext_batch
+    try:
+        nd._native_mod = None
+        assert nd.standardize_batch_e164_dispatch(ext_batch_inputs, "1") == expected_ext_batch
+    finally:
+        nd._native_mod = saved_mod
 
+    # Free-text phone extraction preserves semicolon extensions
+    extracted_semi = extract_phones_from_text("Call us at +1-212-555-0199; ext=123 or 212-555-0199; ext. 45")
+    assert [(r.e164, r.extension) for r in extracted_semi] == [
+        ("+12125550199", "123"),
+        ("+12125550199", "45"),
+    ]
 
+    # Rescuing misplaced phones with extensions from street1 and street2
+    c_rescue_ext1 = standardize_contact(
+        street1="123 Main St, Tel: 212-555-0199 ext 123", city="New York", state="NY", postal_code="10001"
+    )
+    assert c_rescue_ext1.phone.e164 == "+12125550199" and c_rescue_ext1.phone.extension == "123"
+    assert c_rescue_ext1.address.street1 == "123 MAIN ST" and c_rescue_ext1.address.street2 == ""
+
+    c_rescue_ext2 = standardize_contact(
+        street1="123 Main St", street2="212-555-0199 ext 123", city="New York", state="NY", postal_code="10001"
+    )
+    assert c_rescue_ext2.phone.e164 == "+12125550199" and c_rescue_ext2.phone.extension == "123"
+    assert c_rescue_ext2.address.street1 == "123 MAIN ST" and c_rescue_ext2.address.street2 == ""
+
+    # Inferring missing US state from phone NPA when city matches state (and rejecting mismatched city)
+    c_infer_st = standardize_contact(street1="350 Fifth Ave", city="New York", phone="212-555-0199")
+    assert c_infer_st.address.state == "NY"
+    assert CrossHealingAction.ADDRESS_ZIP_STATE_HEALED_FROM_PHONE_NPA.value in c_infer_st.cross_healing_actions
+
+    c_infer_st_stlouis = standardize_contact(street1="100 Market St", city="St. Louis", phone="314-555-0199")
+    assert c_infer_st_stlouis.address.state == "MO"
+    assert CrossHealingAction.ADDRESS_ZIP_STATE_HEALED_FROM_PHONE_NPA.value in c_infer_st_stlouis.cross_healing_actions
+
+    c_mismatch_city = standardize_contact(street1="233 S Wacker Dr", city="Chicago", phone="212-555-0199")
+    assert c_mismatch_city.address.state == ""
 

@@ -151,7 +151,11 @@ fn strip_extension_single_rs(primary: &str) -> &str {
         " #", "ext.", "ext", "xt.", "xt", "x.", "x", "#", ",", ";", "p", "w",
     ] {
         if let Some(idx) = lower.rfind(marker) {
-            if matches!(marker, "ext." | "ext" | "xt." | "xt" | "x." | "x" | "#" | "," | ";" | "p" | "w") {
+            if matches!(marker, "ext." | "ext" | "xt." | "xt" | "x." | "x" | "#") {
+                if idx == 0 || !matches!(lower.as_bytes()[idx - 1], b'0'..=b'9' | b';' | b',' | b'|') {
+                    continue;
+                }
+            } else if matches!(marker, "," | ";" | "p" | "w") {
                 if idx == 0 || !lower.as_bytes()[idx - 1].is_ascii_digit() {
                     continue;
                 }
@@ -233,6 +237,22 @@ fn is_clean_nanp_segment_rs(seg: &str) -> bool {
     db.len() == 11 && db[0] == b'1' && matches!(db[1], b'2'..=b'9') && matches!(db[4], b'2'..=b'9')
 }
 
+fn starts_with_extension_marker_rs(after: &str) -> bool {
+    if after.starts_with('#') {
+        return true;
+    }
+    for prefix in ["extension", "ext.", "ext", "xt.", "xt", "x.", "x", "isub"] {
+        if let Some(rem) = after.strip_prefix(prefix) {
+            if rem.starts_with(|c: char| {
+                c.is_ascii_digit() || matches!(c, ' ' | '\t' | ':' | '-' | '=' | '#' | '.')
+            }) {
+                return true;
+            }
+        }
+    }
+    false
+}
+
 /// If input contains multiple complete phone numbers separated by ';', '/', '|', '&', ',', or whitespace, return the primary phone.
 fn split_primary_phone_rs(input: &str) -> &str {
     let bytes = input.as_bytes();
@@ -240,7 +260,7 @@ fn split_primary_phone_rs(input: &str) -> &str {
     for (idx, &b) in bytes.iter().enumerate() {
         if b == b';' || b == b'/' || b == b'&' || b == b'|' {
             let after = input[idx + 1..].trim_start().to_ascii_lowercase();
-            if !after.starts_with("ext=") && !after.starts_with("isub=") {
+            if !starts_with_extension_marker_rs(&after) {
                 split_indices.push(idx);
             }
         }
@@ -882,6 +902,13 @@ mod tests {
                 "212-687-5650-6246633423".to_string(),
                 "01212345678".to_string(),
                 "02079460912".to_string(),
+                "212-555-0199;x123".to_string(),
+                "212-555-0199;xt123".to_string(),
+                "212-555-0199;xt. 45".to_string(),
+                "212-555-0199,x123".to_string(),
+                "212-555-0199|x123".to_string(),
+                "+298 123456;ext. 45".to_string(),
+                "212-555-0199; x123; 415-555-2671".to_string(),
             ],
             "1",
         );
@@ -932,6 +959,13 @@ mod tests {
                 Some("+12126875650".to_string()),
                 Some("+441212345678".to_string()),
                 Some("+442079460912".to_string()),
+                Some("+12125550199".to_string()),
+                Some("+12125550199".to_string()),
+                Some("+12125550199".to_string()),
+                Some("+12125550199".to_string()),
+                Some("+12125550199".to_string()),
+                Some("+298123456".to_string()),
+                Some("+12125550199".to_string()),
             ]
         );
     }

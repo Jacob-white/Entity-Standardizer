@@ -15,12 +15,15 @@ from phone_standardizer.models import PhoneRiskFlag, StandardizedPhone
 from phone_standardizer.registry import normalize_country_iso2
 from phone_standardizer.standardizer import _extract_address_hint, standardize_phone
 
+_PHONE_EXT_SUFFIX_PAT = r"(?:[;,|\s]*(?:(?:ext\.?|extension|xt\.?|isub|x\.?|#)\s*[:\-=#]?\s*)\d{1,10})?"
 _EMBEDDED_PHONE_LABEL_RE = re.compile(
-    r"(?:[,;|/\-]|\b(?:TEL|TELEPHONE|PHONE|PH|MOBILE|CELL|CALL)\b)[:.\s]*([+()\d][\d\s().\-]{6,22})$",
+    rf"(?:[,;|/\-]|\b(?:TEL|TELEPHONE|PHONE|PH|MOBILE|CELL|CALL)\b)[:.\s]*([+()\d][\d\s().\-]{{6,22}}{_PHONE_EXT_SUFFIX_PAT})$",
     re.IGNORECASE,
 )
-_PURE_PHONE_IN_STREET_RE = re.compile(r"^\s*\+?[\d()\s.\-]{7,22}\s*$")
-_ALPHA_RE = re.compile(r"[A-Za-z]")
+_PURE_PHONE_IN_STREET_RE = re.compile(
+    rf"^\s*\+?[\d()\s.\-]{{7,22}}{_PHONE_EXT_SUFFIX_PAT}\s*$",
+    re.IGNORECASE,
+)
 
 
 class CrossHealingAction(StrEnum):
@@ -69,7 +72,7 @@ def _try_rescue_phone_from_street(
     s1 = (street1 or "").strip()
     s2 = (street2 or "").strip()
 
-    if s1 and not _ALPHA_RE.search(s1) and _PURE_PHONE_IN_STREET_RE.match(s1):
+    if s1 and _PURE_PHONE_IN_STREET_RE.match(s1):
         cand = standardize_phone(
             s1, country=country, default_country=default_country, address_context=addr_ctx
         )
@@ -90,7 +93,7 @@ def _try_rescue_phone_from_street(
                 return cand, cleaned_s1, s2 or None
 
     if s2:
-        if not _ALPHA_RE.search(s2) and _PURE_PHONE_IN_STREET_RE.match(s2):
+        if _PURE_PHONE_IN_STREET_RE.match(s2):
             cand = standardize_phone(
                 s2, country=country, default_country=default_country, address_context=addr_ctx
             )
@@ -224,27 +227,43 @@ def standardize_contact(
     if inferred_country_from_phone and has_valid_addr:
         cross_actions.append(CrossHealingAction.ADDRESS_COUNTRY_INFERRED_FROM_PHONE.value)
 
-    # 3. Use Phone NPA region to break tie on US Address ERR_ZIP_STATE_MISMATCH
+    # 3. Use Phone NPA region to break tie on US Address ERR_ZIP_STATE_MISMATCH or infer missing state
     if (
-        addr_res.is_us
-        and "ERR_ZIP_STATE_MISMATCH" in addr_res.failure_reason_codes
+        has_valid_addr
+        and addr_res.is_us
         and phone_res.is_valid
         and phone_res.country_iso2 == "US"
         and phone_res.region_code
     ):
         phone_st = phone_res.region_code
-        zip_st = get_state_from_zip3(addr_res.postal_code[:3])
-        if zip_st == phone_st:
-            addr_res = standardize_address(
-                street1=eff_s1,
-                street2=eff_s2,
-                city=city,
-                state=phone_st,
-                postal_code=postal_code,
-                country="US",
-                allow_locality=allow_locality,
-            )
-            cross_actions.append(CrossHealingAction.ADDRESS_ZIP_STATE_HEALED_FROM_PHONE_NPA.value)
+        if "ERR_ZIP_STATE_MISMATCH" in addr_res.failure_reason_codes:
+            zip_st = get_state_from_zip3(addr_res.postal_code[:3])
+            if zip_st == phone_st:
+                addr_res = standardize_address(
+                    street1=eff_s1,
+                    street2=eff_s2,
+                    city=city,
+                    state=phone_st,
+                    postal_code=postal_code,
+                    country="US",
+                    allow_locality=allow_locality,
+                )
+                cross_actions.append(CrossHealingAction.ADDRESS_ZIP_STATE_HEALED_FROM_PHONE_NPA.value)
+        elif not addr_res.state and not addr_res.postal_code:
+            from address_standardizer.reference.us_zip5 import get_default_us_zip5_provider
+
+            city_to_check = addr_res.city or (city or "").strip()
+            if not city_to_check or get_default_us_zip5_provider().lookup_place("US", city_to_check, phone_st):
+                addr_res = standardize_address(
+                    street1=eff_s1,
+                    street2=eff_s2,
+                    city=city_to_check or city,
+                    state=phone_st,
+                    postal_code=postal_code,
+                    country="US",
+                    allow_locality=allow_locality,
+                )
+                cross_actions.append(CrossHealingAction.ADDRESS_ZIP_STATE_HEALED_FROM_PHONE_NPA.value)
 
     # 4. Feed standardized address context back into phone standardization
     addr_country = (

@@ -1176,7 +1176,7 @@ _FREE_TEXT_PHONE_CANDIDATE_RE = re.compile(
     r"(?:\d{1,5}(?:[\s.\-]\d{2,6}){1,4}|\d{5,9})"
     r"|\+\d{8,15}"
     r")"
-    r"(?:\s*(?:;ext=|;isub=|(?:ext\.?|extension|x|#)\s*[:\-#]?\s*)\d{1,10})?"
+    r"(?:[;,|\s]*(?:(?:ext\.?|extension|xt\.?|isub|x\.?|#)\s*[:\-=#]?\s*)\d{1,10})?"
     r"(?![:\d])",
     re.IGNORECASE,
 )
