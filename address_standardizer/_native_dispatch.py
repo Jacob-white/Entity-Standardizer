@@ -61,6 +61,40 @@ def try_native(name: str, *args: Any, **kwargs: Any) -> Tuple[bool, Any]:
         return False, None
 
 
+def _load_fallback_native() -> Optional[Any]:
+    try:
+        import _phone_standardizer_rs as mod  # type: ignore[import-not-found]
+
+        return mod
+    except (ImportError, ModuleNotFoundError):
+        pass
+
+    import importlib.machinery
+    import importlib.util
+    from pathlib import Path
+
+    release_dir = Path(__file__).resolve().parent.parent / "target" / "release"
+    for filename in (
+        "lib_phone_standardizer_rs.so",
+        "lib_phone_standardizer_rs.dylib",
+        "_phone_standardizer_rs.pyd",
+    ):
+        candidate = release_dir / filename
+        if candidate.is_file():
+            try:
+                loader = importlib.machinery.ExtensionFileLoader(
+                    "_phone_standardizer_rs", str(candidate)
+                )
+                spec = importlib.util.spec_from_loader("_phone_standardizer_rs", loader)
+                if spec is not None:
+                    mod = importlib.util.module_from_spec(spec)
+                    loader.exec_module(mod)
+                    return mod
+            except Exception:
+                continue
+    return None
+
+
 def _init_native():
     global _NATIVE_MODULE, _NATIVE_AVAILABLE, _FORCE_PURE_PYTHON
     _FORCE_PURE_PYTHON = _env_forces_pure()
@@ -71,9 +105,15 @@ def _init_native():
         _NATIVE_AVAILABLE = True
         logger.debug("Native compiled acceleration loaded (_address_standardizer_rs).")
     except (ImportError, ModuleNotFoundError):
-        _NATIVE_MODULE = None
-        _NATIVE_AVAILABLE = False
-        logger.info("Native compiled core unavailable; operating via pure Python fallback.")
+        fallback_mod = _load_fallback_native()
+        if fallback_mod is not None:
+            _NATIVE_MODULE = fallback_mod
+            _NATIVE_AVAILABLE = True
+            logger.debug("Native compiled acceleration loaded (_phone_standardizer_rs).")
+        else:
+            _NATIVE_MODULE = None
+            _NATIVE_AVAILABLE = False
+            logger.info("Native compiled core unavailable; operating via pure Python fallback.")
     except BaseException as exc:  # noqa: BLE001 - a broken extension must not break `import address_standardizer`
         if _is_fatal(exc):
             raise

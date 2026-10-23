@@ -488,6 +488,18 @@ pub fn standardize_batch_e164_rs(
                 if digits.len() == 11 && digits.starts_with('1') {
                     return Some(format!("+{digits}"));
                 }
+                if digits.len() == 11
+                    && trimmed.chars().all(|c| c.is_ascii_digit())
+                    && [
+                        "01", "020", "023", "024", "028", "029", "071", "072", "073", "074",
+                        "075", "077", "078", "079",
+                    ]
+                    .iter()
+                    .any(|p| digits.starts_with(p))
+                {
+                    let nsn = &digits[1..];
+                    return Some(format!("+44{nsn}"));
+                }
                 return None;
             } else if digits.starts_with('0') && digits.len() >= 8 {
                 let stripped_trunk = &digits[1..];
@@ -868,6 +880,8 @@ mod tests {
                 "800-965-2576-949-365-177".to_string(),
                 "312-558-9400-800-969-3987".to_string(),
                 "212-687-5650-6246633423".to_string(),
+                "01212345678".to_string(),
+                "02079460912".to_string(),
             ],
             "1",
         );
@@ -916,7 +930,54 @@ mod tests {
                 Some("+18009652576".to_string()),
                 Some("+13125589400".to_string()),
                 Some("+12126875650".to_string()),
+                Some("+441212345678".to_string()),
+                Some("+442079460912".to_string()),
             ]
+        );
+    }
+
+    #[test]
+    fn test_soundex_standard_names() {
+        assert_eq!(soundex("Robert"), "R163");
+        assert_eq!(soundex("Rupert"), "R163");
+        assert_eq!(soundex("Rubin"), "R150");
+        assert_eq!(soundex("Washington"), "W252");
+    }
+
+    #[test]
+    fn test_soundex_ashcraft_tymczak_pfister() {
+        assert_eq!(soundex("Ashcraft"), "A261");
+        assert_eq!(soundex("Ashcroft"), "A261");
+        assert_eq!(soundex("Tymczak"), "T522");
+        assert_eq!(soundex("Pfister"), "P236");
+    }
+
+    #[test]
+    fn test_soundex_edge_cases() {
+        assert_eq!(soundex(""), "");
+        assert_eq!(soundex("12345-!@#"), "");
+        assert_eq!(soundex("A"), "A000");
+        assert_eq!(compute_soundex("Main"), "M500");
+    }
+
+    #[test]
+    fn test_damerau_levenshtein_address_tokens() {
+        assert_eq!(damerau_levenshtein("STREET", "STREET"), 0);
+        assert_eq!(damerau_levenshtein("STREET", "STERET"), 1);
+        assert_eq!(damerau_levenshtein("AVENUE", "AVNEUE"), 1);
+        assert_eq!(damerau_levenshtein("BOULEVARD", "BLVD"), 5);
+    }
+
+    #[test]
+    fn test_damerau_levenshtein_edge_cases_and_whitespace() {
+        assert_eq!(damerau_levenshtein("", ""), 0);
+        assert_eq!(damerau_levenshtein("ABC", ""), 3);
+        assert_eq!(damerau_levenshtein("", "ABC"), 3);
+        assert_eq!(damerau_levenshtein("CA", "AC"), 1);
+        assert_eq!(damerau_levenshtein("ABC", "CA"), 2);
+        assert_eq!(
+            normalize_ascii_whitespace_rs("  123  Main, St. #4B - "),
+            "123 MAIN ST 4B"
         );
     }
 }

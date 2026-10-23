@@ -19,20 +19,10 @@ from phone_standardizer.standardizer import (
     validate_phone,
 )
 
-try:
-    import pyarrow as pa  # type: ignore[import-not-found]
-except ImportError:  # pragma: no cover
-    pa = None
-
-try:
-    import polars as pl  # type: ignore[import-not-found]
-except ImportError:  # pragma: no cover
-    pl = None
-
-try:
-    import duckdb  # type: ignore[import-not-found]
-except ImportError:  # pragma: no cover
-    duckdb = None
+_UNSET: Any = object()
+pa: Any = _UNSET
+pl: Any = _UNSET
+duckdb: Any = _UNSET
 
 
 def standardize_arrow(
@@ -44,6 +34,14 @@ def standardize_arrow(
     as_struct: bool = False,
 ) -> Any:
     """Standardize phone numbers in an Apache Arrow Table or RecordBatch."""
+    global pa
+    if pa is _UNSET:
+        try:
+            import pyarrow as _pa  # type: ignore[import-not-found]
+
+            pa = _pa
+        except ImportError:
+            pa = None
     if pa is None:
         raise ImportError("pyarrow is required to use standardize_arrow. Install with `pip install pyarrow`.")
 
@@ -139,6 +137,14 @@ def standardize_polars(
     output_prefix: str = "phone_",
 ) -> Any:
     """Standardize phone numbers in a Polars DataFrame or LazyFrame."""
+    global pl
+    if pl is _UNSET:
+        try:
+            import polars as _pl  # type: ignore[import-not-found]
+
+            pl = _pl
+        except ImportError:
+            pl = None
     if pl is None:
         raise ImportError("polars is required to use standardize_polars. Install with `pip install polars`.")
 
@@ -164,6 +170,14 @@ def standardize_polars(
 
 def register_duckdb_udfs(con: Any, default_country: str = "US") -> None:
     """Register scalar phone standardization UDFs on a DuckDB connection."""
+    global duckdb
+    if duckdb is _UNSET:
+        try:
+            import duckdb as _duckdb  # type: ignore[import-not-found]
+
+            duckdb = _duckdb
+        except ImportError:
+            duckdb = None
     if duckdb is None:
         raise ImportError("duckdb is required to use register_duckdb_udfs. Install with `pip install duckdb`.")
     from phone_standardizer.dedup import generate_phone_blocking_keys

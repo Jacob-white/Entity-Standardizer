@@ -10,24 +10,14 @@ High-performance analytical dataset processing for large address tables:
 import warnings
 from typing import Any, Dict, List, Optional
 
-try:
-    import pyarrow as pa
-except ImportError:
-    pa = None
-
-try:
-    import polars as pl
-except ImportError:
-    pl = None
-
-try:
-    import duckdb
-except ImportError:
-    duckdb = None
-
 from address_standardizer.standardizer import (
     standardize_address,
 )
+
+_UNSET: Any = object()
+pa: Any = _UNSET
+pl: Any = _UNSET
+duckdb: Any = _UNSET
 
 
 # ============================================================================
@@ -53,6 +43,14 @@ def standardize_arrow(
 
     Appends standardized USPS / ISO attributes as columnar arrays or a single struct column.
     """
+    global pa
+    if pa is _UNSET:
+        try:
+            import pyarrow as _pa
+
+            pa = _pa
+        except ImportError:
+            pa = None
     if pa is None:
         raise ImportError("pyarrow is required to use standardize_arrow. Install with `pip install pyarrow`.")
 
@@ -268,6 +266,14 @@ def standardize_polars(
     """
     Standardize addresses in a Polars DataFrame or LazyFrame.
     """
+    global pl
+    if pl is _UNSET:
+        try:
+            import polars as _pl
+
+            pl = _pl
+        except ImportError:
+            pl = None
     if pl is None:
         raise ImportError("polars is required to use standardize_polars. Install with `pip install polars`.")
 
@@ -310,6 +316,14 @@ def register_duckdb_udfs(connection: Optional[Any] = None) -> Any:
       - standardize_deliverability(street1, city, state, postal_code) -> VARCHAR
       - standardize_deliverability_text(address_text) -> VARCHAR
     """
+    global duckdb
+    if duckdb is _UNSET:
+        try:
+            import duckdb as _duckdb
+
+            duckdb = _duckdb
+        except ImportError:
+            duckdb = None
     if duckdb is None:
         raise ImportError("duckdb is required to use register_duckdb_udfs. Install with `pip install duckdb`.")
 

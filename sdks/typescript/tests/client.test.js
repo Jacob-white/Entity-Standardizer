@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  EntityStandardizerClient,
   formatAsYouType,
   PhoneInputController,
   PhoneStandardizerClient,
@@ -24,7 +25,7 @@ test("PhoneStandardizerClient and PhoneInputController interact with API", async
       return {
         ok: true,
         status: 200,
-        json: async () => ({ status: "ok", version: "1.4.0" }),
+        json: async () => ({ status: "ok", version: "2.0.0" }),
       };
     }
     if (u.endsWith("/v1/standardize")) {
@@ -150,9 +151,87 @@ test("PhoneStandardizerClient and PhoneInputController interact with API", async
         }),
       };
     }
+    if (u.endsWith("/v1/address")) {
+      const body = JSON.parse(init.body);
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          street1: "350 5TH AVE",
+          street2: body.street2 ?? "",
+          city: "NEW YORK",
+          state: "NY",
+          postal_code: "10118",
+          country: "USA",
+          normalized_address_key: "350 5TH AVE|NEW YORK|NY|10118|USA",
+          building_key: "350 5TH AVE|NEW YORK|NY|10118|USA",
+          phonetic_key: "350|F130|N620|NY|10118",
+          address_status: "standardized",
+          raw_street_address: body.street1 ?? "",
+          is_us: true,
+          is_private_residence: false,
+          is_registered_agent_hub: false,
+        }),
+      };
+    }
+    if (u.endsWith("/v1/contact")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          address: {
+            street1: "350 5TH AVE",
+            street2: "",
+            city: "NEW YORK",
+            state: "NY",
+            postal_code: "10118",
+            country: "USA",
+            normalized_address_key: "350 5TH AVE|NEW YORK|NY|10118|USA",
+            building_key: "350 5TH AVE|NEW YORK|NY|10118|USA",
+            phonetic_key: "350|F130|N620|NY|10118",
+            address_status: "standardized",
+            raw_street_address: "350 Fifth Ave",
+            is_us: true,
+            is_private_residence: false,
+            is_registered_agent_hub: false,
+          },
+          phone: {
+            raw_input: "555-2368",
+            e164: "+12125552368",
+            national: "(212) 555-2368",
+            international: "+1 212-555-2368",
+            rfc3966: "tel:+1-212-555-2368",
+            country_calling_code: "1",
+            country_iso2: "US",
+            country_iso3: "USA",
+            country_name: "United States",
+            national_significant_number: "2125552368",
+            area_code: "212",
+            subscriber_number: "5552368",
+            extension: null,
+            vanity_alias: null,
+            region_code: "NY",
+            line_type: "FIXED_LINE_OR_MOBILE",
+            is_valid: true,
+            is_possible: true,
+            phone_key: "+12125552368",
+            phone_ext_key: "+12125552368",
+            confidence: 0.94,
+            routing_tier: "AUTO_PASS",
+            risk_flags: [],
+            healing_actions: ["AREA_CODE_INFERRED_FROM_ADDRESS"],
+          },
+          fax: null,
+          entity_key: "350 5TH AVE|NEW YORK|NY|10118|USA||+12125552368",
+          cross_healing_actions: ["PHONE_HEALED_FROM_STANDARDIZED_ADDRESS"],
+          overall_confidence: 0.97,
+        }),
+      };
+    }
     return { ok: false, status: 404, json: async () => ({}) };
   };
 
+  assert.equal(EntityStandardizerClient, PhoneStandardizerClient);
   const client = new PhoneStandardizerClient({
     baseUrl: "http://localhost:8000",
     fetchImpl: mockFetch,
@@ -160,7 +239,7 @@ test("PhoneStandardizerClient and PhoneInputController interact with API", async
 
   const health = await client.health();
   assert.equal(health.status, "ok");
-  assert.equal(health.version, "1.4.0");
+  assert.equal(health.version, "2.0.0");
 
   const country = await client.getCountry("US");
   assert.equal(country.calling_code, "1");
@@ -187,6 +266,41 @@ test("PhoneStandardizerClient and PhoneInputController interact with API", async
 
   const batch = await client.batch({ phones: ["(415) 555-2671"] });
   assert.equal(batch.count, 1);
+
+  const addr = await client.standardizeAddress({
+    street1: "350 Fifth Ave",
+    city: "New York",
+    state: "NY",
+    postal_code: "10118",
+  });
+  assert.equal(addr.street1, "350 5TH AVE");
+  assert.equal(addr.is_us, true);
+
+  const contact = await client.standardizeContact({
+    street1: "350 Fifth Ave",
+    city: "New York",
+    postal_code: "10118",
+    phone: "555-2368",
+  });
+  assert.equal(contact.phone.e164, "+12125552368");
+  assert.equal(contact.address.state, "NY");
+  assert.equal(contact.entity_key, "350 5TH AVE|NEW YORK|NY|10118|USA||+12125552368");
+  assert.deepEqual(contact.cross_healing_actions, [
+    "PHONE_HEALED_FROM_STANDARDIZED_ADDRESS",
+  ]);
+
+  const failingClient = new PhoneStandardizerClient({
+    fetchImpl: async () => ({ ok: false, status: 500, json: async () => ({}) }),
+  });
+  await assert.rejects(
+    () => failingClient.standardizeAddress({ street1: "350 Fifth Ave" }),
+    /Standardize address failed with status 500/
+  );
+  await assert.rejects(
+    () => failingClient.standardizeContact({ street1: "350 Fifth Ave", phone: "555-2368" }),
+    /Standardize contact failed with status 500/
+  );
+
 
   let callbackRecord = null;
   const controller = new PhoneInputController({

@@ -163,6 +163,30 @@ def standardize_batch_e164_dispatch(
             if len(digits) == 11 and digits.startswith("1"):
                 results.append(f"+{digits}")
                 continue
+            if (
+                len(digits) == 11
+                and cleaned.isdigit()
+                and digits.startswith(
+                    (
+                        "01",
+                        "020",
+                        "023",
+                        "024",
+                        "028",
+                        "029",
+                        "071",
+                        "072",
+                        "073",
+                        "074",
+                        "075",
+                        "077",
+                        "078",
+                        "079",
+                    )
+                )
+            ):
+                results.append(f"+44{digits[1:]}")
+                continue
             results.append(None)
             continue
         elif digits.startswith("0") and len(digits) >= 8:

@@ -1200,6 +1200,189 @@ def test_joint_cross_healing_and_phase7_upgrades() -> None:
     )
     assert len(batch_res) == 1 and batch_res[0].phone.e164 == "+12125552368"
 
+    # G. Regression tests for v2.0.0 cross-healing & UK 11-digit trunk prefix ordering
+    import address_standardizer as addr_pkg
+    import entity_standardizer as ent_pkg
+    import entity_standardizer.__main__ as ent_main
+    import pytest
+
+    assert ent_main.main is not None
+    assert ent_pkg.is_native_available() == addr_pkg.is_native_available()
+    assert ent_pkg.cluster_contact_records is not None
+    assert ent_pkg.ContactCluster is not None
+    assert ent_pkg.PhoneCluster is not None
+    assert ent_pkg.PhoneComparisonResult is not None
+    assert ent_pkg.AddressValidationResult is not None
+    assert ent_pkg.generate_phonetic_address_key is not None
+    assert ent_pkg.autocomplete_address is not None
+    assert ent_pkg.explain_phone is not None
+    assert "standardize_arrow" in dir(addr_pkg)
+    assert "create_app" in dir(addr_pkg)
+    assert "AddressSchema" in dir(addr_pkg)
+    assert addr_pkg.arrow is not None
+    assert addr_pkg.server is not None
+    assert addr_pkg.schemas is not None
+    assert callable(addr_pkg.standardize_arrow)
+    assert callable(addr_pkg.create_app)
+    assert addr_pkg.AddressSchema is not None
+    with pytest.raises(AttributeError):
+        _ = addr_pkg.nonexistent_attr_xyz
+
+    # Verify PEP 562 __getattr__ returns None when optional dependency import raises ImportError
+    import importlib
+    import subprocess
+    import sys
+
+    saved_create_app = addr_pkg.__dict__.get("create_app")
+    try:
+        addr_pkg.__dict__.pop("create_app", None)
+        orig_import_module = importlib.import_module
+
+        def _fail_import(name: str, package: str | None = None):
+            if name == "address_standardizer.server":
+                raise ImportError("simulated missing fastapi")
+            return orig_import_module(name, package)
+
+        importlib.import_module = _fail_import  # type: ignore[assignment]
+        try:
+            assert addr_pkg.create_app is None
+        finally:
+            importlib.import_module = orig_import_module  # type: ignore[assignment]
+    finally:
+        if saved_create_app is not None:
+            addr_pkg.__dict__["create_app"] = saved_create_app
+
+    # Verify cold import in a fresh process does not load heavy optional integrations
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            (
+                "import sys, entity_standardizer, address_standardizer, phone_standardizer; "
+                "heavy = ('pyarrow', 'polars', 'duckdb', 'fastapi', 'pydantic'); "
+                "loaded = [m for m in heavy if m in sys.modules]; "
+                "assert not loaded, f'Unexpectedly loaded: {loaded}'; "
+                "assert 'standardize_arrow' in dir(address_standardizer); "
+                "assert address_standardizer.arrow is not None"
+            ),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, proc.stderr
+
+
+    # Unformatted 11-digit UK numbers must not be hijacked by NANP area codes (e.g. 212, 207)
+    p_uk_bham = standardize_phone("01212345678")
+    assert p_uk_bham.is_valid is True and p_uk_bham.e164 == "+441212345678" and p_uk_bham.country_iso2 == "GB"
+    p_uk_lon = standardize_phone("02079460912")
+    assert p_uk_lon.is_valid is True and p_uk_lon.e164 == "+442079460912" and p_uk_lon.country_iso2 == "GB"
+
+    # Empty address must not corrupt UK mobile 0781 into US MA (+1781) or record ADDRESS_COUNTRY_INFERRED_FROM_PHONE
+    c_uk_mob_empty = standardize_contact(phone="0781 234 5678", default_country="GB")
+    assert c_uk_mob_empty.phone.e164 == "+447812345678" and c_uk_mob_empty.phone.country_iso2 == "GB"
+    assert c_uk_mob_empty.cross_healing_actions == []
+
+    c_uk_intl_empty = standardize_contact(phone="+44 20 7946 0912")
+    assert c_uk_intl_empty.phone.e164 == "+442079460912"
+    assert CrossHealingAction.ADDRESS_COUNTRY_INFERRED_FROM_PHONE.value not in c_uk_intl_empty.cross_healing_actions
+
+    # Domestic US addresses (single-line and structured) must not have country overwritten by foreign phone
+    c_us_single_uk_ph = standardize_contact(street1="123 Main St, New York, NY 10001", phone="+44 20 7946 0912")
+    assert c_us_single_uk_ph.address.country == "USA" and c_us_single_uk_ph.address.is_us is True
+    assert PhoneRiskFlag.ADDRESS_COUNTRY_MISMATCH in c_us_single_uk_ph.phone.risk_flags
+    assert CrossHealingAction.ADDRESS_COUNTRY_INFERRED_FROM_PHONE.value not in c_us_single_uk_ph.cross_healing_actions
+
+    c_us_struct_uk_ph = standardize_contact(
+        street1="123 Main St", city="New York", state="NY", postal_code="10001", phone="+44 20 7946 0912"
+    )
+    assert c_us_struct_uk_ph.address.country == "USA" and c_us_struct_uk_ph.address.is_us is True
+    assert PhoneRiskFlag.ADDRESS_COUNTRY_MISMATCH in c_us_struct_uk_ph.phone.risk_flags
+
+    # Single-line UK address healing formatted UK phone (020 7946 0912) and embedded phone in street1
+    c_uk_single_heal = standardize_contact(street1="10 Downing St, London SW1A 2AA", phone="020 7946 0912")
+    assert c_uk_single_heal.address.country == "GBR"
+    assert c_uk_single_heal.phone.e164 == "+442079460912" and c_uk_single_heal.phone.country_iso2 == "GB"
+    assert CrossHealingAction.PHONE_HEALED_FROM_STANDARDIZED_ADDRESS.value in c_uk_single_heal.cross_healing_actions
+
+    c_uk_rescued_heal = standardize_contact(street1="10 Downing St, London SW1A 2AA Tel: 020 7946 0912")
+    assert c_uk_rescued_heal.address.country == "GBR"
+    assert c_uk_rescued_heal.phone.e164 == "+442079460912" and c_uk_rescued_heal.phone.country_iso2 == "GB"
+    assert CrossHealingAction.PHONE_RESCUED_FROM_ADDRESS_FIELD.value in c_uk_rescued_heal.cross_healing_actions
+    assert CrossHealingAction.PHONE_HEALED_FROM_STANDARDIZED_ADDRESS.value in c_uk_rescued_heal.cross_healing_actions
+
+    # Step 4 retry of _try_rescue_phone_from_street when 7-digit local phone needs state inferred from ZIP
+    c_rescue_step4 = standardize_contact(street1="350 Fifth Ave Tel: 555-2368", city="New York", postal_code="10118")
+    assert c_rescue_step4.phone.e164 == "+12125552368"
+    assert c_rescue_step4.address.street1 == "350 5TH AVE"
+    assert CrossHealingAction.PHONE_RESCUED_FROM_ADDRESS_FIELD.value in c_rescue_step4.cross_healing_actions
+    assert CrossHealingAction.PHONE_HEALED_FROM_STANDARDIZED_ADDRESS.value in c_rescue_step4.cross_healing_actions
+
+    # Single-line international addresses with trailing phones must not pollute state or fail rescue
+    c_fr_comma_ph = standardize_contact(street1="10 Rue de Rivoli, 75001 Paris, France, 01 42 68 55 00")
+    assert c_fr_comma_ph.phone.e164 == "+33142685500" and c_fr_comma_ph.address.country == "FRA"
+    assert c_fr_comma_ph.address.state == "" and c_fr_comma_ph.address.city == "PARIS"
+
+    c_fr_tel_single = standardize_contact(street1="10 Rue de Rivoli, 75001 Paris Tel: 01 42 68 55 00")
+    assert c_fr_tel_single.phone.e164 == "+33142685500" and c_fr_tel_single.address.country == "FRA"
+    assert c_fr_tel_single.address.city == "PARIS" and c_fr_tel_single.address.postal_code == "75001"
+
+    c_de_tel_single = standardize_contact(street1="Friedrichstrasse 100, 10117 Berlin Tel: 030 1234567")
+    assert c_de_tel_single.phone.e164 == "+49301234567" and c_de_tel_single.address.country == "DEU"
+
+    # Non-US default_country on street address without explicit country must not default to USA or corrupt phone
+    c_uk_def_mob = standardize_contact(street1="10 High St", phone="0781 234 5678", default_country="GB")
+    assert c_uk_def_mob.address.country == "GBR"
+    assert c_uk_def_mob.phone.e164 == "+447812345678" and c_uk_def_mob.phone.country_iso2 == "GB"
+    assert c_uk_def_mob.cross_healing_actions == []
+
+    c_uk_def_no_ph = standardize_contact(street1="10 High St", default_country="GB")
+    assert c_uk_def_no_ph.address.country == "GBR"
+
+    # Single-line US address with trailing <City> <5-digit ZIP> (no state) must not be overwritten by foreign phone
+    c_us_zip_uk_ph = standardize_contact(street1="123 Main St, Austin 78701", phone="+44 20 7946 0912")
+    assert c_us_zip_uk_ph.address.country == "USA" and c_us_zip_uk_ph.address.state == "TX"
+    assert PhoneRiskFlag.ADDRESS_COUNTRY_MISMATCH in c_us_zip_uk_ph.phone.risk_flags
+
+    # European 5-digit postal codes (metro, non-US ZIP, or mismatched US ZIP city) must not trigger false US mismatch
+    c_fr_paris = standardize_contact(
+        street1="10 Rue de Rivoli", city="Paris", postal_code="75001", phone="+33 1 42 68 55 00"
+    )
+    assert c_fr_paris.address.country == "FRA"
+    assert PhoneRiskFlag.ADDRESS_COUNTRY_MISMATCH not in c_fr_paris.phone.risk_flags
+    assert CrossHealingAction.ADDRESS_COUNTRY_INFERRED_FROM_PHONE.value in c_fr_paris.cross_healing_actions
+    assert CrossHealingAction.PHONE_HEALED_FROM_STANDARDIZED_ADDRESS.value not in c_fr_paris.cross_healing_actions
+
+    c_fr_vers = standardize_contact(
+        street1="10 Rue de la Paroisse", city="Versailles", postal_code="78000", phone="+33 1 42 68 55 00"
+    )
+    assert c_fr_vers.address.country == "FRA"
+    assert PhoneRiskFlag.ADDRESS_COUNTRY_MISMATCH not in c_fr_vers.phone.risk_flags
+
+    c_es_toledo = standardize_contact(
+        street1="Calle Mayor 1", city="Toledo", postal_code="45001", phone="+34 925 22 33 44"
+    )
+    assert c_es_toledo.address.country == "ESP"
+    assert PhoneRiskFlag.ADDRESS_COUNTRY_MISMATCH not in c_es_toledo.phone.risk_flags
+
+    # Batch E.164 dispatch parity for 11-digit UK domestic numbers (both native and pure Python)
+    from phone_standardizer import _native_dispatch as nd
+
+    assert nd.standardize_batch_e164_dispatch(["01212345678", "02079460912"], "1") == [
+        "+441212345678",
+        "+442079460912",
+    ]
+    saved_mod = nd._native_mod
+    try:
+        nd._native_mod = None
+        assert nd.standardize_batch_e164_dispatch(["01212345678", "02079460912"], "1") == [
+            "+441212345678",
+            "+442079460912",
+        ]
+    finally:
+        nd._native_mod = saved_mod
+
 
 
 

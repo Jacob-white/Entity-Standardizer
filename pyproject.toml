@@ -27,7 +27,9 @@ classifiers = [
     "Topic :: Communications :: Telephony",
     "Topic :: Text Processing :: General",
 ]
-dependencies = []
+dependencies = [
+    "h3>=4.0.0",
+]
 
 [project.optional-dependencies]
 server = [
@@ -50,6 +52,15 @@ arrow = [
     "polars>=0.20.0",
     "duckdb>=0.10.0",
     "numpy>=1.24",
+]
+ml = [
+    "usaddress>=0.5.16",
+]
+benchmark = [
+    "psutil>=5.9.0",
+]
+translit = [
+    "anyascii>=0.3",
 ]
 dev = [
     "pytest>=7.0.0",
@@ -75,16 +86,22 @@ address-standardizer-mcp = "address_standardizer.mcp.server:main"
 where = ["."]
 include = ["entity_standardizer*", "phone_standardizer*", "address_standardizer*"]
 
+[tool.setuptools.package-data]
+address_standardizer = [
+    "service/static/*.html",
+    "reference/data/*.tsv.gz",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-norecursedirs = [".claude", "node_modules", ".git", "build", "dist", "target"]
+norecursedirs = [".claude", ".hypothesis", "node_modules", ".git", "build", "dist", "target"]
 python_files = ["test_*.py"]
 markers = [
     "perf: absolute-throughput/memory SLA tests; run without coverage tracing (pytest -m perf)",
 ]
 
 [tool.coverage.run]
-source = ["phone_standardizer"]
+source = ["phone_standardizer", "entity_standardizer"]
 branch = true
 
 [tool.coverage.report]

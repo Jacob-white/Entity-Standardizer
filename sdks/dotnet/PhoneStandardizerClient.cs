@@ -73,6 +73,20 @@ public sealed class PhoneStandardizerClient
         return JsonSerializer.Deserialize<ListCountriesResponse>(body);
     }
 
+    public async Task<StandardizedAddress?> StandardizeAddressAsync(
+        AddressStandardizeRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        return await PostJsonAsync<AddressStandardizeRequest, StandardizedAddress>("/v1/address", request, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<StandardizedContact?> StandardizeContactAsync(
+        ContactStandardizeRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        return await PostJsonAsync<ContactStandardizeRequest, StandardizedContact>("/v1/contact", request, cancellationToken).ConfigureAwait(false);
+    }
+
     private async Task<TResponse?> PostJsonAsync<TRequest, TResponse>(
         string path,
         TRequest request,
@@ -86,3 +100,4 @@ public sealed class PhoneStandardizerClient
         return JsonSerializer.Deserialize<TResponse>(body);
     }
 }
+

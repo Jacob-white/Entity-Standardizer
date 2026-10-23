@@ -18,3 +18,5 @@ docs
 site
 tests
 benchmarks
+.drive_datasets
+.agents

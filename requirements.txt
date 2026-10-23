@@ -1,2 +1,3 @@
-# Core runtime is zero-dependency pure Python.
-# Optional extras: pip install "phone-standardizer[server,arrow,mcp]"
+# Core runtime dependencies (H3 spatial indexing for address standardization).
+# Optional extras: pip install "entity-standardizer[server,arrow,mcp]"
+h3>=4.0.0

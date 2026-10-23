@@ -3,6 +3,8 @@
  */
 
 import {
+  AddressStandardizeRequest,
+  ContactStandardizeRequest,
   CountryDialPlan,
   PhoneBatchRequest,
   PhoneCluster,
@@ -11,6 +13,8 @@ import {
   PhoneDeduplicateRequest,
   PhoneExplainReport,
   PhoneStandardizeRequest,
+  StandardizedAddress,
+  StandardizedContact,
   StandardizedPhone,
 } from "./types.js";
 
@@ -185,4 +189,37 @@ export class PhoneStandardizerClient {
     }
     return (await res.json()) as { count: number; countries: CountryDialPlan[] };
   }
+
+  async standardizeAddress(
+    req: AddressStandardizeRequest,
+    options?: RequestOptions
+  ): Promise<StandardizedAddress> {
+    const res = await this.fetchImpl(`${this.baseUrl}/v1/address`, {
+      method: "POST",
+      headers: this.headers,
+      body: JSON.stringify(req),
+      signal: options?.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Standardize address failed with status ${res.status}`);
+    }
+    return (await res.json()) as StandardizedAddress;
+  }
+
+  async standardizeContact(
+    req: ContactStandardizeRequest,
+    options?: RequestOptions
+  ): Promise<StandardizedContact> {
+    const res = await this.fetchImpl(`${this.baseUrl}/v1/contact`, {
+      method: "POST",
+      headers: this.headers,
+      body: JSON.stringify(req),
+      signal: options?.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Standardize contact failed with status ${res.status}`);
+    }
+    return (await res.json()) as StandardizedContact;
+  }
 }
+

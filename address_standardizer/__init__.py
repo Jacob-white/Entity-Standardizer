@@ -137,37 +137,6 @@ from address_standardizer.reference import (
     get_default_us_zip5_provider,
     validate_against_reference,
 )
-try:
-    from address_standardizer.arrow import (
-        standardize_arrow,
-        standardize_polars,
-        register_duckdb_udfs,
-    )
-except ImportError:
-    standardize_arrow = None
-    standardize_polars = None
-    register_duckdb_udfs = None
-
-try:
-    from address_standardizer.server import (
-        create_app,
-    )
-except ImportError:
-    create_app = None
-
-try:
-    from address_standardizer.schemas import (
-        AddressInputSchema,
-        AddressSchema,
-        StandardizedAddressPydantic,
-        ValidationResultSchema,
-    )
-except ImportError:
-    AddressInputSchema = None
-    AddressSchema = None
-    StandardizedAddressPydantic = None
-    ValidationResultSchema = None
-
 
 from phone_standardizer.joint import (
     CrossHealingAction,
@@ -310,4 +279,43 @@ __all__ = [
     "ValidationResultSchema",
     "__version__",
 ]
+
+_LAZY_SUBMODULES = {
+    "standardize_arrow": "address_standardizer.arrow",
+    "standardize_polars": "address_standardizer.arrow",
+    "register_duckdb_udfs": "address_standardizer.arrow",
+    "create_app": "address_standardizer.server",
+    "AddressInputSchema": "address_standardizer.schemas",
+    "AddressSchema": "address_standardizer.schemas",
+    "StandardizedAddressPydantic": "address_standardizer.schemas",
+    "ValidationResultSchema": "address_standardizer.schemas",
+}
+
+_LAZY_MODULES = {"arrow", "server", "schemas"}
+
+
+def __getattr__(name: str):
+    if name in _LAZY_MODULES:
+        import importlib
+
+        mod = importlib.import_module(f"address_standardizer.{name}")
+        globals()[name] = mod
+        return mod
+    module_path = _LAZY_SUBMODULES.get(name)
+    if module_path is not None:
+        import importlib
+
+        try:
+            mod = importlib.import_module(module_path)
+            val = getattr(mod, name)
+        except ImportError:
+            val = None
+        globals()[name] = val
+        return val
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted(set(globals()) | set(__all__) | _LAZY_MODULES)
+
 

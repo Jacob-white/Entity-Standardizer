@@ -65,18 +65,37 @@ def test_standardize_arrow_and_polars_errors(monkeypatch) -> None:
     with pytest.raises(TypeError, match="Expected polars"):
         standardize_polars(["not_a_df"])
 
-    # Simulate missing optional dependencies
-    monkeypatch.setattr(arrow_mod, "pa", None)
-    with pytest.raises(ImportError, match="pyarrow"):
-        standardize_arrow(tbl)
+    # Simulate missing optional dependencies via both None override and lazy _UNSET import failure
+    import sys
+    import address_standardizer.arrow as addr_arrow_mod
 
-    monkeypatch.setattr(arrow_mod, "pl", None)
-    with pytest.raises(ImportError, match="polars"):
-        standardize_polars(tbl)
+    for mod, fn_arrow, fn_polars, fn_duckdb in (
+        (arrow_mod, standardize_arrow, standardize_polars, register_duckdb_udfs),
+        (
+            addr_arrow_mod,
+            addr_arrow_mod.standardize_arrow,
+            addr_arrow_mod.standardize_polars,
+            addr_arrow_mod.register_duckdb_udfs,
+        ),
+    ):
+        for attr, mod_name, fn in (
+            ("pa", "pyarrow", fn_arrow),
+            ("pl", "polars", fn_polars),
+            ("duckdb", "duckdb", fn_duckdb),
+        ):
+            with monkeypatch.context() as mp:
+                mp.setattr(mod, attr, None)
+                with pytest.raises(ImportError, match=mod_name):
+                    fn(tbl if attr != "duckdb" else None)
 
-    monkeypatch.setattr(arrow_mod, "duckdb", None)
-    with pytest.raises(ImportError, match="duckdb"):
-        register_duckdb_udfs(None)
+            with monkeypatch.context() as mp:
+                mp.setattr(mod, attr, mod._UNSET)
+                mp.setitem(sys.modules, mod_name, None)
+                with pytest.raises(ImportError, match=mod_name):
+                    fn(tbl if attr != "duckdb" else None)
+                assert getattr(mod, attr) is None
+
+
 
 
 def test_standardize_polars_df_and_lazy() -> None:

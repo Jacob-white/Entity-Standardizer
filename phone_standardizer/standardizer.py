@@ -69,33 +69,53 @@ def _extract_address_hint(address_context: Any) -> tuple[str | None, str | None]
             or address_context.get("country")
         )
         raw_state = address_context.get("state") or address_context.get("region")
+        raw_city = address_context.get("city") or address_context.get("locality")
         raw_postal = (
             address_context.get("postal_code")
             or address_context.get("zip_code")
             or address_context.get("zip")
             or address_context.get("postcode")
         )
-        iso2 = normalize_country_iso2(str(raw_country)) if raw_country else None
-        if not iso2 and raw_postal:
-            iso2 = infer_country_from_postal_code(str(raw_postal))
-        return iso2, (str(raw_state).strip().upper() if raw_state else None)
-
-    raw_country = (
-        getattr(address_context, "country_iso2", None)
-        or getattr(address_context, "country_code", None)
-        or getattr(address_context, "country_iso3", None)
-        or getattr(address_context, "country", None)
-    )
-    raw_state = getattr(address_context, "state", None)
-    raw_postal = (
-        getattr(address_context, "postal_code", None)
-        or getattr(address_context, "zip_code", None)
-        or getattr(address_context, "zip", None)
-        or getattr(address_context, "postcode", None)
-    )
+    else:
+        raw_country = (
+            getattr(address_context, "country_iso2", None)
+            or getattr(address_context, "country_code", None)
+            or getattr(address_context, "country_iso3", None)
+            or getattr(address_context, "country", None)
+        )
+        raw_state = getattr(address_context, "state", None)
+        raw_city = getattr(address_context, "city", None)
+        raw_postal = (
+            getattr(address_context, "postal_code", None)
+            or getattr(address_context, "zip_code", None)
+            or getattr(address_context, "zip", None)
+            or getattr(address_context, "postcode", None)
+        )
     iso2 = normalize_country_iso2(str(raw_country)) if raw_country else None
+    if not iso2 and (raw_state or raw_city):
+        from address_standardizer.normalization import normalize_country_code
+
+        probed = normalize_country_code(
+            "__PROBE__",
+            state_raw=str(raw_state or ""),
+            postal_raw=str(raw_postal or ""),
+            city_raw=str(raw_city or ""),
+        )
+        if probed != "ZZZ":
+            iso2 = normalize_country_iso2(probed)
     if not iso2 and raw_postal:
-        iso2 = infer_country_from_postal_code(str(raw_postal))
+        p_str = str(raw_postal).strip()
+        iso2 = infer_country_from_postal_code(p_str)
+        if iso2 == "US" and len(p_str) == 5 and not raw_state:
+            from address_standardizer.reference._match import fold_name
+            from address_standardizer.reference.us_zip5 import get_default_us_zip5_provider
+
+            places = get_default_us_zip5_provider().lookup_postal("US", p_str)
+            if not places or (
+                raw_city
+                and fold_name(str(raw_city)) not in {fold_name(p.place_name) for p in places}
+            ):
+                iso2 = None
     return iso2, (str(raw_state).strip().upper() if raw_state else None)
 
 
@@ -646,12 +666,13 @@ def standardize_phone(
                 if nsn.startswith("1"):
                     nsn = nsn[1:]
                     healing_actions.append(HealingAction.NATIONAL_TRUNK_STRIPPED)
-                elif nsn.startswith("01") and resolve_nanp_npa(nsn[2:5])[2]:
+                elif (
+                    nsn.startswith("01")
+                    and not working.strip().isdigit()
+                    and resolve_nanp_npa(nsn[2:5])[2]
+                ):
                     # Heals off-by-one shifted leading zero '01-703-47-8020' -> '7034780200'
                     nsn = nsn[2:] + "0"
-                    healing_actions.append(HealingAction.NATIONAL_TRUNK_STRIPPED)
-                elif nsn.startswith("0") and resolve_nanp_npa(nsn[1:4])[2]:
-                    nsn = nsn[1:]
                     healing_actions.append(HealingAction.NATIONAL_TRUNK_STRIPPED)
                 elif (
                     explicit_iso2 in (None, "US")
@@ -665,6 +686,9 @@ def standardize_phone(
                     )
                     assert uk_plan is not None
                     plan = uk_plan
+                elif nsn.startswith("0") and resolve_nanp_npa(nsn[1:4])[2]:
+                    nsn = nsn[1:]
+                    healing_actions.append(HealingAction.NATIONAL_TRUNK_STRIPPED)
                 elif (
                     _CORRUPTED_NANP_HYPHEN_RE.match(working)
                     and nsn[3] in "23456789"

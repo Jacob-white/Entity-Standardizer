@@ -143,7 +143,7 @@ def handle_mcp_request(request: dict[str, Any]) -> dict[str, Any]:
             "id": req_id,
             "result": {
                 "protocolVersion": "2024-11-05",
-                "serverInfo": {"name": "phone-standardizer-mcp", "version": "1.4.0"},
+                "serverInfo": {"name": "phone-standardizer-mcp", "version": "2.0.0"},
                 "capabilities": {"tools": {}},
             },
         }
