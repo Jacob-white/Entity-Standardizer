@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 import re
 from typing import Any
@@ -91,6 +92,17 @@ _CREDENTIALS: dict[str, str] = {
     "CISSP": "CISSP",
     "FACS": "FACS",
     "FACP": "FACP",
+    "CHFC": "CHFC",
+    "CLU": "CLU",
+    "AIF": "AIF",
+    "CIMA": "CIMA",
+    "CPWA": "CPWA",
+    "RICP": "RICP",
+    "CRPC": "CRPC",
+    "EA": "EA",
+    "PFS": "PFS",
+    "CAIA": "CAIA",
+    "FRM": "FRM",
 }
 
 _SURNAME_PARTICLES: frozenset[str] = frozenset(
@@ -220,6 +232,26 @@ _NICKNAME_TO_ROOT: dict[str, str] = {
     "VICKY": "VICTORIA",
     "MANDY": "AMANDA",
     "STEPH": "STEPHANIE",
+    "ZACK": "ZACHARY",
+    "ZACH": "ZACHARY",
+    "JOSH": "JOSHUA",
+    "NATE": "NATHAN",
+    "NAT": "NATHAN",
+    "DOUG": "DOUGLAS",
+    "WALT": "WALTER",
+    "WALLY": "WALTER",
+    "PHIL": "PHILIP",
+    "GENE": "EUGENE",
+    "RAY": "RAYMOND",
+    "HARRY": "HAROLD",
+    "HAL": "HAROLD",
+    "HANK": "HENRY",
+    "JACK": "JOHN",
+    "JOHNNY": "JOHN",
+    "MARTY": "MARTIN",
+    "ART": "ARTHUR",
+    "ARTIE": "ARTHUR",
+    "BERNIE": "BERNARD",
 }
 
 _PAREN_OR_QUOTE_NICK_RE = re.compile(
@@ -256,6 +288,9 @@ _TITLE_TOKEN_EXPANSIONS: dict[str, str] = {
     "CPO": "CHIEF PRODUCT OFFICER",
     "CHRO": "CHIEF HUMAN RESOURCES OFFICER",
     "CLO": "CHIEF LEGAL OFFICER",
+    "CCO": "CHIEF COMPLIANCE OFFICER",
+    "CAO": "CHIEF ACCOUNTING OFFICER",
+    "CSO": "CHIEF STRATEGY OFFICER",
     "VP": "VICE PRESIDENT",
     "SVP": "SENIOR VICE PRESIDENT",
     "EVP": "EXECUTIVE VICE PRESIDENT",
@@ -797,3 +832,13 @@ def standardize_job_title(raw_input: str | None) -> StandardizedJobTitle:
         confidence=0.96,
         healing_actions=list(dict.fromkeys(actions)),
     )
+
+
+def batch_standardize_persons(inputs: Sequence[str | None]) -> list[StandardizedPerson]:
+    """Batch-standardize a sequence of person full names."""
+    return [standardize_person(item) for item in inputs]
+
+
+def batch_standardize_job_titles(inputs: Sequence[str | None]) -> list[StandardizedJobTitle]:
+    """Batch-standardize a sequence of job titles."""
+    return [standardize_job_title(item) for item in inputs]

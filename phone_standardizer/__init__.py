@@ -109,12 +109,16 @@ from phone_standardizer.joint import (
 from entity_standardizer.company import (
     StandardizedCompany,
     StandardizedOrganization,
+    batch_standardize_companies,
+    batch_standardize_organizations,
     standardize_company,
     standardize_organization,
 )
 from entity_standardizer.person import (
     StandardizedJobTitle,
     StandardizedPerson,
+    batch_standardize_job_titles,
+    batch_standardize_persons,
     standardize_job_title,
     standardize_person,
 )
@@ -161,8 +165,12 @@ __all__ = [
     "StandardizedWebsite",
     "__version__",
     "are_keypad_adjacent",
+    "batch_standardize_companies",
     "batch_standardize_contacts",
     "batch_standardize_entities",
+    "batch_standardize_job_titles",
+    "batch_standardize_organizations",
+    "batch_standardize_persons",
     "batch_standardize_phones",
     "clear_cache",
     "cluster_contact_records",

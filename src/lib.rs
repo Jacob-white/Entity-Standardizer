@@ -765,6 +765,158 @@ pub fn normalize_batch_ascii_rs(inputs: Vec<String>) -> Vec<String> {
 }
 
 #[pyfunction]
+pub fn normalize_company_tokens_rs(input: &str) -> (Vec<String>, bool, bool) {
+    let chars: Vec<char> = input.chars().collect();
+    let n = chars.len();
+    let mut stage1 = String::with_capacity(input.len() + 16);
+    let mut amp_normalized = false;
+    let mut init_collapsed = false;
+
+    let mut i = 0;
+    while i < n {
+        let ch = chars[i];
+        let prev_is_word = i > 0 && (chars[i - 1].is_alphanumeric() || chars[i - 1] == '_');
+        let prev_is_alnum = i > 0 && chars[i - 1].is_ascii_alphanumeric();
+
+        // 1. Check \bA\s*/\s*S\b (Danish/Norwegian A/S legal form)
+        if !prev_is_word && (ch == 'A' || ch == 'a') {
+            let mut j = i + 1;
+            while j < n && chars[j].is_whitespace() {
+                j += 1;
+            }
+            if j < n && chars[j] == '/' {
+                j += 1;
+                while j < n && chars[j].is_whitespace() {
+                    j += 1;
+                }
+                if j < n
+                    && (chars[j] == 'S' || chars[j] == 's')
+                    && (j + 1 == n || (!chars[j + 1].is_alphanumeric() && chars[j + 1] != '_'))
+                {
+                    stage1.push_str(" AS ");
+                    i = j + 1;
+                    continue;
+                }
+            }
+        }
+
+        // 2. Check & or +
+        if ch == '&' || ch == '+' {
+            stage1.push_str(" AND ");
+            amp_normalized = true;
+            i += 1;
+            continue;
+        }
+
+        // 3. Check dotted initialisms: (?<![A-Za-z0-9])(?:(?:[A-Za-z]\.\s*){2,}(?:[A-Za-z](?![A-Za-z0-9.]))?|[A-Za-z]\.[A-Za-z](?![A-Za-z0-9.]))
+        if !prev_is_alnum && ch.is_ascii_alphabetic() && i + 1 < n && chars[i + 1] == '.' {
+            let mut j = i;
+            let mut dot_count = 0usize;
+            let mut letters = String::new();
+            while j + 1 < n && chars[j].is_ascii_alphabetic() && chars[j + 1] == '.' {
+                letters.push(chars[j].to_ascii_uppercase());
+                dot_count += 1;
+                j += 2;
+                while j < n && chars[j].is_whitespace() {
+                    j += 1;
+                }
+            }
+            if dot_count >= 2 {
+                if j < n
+                    && chars[j].is_ascii_alphabetic()
+                    && (j + 1 == n
+                        || (!chars[j + 1].is_ascii_alphanumeric() && chars[j + 1] != '.'))
+                {
+                    letters.push(chars[j].to_ascii_uppercase());
+                    j += 1;
+                }
+                stage1.push(' ');
+                stage1.push_str(&letters);
+                stage1.push(' ');
+                init_collapsed = true;
+                i = j;
+                continue;
+            } else if dot_count == 1
+                && j == i + 2
+                && j < n
+                && chars[j].is_ascii_alphabetic()
+                && (j + 1 == n || (!chars[j + 1].is_ascii_alphanumeric() && chars[j + 1] != '.'))
+            {
+                letters.push(chars[j].to_ascii_uppercase());
+                stage1.push(' ');
+                stage1.push_str(&letters);
+                stage1.push(' ');
+                init_collapsed = true;
+                i = j + 1;
+                continue;
+            }
+        }
+
+        stage1.push(ch);
+        i += 1;
+    }
+
+    // 4. Split on non-word characters and uppercase tokens
+    let mut raw_tokens: Vec<String> = Vec::new();
+    let mut current = String::new();
+    for ch in stage1.chars() {
+        if ch.is_alphanumeric() || ch == '_' {
+            for up in ch.to_uppercase() {
+                current.push(up);
+            }
+        } else if !current.is_empty() {
+            raw_tokens.push(std::mem::take(&mut current));
+        }
+    }
+    if !current.is_empty() {
+        raw_tokens.push(current);
+    }
+
+    // 5. Collapse consecutive single-letter alphabetic tokens
+    let mut collapsed: Vec<String> = Vec::with_capacity(raw_tokens.len());
+    let mut idx = 0;
+    let m = raw_tokens.len();
+    let is_single_alpha = |s: &str| -> bool {
+        let mut it = s.chars();
+        match (it.next(), it.next()) {
+            (Some(c), None) => c.is_alphabetic(),
+            _ => false,
+        }
+    };
+    while idx < m {
+        if is_single_alpha(&raw_tokens[idx])
+            && idx + 1 < m
+            && is_single_alpha(&raw_tokens[idx + 1])
+        {
+            let mut merged = raw_tokens[idx].clone();
+            let mut k = idx + 1;
+            while k < m && is_single_alpha(&raw_tokens[k]) {
+                merged.push_str(&raw_tokens[k]);
+                k += 1;
+            }
+            collapsed.push(merged);
+            init_collapsed = true;
+            idx = k;
+        } else {
+            collapsed.push(raw_tokens[idx].clone());
+            idx += 1;
+        }
+    }
+
+    (collapsed, amp_normalized, init_collapsed)
+}
+
+#[pyfunction]
+pub fn normalize_batch_company_tokens_rs(
+    inputs: Vec<String>,
+) -> Vec<(Vec<String>, bool, bool)> {
+    inputs
+        .into_iter()
+        .map(|s| normalize_company_tokens_rs(&s))
+        .collect()
+}
+
+#[pyfunction]
 pub fn get_engine_name() -> &'static str {
     "Rust_PyO3"
 }
@@ -788,6 +940,8 @@ pub fn get_capabilities(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
             "damerau_levenshtein_distance",
             "normalize_ascii_whitespace_rs",
             "normalize_batch_ascii_rs",
+            "normalize_company_tokens_rs",
+            "normalize_batch_company_tokens_rs",
             "fold_vanity_digits_rs",
             "fold_unicode_digits_rs",
             "extract_digits_rs",
@@ -810,6 +964,8 @@ fn register_all_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(damerau_levenshtein_distance, m)?)?;
     m.add_function(wrap_pyfunction!(normalize_ascii_whitespace_rs, m)?)?;
     m.add_function(wrap_pyfunction!(normalize_batch_ascii_rs, m)?)?;
+    m.add_function(wrap_pyfunction!(normalize_company_tokens_rs, m)?)?;
+    m.add_function(wrap_pyfunction!(normalize_batch_company_tokens_rs, m)?)?;
     m.add_function(wrap_pyfunction!(get_engine_name, m)?)?;
     m.add_function(wrap_pyfunction!(is_native, m)?)?;
     m.add_function(wrap_pyfunction!(get_capabilities, m)?)?;
@@ -1013,6 +1169,38 @@ mod tests {
             normalize_ascii_whitespace_rs("  123  Main, St. #4B - "),
             "123 MAIN ST 4B"
         );
+    }
+
+    #[test]
+    fn test_normalize_company_tokens_rs() {
+        let (t1, amp1, init1) = normalize_company_tokens_rs("The I. B. M. Corporation");
+        assert_eq!(t1, vec!["THE", "IBM", "CORPORATION"]);
+        assert!(!amp1);
+        assert!(init1);
+
+        let (t2, amp2, init2) = normalize_company_tokens_rs("I B M Holdings & Group L.L.C");
+        assert_eq!(t2, vec!["IBM", "HOLDINGS", "AND", "GROUP", "LLC"]);
+        assert!(amp2);
+        assert!(init2);
+
+        let (t3, amp3, init3) = normalize_company_tokens_rs("Novo Nordisk A/S");
+        assert_eq!(t3, vec!["NOVO", "NORDISK", "AS"]);
+        assert!(!amp3);
+        assert!(!init3);
+
+        let (t4, amp4, init4) = normalize_company_tokens_rs("Booking.com B.V");
+        assert_eq!(t4, vec!["BOOKING", "COM", "BV"]);
+        assert!(!amp4);
+        assert!(init4);
+
+        let batch = normalize_batch_company_tokens_rs(vec![
+            "Beta S.A. de C.V.".to_string(),
+            "Smith + Associates".to_string(),
+        ]);
+        assert_eq!(batch.len(), 2);
+        assert_eq!(batch[0].0, vec!["BETA", "SA", "DE", "CV"]);
+        assert_eq!(batch[1].0, vec!["SMITH", "AND", "ASSOCIATES"]);
+        assert!(batch[1].1);
     }
 }
 
