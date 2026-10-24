@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 import re
 from typing import Any
@@ -10,12 +11,15 @@ from typing import Any
 # Mapped to (canonical_suffix, unambiguous_country_iso2)
 _MULTI_TOKEN_LEGAL_SUFFIXES: tuple[tuple[tuple[str, ...], str, str | None], ...] = (
     (("SOCIEDAD", "ANONIMA", "DE", "CAPITAL", "VARIABLE"), "SA DE CV", "MX"),
+    (("LIMITED", "LIABILITY", "LIMITED", "PARTNERSHIP"), "LLLP", None),
     (("SA", "DE", "CV"), "SA DE CV", "MX"),
     (("S", "A", "DE", "C", "V"), "SA DE CV", "MX"),
     (("PROFESSIONAL", "LIMITED", "LIABILITY", "COMPANY"), "PLLC", None),
     (("LIMITED", "LIABILITY", "COMPANY"), "LLC", None),
     (("LIMITED", "LIABILITY", "PARTNERSHIP"), "LLP", None),
+    (("UNLIMITED", "LIABILITY", "COMPANY"), "ULC", "CA"),
     (("PUBLIC", "LIMITED", "COMPANY"), "PLC", "GB"),
+    (("FEDERAL", "SAVINGS", "BANK"), "FSB", "US"),
     (("PROPRIETARY", "LIMITED"), "PTY LTD", "AU"),
     (("PROPRIETARY", "LTD"), "PTY LTD", "AU"),
     (("PTY", "LIMITED"), "PTY LTD", "AU"),
@@ -25,6 +29,9 @@ _MULTI_TOKEN_LEGAL_SUFFIXES: tuple[tuple[tuple[str, ...], str, str | None], ...]
     (("KABUSHIKI", "GAISHA"), "KK", "JP"),
     (("LIMITED", "PARTNERSHIP"), "LP", None),
     (("PROFESSIONAL", "CORPORATION"), "PC", None),
+    (("NATIONAL", "ASSOCIATION"), "NA", "US"),
+    (("STATUTORY", "TRUST"), "TRUST", None),
+    (("BUSINESS", "TRUST"), "TRUST", None),
     (("SOCIEDAD", "ANONIMA"), "SA", None),
     (("SOCIETE", "ANONYME"), "SA", None),
 )
@@ -39,9 +46,13 @@ _SINGLE_TOKEN_LEGAL_SUFFIXES: dict[str, tuple[str, str | None]] = {
     "LIMITED": ("LTD", None),
     "PLC": ("PLC", "GB"),
     "LLP": ("LLP", None),
+    "LLLP": ("LLLP", None),
     "LP": ("LP", None),
     "PC": ("PC", None),
     "PLLC": ("PLLC", None),
+    "ULC": ("ULC", "CA"),
+    "NA": ("NA", "US"),
+    "FSB": ("FSB", "US"),
     "CO": ("CO", None),
     "COMPANY": ("CO", None),
     "GMBH": ("GMBH", "DE"),
@@ -178,8 +189,8 @@ class StandardizedCompany:
 StandardizedOrganization = StandardizedCompany
 
 
-def _normalize_tokens(text: str, actions: list[str] | None = None) -> list[str]:
-    """Normalize punctuation, ampersands, and spaced/dotted initialisms into uppercase tokens."""
+def _pure_normalize_tokens(text: str, actions: list[str] | None = None) -> list[str]:
+    """Pure-Python normalization of punctuation, ampersands, and spaced/dotted initialisms into uppercase tokens."""
     working = _AS_SLASH_RE.sub(" AS ", text)
 
     if "&" in working or "+" in working:
@@ -224,6 +235,21 @@ def _normalize_tokens(text: str, actions: list[str] | None = None) -> list[str]:
             i += 1
 
     return collapsed
+
+
+def _normalize_tokens(text: str, actions: list[str] | None = None) -> list[str]:
+    """Normalize punctuation, ampersands, and spaced/dotted initialisms into uppercase tokens."""
+    from phone_standardizer._native_dispatch import _native_mod
+
+    if _native_mod is not None and hasattr(_native_mod, "normalize_company_tokens_rs"):
+        tokens, amp_norm, init_col = _native_mod.normalize_company_tokens_rs(text)
+        if actions is not None:
+            if amp_norm:
+                actions.append("AMPERSAND_NORMALIZED")
+            if init_col:
+                actions.append("INITIALISM_COLLAPSED")
+        return list(tokens)
+    return _pure_normalize_tokens(text, actions)
 
 
 def _strip_trailing_co_and(base: list[str], canonical: str) -> list[str]:
@@ -427,3 +453,15 @@ def standardize_company(
 
 
 standardize_organization = standardize_company
+
+
+def batch_standardize_companies(
+    inputs: Sequence[str | None],
+    *,
+    country: str | None = None,
+) -> list[StandardizedCompany]:
+    """Batch-standardize a sequence of organization or company names."""
+    return [standardize_company(item, country=country) for item in inputs]
+
+
+batch_standardize_organizations = batch_standardize_companies

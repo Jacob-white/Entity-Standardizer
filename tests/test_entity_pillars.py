@@ -14,8 +14,12 @@ from entity_standardizer import (
     StandardizedOrganization,
     StandardizedUrl,
     StandardizedWebsite,
+    batch_standardize_companies,
     batch_standardize_contacts,
     batch_standardize_entities,
+    batch_standardize_job_titles,
+    batch_standardize_organizations,
+    batch_standardize_persons,
     standardize_company,
     standardize_contact,
     standardize_email,
@@ -27,7 +31,9 @@ from entity_standardizer import (
     standardize_url,
     standardize_website,
 )
+from entity_standardizer.company import _normalize_tokens, _pure_normalize_tokens
 from entity_standardizer.web import extract_registrable_domain, infer_country_from_domain
+import phone_standardizer._native_dispatch as native_dispatch
 from phone_standardizer.cli import main as cli_main
 
 
@@ -596,3 +602,111 @@ def test_cli_entity_subcommands(capsys: pytest.CaptureFixture[str]) -> None:
     assert cli_main(["social", "@octocat", "--platform", "GITHUB"]) == 0
     out_soc = json.loads(capsys.readouterr().out)
     assert out_soc["url"] == "https://github.com/octocat"
+
+
+def test_rust_company_tokens_pure_fallback_and_batch_helpers(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert batch_standardize_organizations is batch_standardize_companies
+
+    # Direct pure-Python token normalization parity check
+    pure_actions: list[str] = []
+    assert _pure_normalize_tokens("The I. B. M. & Co. L.L.C", pure_actions) == [
+        "THE",
+        "IBM",
+        "AND",
+        "CO",
+        "LLC",
+    ]
+    assert "AMPERSAND_NORMALIZED" in pure_actions
+    assert "INITIALISM_COLLAPSED" in pure_actions
+    assert _pure_normalize_tokens("I B M + Group", None) == ["IBM", "AND", "GROUP"]
+    assert _pure_normalize_tokens("I.B.M. Corp", None) == ["IBM", "CORP"]
+
+    # Native Rust PyO3 token normalization (or mock when running pure-Python CI job)
+    if native_dispatch._native_mod is not None:  # pragma: no cover
+        toks_rs, amp_rs, init_rs = native_dispatch._native_mod.normalize_company_tokens_rs(
+            "The I. B. M. & Co. L.L.C"
+        )
+        assert toks_rs == ["THE", "IBM", "AND", "CO", "LLC"]
+        assert amp_rs is True
+        assert init_rs is True
+        batch_rs = native_dispatch._native_mod.normalize_batch_company_tokens_rs(
+            ["Novo Nordisk A/S", "Booking.com B.V."]
+        )
+        assert batch_rs[0][0] == ["NOVO", "NORDISK", "AS"]
+        assert batch_rs[1][0] == ["BOOKING", "COM", "BV"]
+
+    class _DummyNative:
+        @staticmethod
+        def normalize_company_tokens_rs(text: str) -> tuple[list[str], bool, bool]:
+            if "&" in text:
+                return (["ABC", "AND", "CO"], True, True)
+            return (["ACME", "CORP"], False, False)
+
+    monkeypatch.setattr(native_dispatch, "_native_mod", _DummyNative())
+    nat_actions: list[str] = []
+    assert _normalize_tokens("A.B.C. & Co.", nat_actions) == ["ABC", "AND", "CO"]
+    assert "AMPERSAND_NORMALIZED" in nat_actions
+    assert "INITIALISM_COLLAPSED" in nat_actions
+    nat_actions_plain: list[str] = []
+    assert _normalize_tokens("Acme Corp", nat_actions_plain) == ["ACME", "CORP"]
+    assert nat_actions_plain == []
+    assert _normalize_tokens("Acme Corp", None) == ["ACME", "CORP"]
+
+    # Fallback path when _native_mod is None
+    monkeypatch.setattr(native_dispatch, "_native_mod", None)
+    fb_actions: list[str] = []
+    assert _normalize_tokens("A B C & Partners", fb_actions) == [
+        "ABC",
+        "AND",
+        "PARTNERS",
+    ]
+    assert "AMPERSAND_NORMALIZED" in fb_actions
+    assert "INITIALISM_COLLAPSED" in fb_actions
+
+    # Expanded legal forms, credentials, nicknames, and batch functions
+    comp_batch = batch_standardize_companies(
+        [
+            "JPMorgan Chase Bank, National Association",
+            "Acme Limited Liability Limited Partnership",
+            "Maple Unlimited Liability Company",
+            "Pacific Federal Savings Bank",
+            "Vanguard Statutory Trust",
+            "Fidelity Business Trust",
+        ]
+    )
+    assert [c.legal_suffix for c in comp_batch] == [
+        "NA",
+        "LLLP",
+        "ULC",
+        "FSB",
+        "TRUST",
+        "TRUST",
+    ]
+    assert comp_batch[0].inferred_country_iso2 == "US"
+    assert comp_batch[2].inferred_country_iso2 == "CA"
+
+    person_batch = batch_standardize_persons(
+        [
+            "Zack Smith, ChFC, CLU, AIF, CFP",
+            "Josh Miller, CIMA, CPWA, CAIA, FRM",
+            "Hank Williams, EA, PFS, RICP, CRPC",
+            "Jack Welch",
+        ]
+    )
+    assert person_batch[0].root_first_name == "ZACHARY"
+    assert "CHFC" in person_batch[0].credentials and "AIF" in person_batch[0].credentials
+    assert person_batch[1].root_first_name == "JOSHUA"
+    assert "CIMA" in person_batch[1].credentials and "FRM" in person_batch[1].credentials
+    assert person_batch[2].root_first_name == "HENRY"
+    assert "EA" in person_batch[2].credentials and "RICP" in person_batch[2].credentials
+    assert person_batch[3].root_first_name == "JOHN"
+
+    title_batch = batch_standardize_job_titles(["CCO", "CAO", "CSO"])
+    assert [t.normalized_title for t in title_batch] == [
+        "CHIEF COMPLIANCE OFFICER",
+        "CHIEF ACCOUNTING OFFICER",
+        "CHIEF STRATEGY OFFICER",
+    ]
+    assert all(t.seniority_level == "C_SUITE" for t in title_batch)
