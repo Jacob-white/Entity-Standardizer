@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+import json
 import re
 from typing import Any
 
@@ -317,7 +318,99 @@ _TITLE_TOKEN_EXPANSIONS: dict[str, str] = {
     "SWE": "SOFTWARE ENGINEER",
     "GC": "GENERAL COUNSEL",
     "PRES": "PRESIDENT",
+    "FINOP": "FINANCIAL AND OPERATIONS PRINCIPAL",
+    "IAR": "INVESTMENT ADVISER REPRESENTATIVE",
+    "OSJ": "OFFICE OF SUPERVISORY JURISDICTION",
 }
+
+_UNAMBIGUOUS_ORG_TOKENS: frozenset[str] = frozenset(
+    {
+        "LLC",
+        "INC",
+        "INCORPORATED",
+        "CORP",
+        "CORPORATION",
+        "LTD",
+        "LIMITED",
+        "LLP",
+        "LLLP",
+        "PLLC",
+        "PLC",
+        "GMBH",
+        "SARL",
+        "SCSP",
+        "SPC",
+        "PTY",
+        "ULC",
+        "FSB",
+        "HOLDINGS",
+        "HOLDING",
+        "PARTNERS",
+        "PARTNERSHIP",
+        "VENTURES",
+        "CAPITAL",
+        "MANAGEMENT",
+        "ADVISORS",
+        "ADVISERS",
+        "SECURITIES",
+        "INVESTMENTS",
+        "INVESTORS",
+        "FUND",
+        "FUNDS",
+        "TRUST",
+        "TRUSTEES",
+        "FOUNDATION",
+        "ASSOCIATION",
+        "BANCORP",
+        "COMPANY",
+        "COMPANIES",
+        "GROUP",
+        "ENTERPRISES",
+        "SOLUTIONS",
+        "SERVICES",
+        "UNIVERSITY",
+    }
+)
+
+_ORG_SUFFIX_PATTERN_RE = re.compile(
+    r"(?:,\s*|\s+)L\.?\s*P\.?\s*$"
+    r"|\bS\.\s*[aàAÀ]\.?\s*r\.\s*l\.?(?:\s|$)"
+    r"|\bL\.\s*L\.\s*C\.?(?:\s|$)"
+    r"|\bS\.\s*C\.\s*Sp\.?(?:\s|$)",
+    re.IGNORECASE,
+)
+
+_PERSON_PLACEHOLDERS: frozenset[str] = frozenset(
+    {
+        "NA",
+        "N/A",
+        "NONE",
+        "NULL",
+        "UNKNOWN",
+        "TBD",
+        "UNAVAILABLE",
+        "NOT APPLICABLE",
+        "REDACTED",
+    }
+)
+
+_LEADING_PLACEHOLDER_RE = re.compile(
+    r"^\s*(?:[-–—]+|\[?\s*(?:N\s*/\s*A|NA|NONE|NULL|UNKNOWN|TBD)\s*\]?)\s+(?=[A-Za-z])",
+    re.IGNORECASE,
+)
+
+
+def is_organization_name(raw_input: str | None) -> bool:
+    """Return True if raw_input represents a corporate entity, fund, or trust rather than a natural person."""
+    if not raw_input:
+        return False
+    s = str(raw_input).strip()
+    if not s:
+        return False
+    if _ORG_SUFFIX_PATTERN_RE.search(s):
+        return True
+    words = {w.upper() for w in re.findall(r"[A-Za-z0-9]+", s)}
+    return bool(words & _UNAMBIGUOUS_ORG_TOKENS)
 
 
 @dataclass(slots=True)
@@ -337,6 +430,7 @@ class StandardizedPerson:
     person_key: str | None = None
     person_root_key: str | None = None
     phonetic_key: str | None = None
+    is_organization: bool = False
     is_valid: bool = False
     confidence: float = 0.0
     healing_actions: list[str] = field(default_factory=list)
@@ -357,6 +451,7 @@ class StandardizedPerson:
             "person_key": self.person_key,
             "person_root_key": self.person_root_key,
             "phonetic_key": self.phonetic_key,
+            "is_organization": self.is_organization,
             "is_valid": self.is_valid,
             "confidence": round(self.confidence, 4),
             "healing_actions": list(self.healing_actions),
@@ -371,6 +466,7 @@ class StandardizedJobTitle:
     normalized_title: str | None = None
     seniority_level: str | None = None
     department: str | None = None
+    is_executive: bool = False
     is_valid: bool = False
     confidence: float = 0.0
     healing_actions: list[str] = field(default_factory=list)
@@ -382,6 +478,7 @@ class StandardizedJobTitle:
             "normalized_title": self.normalized_title,
             "seniority_level": self.seniority_level,
             "department": self.department,
+            "is_executive": self.is_executive,
             "is_valid": self.is_valid,
             "confidence": round(self.confidence, 4),
             "healing_actions": list(self.healing_actions),
@@ -426,8 +523,28 @@ def standardize_person(raw_input: str | None) -> StandardizedPerson:
     if not cleaned_raw or re.match(r"^\d+\s+", cleaned_raw):
         return StandardizedPerson(raw_input=str(raw_input))
 
+    # Reject pure placeholders like "N/A", "NONE", "[none]"
+    stripped_brackets = cleaned_raw.strip("[](){}-–— ").upper()
+    if not stripped_brackets or stripped_brackets in _PERSON_PLACEHOLDERS:
+        return StandardizedPerson(raw_input=str(raw_input))
+
     actions: list[str] = []
     working = re.sub(r"\s+", " ", cleaned_raw)
+
+    # Strip leading placeholder tokens (e.g. "- Enis Hulli" or "N/A Enis Hulli")
+    m_lead_ph = _LEADING_PLACEHOLDER_RE.match(working)
+    if m_lead_ph:
+        working = working[m_lead_ph.end() :].strip()
+        actions.append("PLACEHOLDER_STRIPPED")
+
+    # Detect corporate / entity names misplaced in person name fields
+    if is_organization_name(working):
+        return StandardizedPerson(
+            raw_input=str(raw_input),
+            is_organization=True,
+            is_valid=False,
+            healing_actions=["ORGANIZATION_DETECTED_IN_PERSON_FIELD"],
+        )
 
     salutation: str | None = None
     nickname: str | None = None
@@ -784,7 +901,20 @@ def standardize_job_title(raw_input: str | None) -> StandardizedJobTitle:
     from entity_standardizer.company import _DOTTED_INITIALISM_RE
 
     actions: list[str] = []
-    working = re.sub(r"&", " AND ", cleaned_raw)
+    working = cleaned_raw
+
+    # Unpack JSON array strings (e.g., '["Executive Officer", "Director"]')
+    if working.startswith("[") and working.endswith("]"):
+        try:
+            parsed_arr = json.loads(working)
+            items = [str(x).strip() for x in parsed_arr if str(x).strip()]
+            if items:
+                working = " AND ".join(items)
+                actions.append("JSON_ARRAY_UNPACKED")
+        except ValueError:
+            pass
+
+    working = re.sub(r"&", " AND ", working)
     working = _DOTTED_INITIALISM_RE.sub(
         lambda m: f" {re.sub(r'[^A-Za-z]', '', m.group(0)).upper()} ", working
     )
@@ -822,15 +952,136 @@ def standardize_job_title(raw_input: str | None) -> StandardizedJobTitle:
     token_set = set(expanded_tokens)
     seniority_level = _classify_seniority(normalized_title, token_set)
     department = _classify_department(normalized_title, token_set)
+    is_executive = (
+        seniority_level in ("C_SUITE", "OWNER_PARTNER", "VP")
+        or bool(token_set & {"EXECUTIVE", "DIRECTOR", "TRUSTEE", "PRINCIPAL"})
+    )
 
     return StandardizedJobTitle(
         raw_input=str(raw_input),
         normalized_title=normalized_title,
         seniority_level=seniority_level,
         department=department,
+        is_executive=is_executive,
         is_valid=True,
         confidence=0.96,
         healing_actions=list(dict.fromkeys(actions)),
+    )
+
+
+@dataclass(slots=True)
+class PersonComparisonResult:
+    """Result of comparing two person name records for entity resolution."""
+
+    is_match: bool
+    score: float
+    match_type: str
+    person_a: StandardizedPerson
+    person_b: StandardizedPerson
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the person comparison result into a JSON-compatible dictionary."""
+        return {
+            "is_match": self.is_match,
+            "score": round(self.score, 4),
+            "match_type": self.match_type,
+            "person_a": self.person_a.to_dict(),
+            "person_b": self.person_b.to_dict(),
+        }
+
+
+def compare_persons(
+    person_a: str | StandardizedPerson | None,
+    person_b: str | StandardizedPerson | None,
+) -> PersonComparisonResult:
+    """Compare two person names or StandardizedPerson objects across exact, root-nickname, initial, and phonetic keys."""
+    from phone_standardizer._native_dispatch import damerau_levenshtein_distance_dispatch
+
+    pa = person_a if isinstance(person_a, StandardizedPerson) else standardize_person(person_a)
+    pb = person_b if isinstance(person_b, StandardizedPerson) else standardize_person(person_b)
+
+    if (
+        not pa.is_valid
+        or not pb.is_valid
+        or not pa.first_name
+        or not pa.last_name
+        or not pb.first_name
+        or not pb.last_name
+    ):
+        return PersonComparisonResult(
+            is_match=False,
+            score=0.0,
+            match_type="INVALID_INPUT",
+            person_a=pa,
+            person_b=pb,
+        )
+
+    if (
+        pa.generational_suffix
+        and pb.generational_suffix
+        and pa.generational_suffix != pb.generational_suffix
+        and pa.last_name == pb.last_name
+        and pa.root_first_name == pb.root_first_name
+    ):
+        return PersonComparisonResult(
+            is_match=False,
+            score=0.45,
+            match_type="GENERATIONAL_SUFFIX_CONFLICT",
+            person_a=pa,
+            person_b=pb,
+        )
+
+    if pa.person_key == pb.person_key:
+        return PersonComparisonResult(
+            is_match=True,
+            score=1.0,
+            match_type="EXACT_PERSON_KEY",
+            person_a=pa,
+            person_b=pb,
+        )
+
+    if pa.person_root_key == pb.person_root_key:
+        return PersonComparisonResult(
+            is_match=True,
+            score=0.96,
+            match_type="ROOT_NAME_MATCH",
+            person_a=pa,
+            person_b=pb,
+        )
+
+    if pa.last_name == pb.last_name and (
+        (len(pa.first_name) == 1 and pb.first_name.startswith(pa.first_name))
+        or (len(pb.first_name) == 1 and pa.first_name.startswith(pb.first_name))
+    ):
+        return PersonComparisonResult(
+            is_match=True,
+            score=0.88,
+            match_type="INITIAL_AND_LAST_MATCH",
+            person_a=pa,
+            person_b=pb,
+        )
+
+    full_a = f"{pa.root_first_name} {pa.last_name}"
+    full_b = f"{pb.root_first_name} {pb.last_name}"
+    max_len = max(len(full_a), len(full_b))
+    dist = damerau_levenshtein_distance_dispatch(full_a, full_b)
+    sim = round(max(0.0, 1.0 - (dist / max_len)), 4)
+
+    if pa.phonetic_key and pa.phonetic_key == pb.phonetic_key and sim >= 0.82:
+        return PersonComparisonResult(
+            is_match=True,
+            score=sim,
+            match_type="PHONETIC_FUZZY_MATCH",
+            person_a=pa,
+            person_b=pb,
+        )
+
+    return PersonComparisonResult(
+        is_match=False,
+        score=sim,
+        match_type="NO_MATCH",
+        person_a=pa,
+        person_b=pb,
     )
 
 

@@ -545,6 +545,9 @@ public sealed class StandardizedPerson
     [JsonPropertyName("phonetic_key")]
     public string? PhoneticKey { get; set; }
 
+    [JsonPropertyName("is_organization")]
+    public bool IsOrganization { get; set; }
+
     [JsonPropertyName("is_valid")]
     public bool IsValid { get; set; }
 
@@ -568,6 +571,9 @@ public sealed class StandardizedJobTitle
 
     [JsonPropertyName("department")]
     public string? Department { get; set; }
+
+    [JsonPropertyName("is_executive")]
+    public bool IsExecutive { get; set; }
 
     [JsonPropertyName("is_valid")]
     public bool IsValid { get; set; }

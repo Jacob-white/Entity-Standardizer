@@ -7,7 +7,9 @@ import json
 import pytest
 
 from entity_standardizer import (
+    CompanyComparisonResult,
     CrossHealingAction,
+    PersonComparisonResult,
     StandardizedCompany,
     StandardizedContact,
     StandardizedEntity,
@@ -16,10 +18,18 @@ from entity_standardizer import (
     StandardizedWebsite,
     batch_standardize_companies,
     batch_standardize_contacts,
+    batch_standardize_emails,
     batch_standardize_entities,
     batch_standardize_job_titles,
     batch_standardize_organizations,
     batch_standardize_persons,
+    batch_standardize_socials,
+    batch_standardize_urls,
+    batch_standardize_websites,
+    compare_companies,
+    compare_organizations,
+    compare_persons,
+    is_organization_name,
     standardize_company,
     standardize_contact,
     standardize_email,
@@ -710,3 +720,200 @@ def test_rust_company_tokens_pure_fallback_and_batch_helpers(
         "CHIEF STRATEGY OFFICER",
     ]
     assert all(t.seniority_level == "C_SUITE" for t in title_batch)
+
+
+def test_v2_1_company_diacritics_offshore_suffixes_sec_trusts_and_comparison() -> None:
+    # Diacritics folding in both pure-Python and native paths
+    assert _pure_normalize_tokens("KKR Opportunities III S.à r.l.", []) == [
+        "KKR",
+        "OPPORTUNITIES",
+        "III",
+        "SA",
+        "RL",
+    ]
+    c_sarl = standardize_company("KKR Opportunities III S.à r.l.")
+    assert c_sarl.legal_name == "KKR OPPORTUNITIES III SARL"
+    assert c_sarl.legal_suffix == "SARL"
+    assert c_sarl.inferred_country_iso2 == "LU"
+
+    c_fr_sarl = standardize_company("Société Générale Société à responsabilité limitée")
+    assert c_fr_sarl.legal_name == "SOCIETE GENERALE SARL"
+    assert c_fr_sarl.inferred_country_iso2 == "FR"
+
+    c_scsp = standardize_company("EQT X Special Limited Partnership")
+    assert c_scsp.legal_suffix == "SCSP"
+    assert c_scsp.inferred_country_iso2 == "LU"
+
+    c_scsp_abbr = standardize_company("Bain Capital S.C.Sp.")
+    assert c_scsp_abbr.legal_suffix == "SCSP"
+    assert c_scsp_abbr.inferred_country_iso2 == "LU"
+
+    c_spc = standardize_company("Millennium Global Segregated Portfolio Company")
+    assert c_spc.legal_suffix == "SPC"
+    assert c_spc.inferred_country_iso2 == "KY"
+
+    c_dst = standardize_company("Inland Exchange Delaware Statutory Trust")
+    assert c_dst.legal_suffix == "DST"
+    assert c_dst.inferred_country_iso2 == "US"
+
+    c_reit = standardize_company("Prologis Real Estate Investment Trust")
+    assert c_reit.legal_suffix == "REIT"
+
+    # SEC /DE/ state suffix stripping (valid US state and non-US state code)
+    c_sec_de = standardize_company("BLACKROCK INC /DE/")
+    assert c_sec_de.legal_name == "BLACKROCK INC"
+    assert c_sec_de.inferred_country_iso2 == "US"
+    assert "SEC_STATE_SUFFIX_STRIPPED" in c_sec_de.healing_actions
+
+    c_sec_xx = standardize_company("GLOBAL OFFSHORE CORP /FI/")
+    assert c_sec_xx.legal_name == "GLOBAL OFFSHORE CORP"
+    assert c_sec_xx.inferred_country_iso2 is None
+    assert "SEC_STATE_SUFFIX_STRIPPED" in c_sec_xx.healing_actions
+
+    # Trust agreement date guard (U/A/D, F/B/O, REVOCABLE TRUST) must not split as DBA
+    c_trust = standardize_company("U/A/D 01/15/2010 JOHN DOE REVOCABLE TRUST")
+    assert c_trust.dba_name is None
+    assert c_trust.legal_suffix == "TRUST"
+
+    # Parenthesized acronym alias extraction vs legal suffix inside parentheses
+    c_pimco = standardize_company("Pacific Investment Management Company (PIMCO)")
+    assert c_pimco.base_name == "PACIFIC INVESTMENT MANAGEMENT"
+    assert c_pimco.dba_name == "PIMCO"
+    assert "DBA_EXTRACTED" in c_pimco.healing_actions
+
+    c_paren_sfx = standardize_company("Acme Holdings (LLC)")
+    assert c_paren_sfx.dba_name is None
+
+    # Institutional role qualifiers in parentheses extracted as branch_unit
+    c_prog = standardize_company("Fidelity Investments (Program Manager)")
+    assert c_prog.branch_unit == "PROGRAM MANAGER"
+    assert c_prog.base_name == "FIDELITY INVESTMENTS"
+
+    # Company comparison across all match tiers
+    assert compare_organizations is compare_companies
+    cmp_inv = compare_companies(None, "BlackRock, Inc.")
+    assert cmp_inv.is_match is False and cmp_inv.match_type == "INVALID_INPUT"
+
+    cmp_exact = compare_companies("BlackRock, Inc.", "BLACKROCK INCORPORATED /DE/")
+    assert isinstance(cmp_exact, CompanyComparisonResult)
+    assert cmp_exact.is_match is True and cmp_exact.match_type == "EXACT_COMPANY_KEY"
+    assert cmp_exact.to_dict()["score"] == 1.0
+
+    cmp_base = compare_companies("Blackstone Group LLC", "Blackstone Group L.P.")
+    assert cmp_base.is_match is True and cmp_base.match_type == "BASE_NAME_MATCH"
+
+    cmp_alias = compare_companies("Pacific Investment Management Company (PIMCO)", "PIMCO LLC")
+    assert cmp_alias.is_match is True and cmp_alias.match_type == "ALIAS_MATCH"
+
+    cmp_stem = compare_companies("Apollo Global Management LLC", "Apollo Advisors LP")
+    assert cmp_stem.is_match is True and cmp_stem.match_type == "BRAND_STEM_MATCH"
+
+    cmp_phon = compare_companies("Schroder Capital LLC", "Schroeder Capital LP")
+    assert cmp_phon.is_match is True and cmp_phon.match_type == "PHONETIC_FUZZY_MATCH"
+
+    cmp_no = compare_companies("BlackRock Inc.", "Vanguard Group Inc.")
+    assert cmp_no.is_match is False and cmp_no.match_type == "NO_MATCH"
+
+
+def test_v2_1_person_org_guard_placeholders_executive_titles_and_comparison() -> None:
+    # Organization detector in person field
+    assert is_organization_name(None) is False
+    assert is_organization_name("   ") is False
+    assert is_organization_name("NexPoint Energy, L.P.") is True
+    assert is_organization_name("Augnition Global Investors US GP, LLC") is True
+    assert is_organization_name("Jane M. Doe") is False
+
+    p_org = standardize_person("Augnition Global Investors US GP, LLC")
+    assert p_org.is_valid is False
+    assert p_org.is_organization is True
+    assert "ORGANIZATION_DETECTED_IN_PERSON_FIELD" in p_org.healing_actions
+    assert p_org.to_dict()["is_organization"] is True
+
+    # Placeholders rejected vs leading placeholder stripped
+    assert standardize_person("N/A").is_valid is False
+    assert standardize_person("[none]").is_valid is False
+    assert standardize_person("---").is_valid is False
+
+    p_lead = standardize_person("- Enis Hulli")
+    assert p_lead.is_valid is True
+    assert p_lead.full_name == "ENIS HULLI"
+    assert "PLACEHOLDER_STRIPPED" in p_lead.healing_actions
+
+    p_na_lead = standardize_person("N/A Enis Hulli")
+    assert p_na_lead.is_valid is True
+    assert p_na_lead.full_name == "ENIS HULLI"
+
+    # JSON-serialized role array unpacking and executive flag
+    jt_json = standardize_job_title('["Executive Officer", "Director"]')
+    assert jt_json.is_valid is True
+    assert jt_json.normalized_title == "EXECUTIVE OFFICER AND DIRECTOR"
+    assert jt_json.is_executive is True
+    assert "JSON_ARRAY_UNPACKED" in jt_json.healing_actions
+    assert jt_json.to_dict()["is_executive"] is True
+
+    assert standardize_job_title("[]").is_valid is False
+    jt_bad_json = standardize_job_title("[Chief Compliance Officer]")
+    assert jt_bad_json.is_valid is True
+    assert jt_bad_json.normalized_title == "CHIEF COMPLIANCE OFFICER"
+
+    jt_finop = standardize_job_title("FINOP")
+    assert jt_finop.normalized_title == "FINANCIAL AND OPERATIONS PRINCIPAL"
+    assert jt_finop.is_executive is True
+
+    jt_iar = standardize_job_title("IAR")
+    assert jt_iar.normalized_title == "INVESTMENT ADVISER REPRESENTATIVE"
+    assert jt_iar.is_executive is False
+
+    # Person comparison across all match tiers
+    p_inv = compare_persons(None, "Jane Doe")
+    assert isinstance(p_inv, PersonComparisonResult)
+    assert p_inv.is_match is False and p_inv.match_type == "INVALID_INPUT"
+
+    p_gen_conflict = compare_persons("Robert J. Smith Jr.", "Robert J. Smith Sr.")
+    assert p_gen_conflict.is_match is False
+    assert p_gen_conflict.match_type == "GENERATIONAL_SUFFIX_CONFLICT"
+
+    p_exact = compare_persons("Dr. Robert J. Smith", "Smith, Robert J., M.D.")
+    assert p_exact.is_match is True and p_exact.match_type == "EXACT_PERSON_KEY"
+    assert p_exact.to_dict()["score"] == 1.0
+
+    p_root = compare_persons("Bob J. Smith", "Robert M. Smith")
+    assert p_root.is_match is True and p_root.match_type == "ROOT_NAME_MATCH"
+
+    p_init = compare_persons("R. Smith", "Robert Smith")
+    assert p_init.is_match is True and p_init.match_type == "INITIAL_AND_LAST_MATCH"
+
+    p_phon = compare_persons("Steven Jonsson", "Stephen Johnson")
+    assert p_phon.is_match is True and p_phon.match_type == "PHONETIC_FUZZY_MATCH"
+
+    p_no = compare_persons("Alice Wonderland", "Bob Builder")
+    assert p_no.is_match is False and p_no.match_type == "NO_MATCH"
+
+
+def test_v2_1_web_batch_helpers_and_joint_org_rescue() -> None:
+    assert batch_standardize_websites is batch_standardize_urls
+    emails = batch_standardize_emails(["Jane.Doe+tag@gmial.com", "invalid"])
+    assert len(emails) == 2 and emails[0].email == "janedoe@gmail.com" and not emails[1].is_valid
+
+    urls = batch_standardize_urls(["http://www.blackrock.com/?utm_source=x", ""])
+    assert len(urls) == 2 and urls[0].domain == "blackrock.com" and not urls[1].is_valid
+
+    socials = batch_standardize_socials(["@blackrock", ""], platform="X")
+    assert len(socials) == 2 and socials[0].url == "https://x.com/blackrock" and not socials[1].is_valid
+
+    # Joint contact cross-healing: rescue organization misplaced in person_name field
+    rec = standardize_contact(
+        person_name="Augnition Global Investors US GP, LLC",
+        street1="100 Main St",
+        city="New York",
+        state="NY",
+        postal_code="10001",
+    )
+    assert rec.person is None
+    assert rec.organization is not None
+    assert rec.organization.legal_name == "AUGNITION GLOBAL INVESTORS US GP LLC"
+    assert (
+        CrossHealingAction.ORGANIZATION_RESCUED_FROM_PERSON_FIELD.value
+        in rec.cross_healing_actions
+    )
+

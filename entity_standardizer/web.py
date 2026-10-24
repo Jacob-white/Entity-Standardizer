@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 import re
 from typing import Any
@@ -904,3 +905,26 @@ def standardize_social(
         )
 
     return StandardizedSocial(raw_input=str(raw_input))
+
+
+def batch_standardize_emails(inputs: Sequence[str | None]) -> list[StandardizedEmail]:
+    """Batch-standardize a sequence of email addresses."""
+    return [standardize_email(item) for item in inputs]
+
+
+def batch_standardize_urls(inputs: Sequence[str | None]) -> list[StandardizedUrl]:
+    """Batch-standardize a sequence of website URLs."""
+    return [standardize_url(item) for item in inputs]
+
+
+batch_standardize_websites = batch_standardize_urls
+
+
+def batch_standardize_socials(
+    inputs: Sequence[str | None],
+    *,
+    platform: str | None = None,
+) -> list[StandardizedSocial]:
+    """Batch-standardize a sequence of social media profiles or handles."""
+    return [standardize_social(item, platform=platform) for item in inputs]
+

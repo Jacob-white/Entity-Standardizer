@@ -80,6 +80,7 @@ class CrossHealingAction(StrEnum):
     EMAIL_WEBSITE_DOMAIN_MATCH = "EMAIL_WEBSITE_DOMAIN_MATCH"
     EMAIL_WEBSITE_DOMAIN_MISMATCH = "EMAIL_WEBSITE_DOMAIN_MISMATCH"
     COUNTRY_INFERRED_FROM_ENTITY_PILLARS = "COUNTRY_INFERRED_FROM_ENTITY_PILLARS"
+    ORGANIZATION_RESCUED_FROM_PERSON_FIELD = "ORGANIZATION_RESCUED_FROM_PERSON_FIELD"
 
 
 @dataclass(slots=True)
@@ -322,6 +323,11 @@ def standardize_contact(
         cand_per = standardize_person(eff_person)
         if cand_per.is_valid:
             person_res = cand_per
+        elif cand_per.is_organization and org_res is None:
+            org_res = standardize_company(eff_person, country=country)
+            cross_actions.append(
+                CrossHealingAction.ORGANIZATION_RESCUED_FROM_PERSON_FIELD.value
+            )
 
     title_res: StandardizedJobTitle | None = None
     if eff_title is not None and str(eff_title).strip():

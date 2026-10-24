@@ -764,9 +764,37 @@ pub fn normalize_batch_ascii_rs(inputs: Vec<String>) -> Vec<String> {
         .collect()
 }
 
+fn fold_latin_diacritic(ch: char) -> char {
+    match ch {
+        'à' | 'á' | 'â' | 'ã' | 'ä' | 'å' | 'ā' | 'ă' | 'ą' => 'a',
+        'À' | 'Á' | 'Â' | 'Ã' | 'Ä' | 'Å' | 'Ā' | 'Ă' | 'Ą' => 'A',
+        'è' | 'é' | 'ê' | 'ë' | 'ē' | 'ĕ' | 'ė' | 'ę' | 'ě' => 'e',
+        'È' | 'É' | 'Ê' | 'Ë' | 'Ē' | 'Ĕ' | 'Ė' | 'Ę' | 'Ě' => 'E',
+        'ì' | 'í' | 'î' | 'ï' | 'ĩ' | 'ī' | 'ĭ' | 'į' => 'i',
+        'Ì' | 'Í' | 'Î' | 'Ï' | 'Ĩ' | 'Ī' | 'Ĭ' | 'Į' => 'I',
+        'ò' | 'ó' | 'ô' | 'õ' | 'ö' | 'ø' | 'ō' | 'ŏ' | 'ő' => 'o',
+        'Ò' | 'Ó' | 'Ô' | 'Õ' | 'Ö' | 'Ø' | 'Ō' | 'Ŏ' | 'Ő' => 'O',
+        'ù' | 'ú' | 'û' | 'ü' | 'ũ' | 'ū' | 'ŭ' | 'ů' | 'ű' | 'ų' => 'u',
+        'Ù' | 'Ú' | 'Û' | 'Ü' | 'Ũ' | 'Ū' | 'Ŭ' | 'Ů' | 'Ű' | 'Ų' => 'U',
+        'ç' | 'ć' | 'č' | 'ĉ' | 'ċ' => 'c',
+        'Ç' | 'Ć' | 'Č' | 'Ĉ' | 'Ċ' => 'C',
+        'ñ' | 'ń' | 'ň' | 'ņ' => 'n',
+        'Ñ' | 'Ń' | 'Ň' | 'Ņ' => 'N',
+        'ý' | 'ÿ' | 'ŷ' => 'y',
+        'Ý' | 'Ÿ' | 'Ŷ' => 'Y',
+        'ž' | 'ź' | 'ż' => 'z',
+        'Ž' | 'Ź' | 'Ż' => 'Z',
+        'š' | 'ś' | 'ŝ' | 'ş' => 's',
+        'Š' | 'Ś' | 'Ŝ' | 'Ş' => 'S',
+        'ł' | 'ľ' | 'ĺ' | 'ļ' => 'l',
+        'Ł' | 'Ľ' | 'Ĺ' | 'Ļ' => 'L',
+        _ => ch,
+    }
+}
+
 #[pyfunction]
 pub fn normalize_company_tokens_rs(input: &str) -> (Vec<String>, bool, bool) {
-    let chars: Vec<char> = input.chars().collect();
+    let chars: Vec<char> = input.chars().map(fold_latin_diacritic).collect();
     let n = chars.len();
     let mut stage1 = String::with_capacity(input.len() + 16);
     let mut amp_normalized = false;
@@ -1196,11 +1224,16 @@ mod tests {
         let batch = normalize_batch_company_tokens_rs(vec![
             "Beta S.A. de C.V.".to_string(),
             "Smith + Associates".to_string(),
+            "KKR Opportunities III S.à r.l.".to_string(),
+            "Société Générale S.A.".to_string(),
         ]);
-        assert_eq!(batch.len(), 2);
+        assert_eq!(batch.len(), 4);
         assert_eq!(batch[0].0, vec!["BETA", "SA", "DE", "CV"]);
         assert_eq!(batch[1].0, vec!["SMITH", "AND", "ASSOCIATES"]);
         assert!(batch[1].1);
+        assert_eq!(batch[2].0, vec!["KKR", "OPPORTUNITIES", "III", "SA", "RL"]);
+        assert!(batch[2].2);
+        assert_eq!(batch[3].0, vec!["SOCIETE", "GENERALE", "SA"]);
     }
 }
 
