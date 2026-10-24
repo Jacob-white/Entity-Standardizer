@@ -1093,3 +1093,90 @@ def batch_standardize_persons(inputs: Sequence[str | None]) -> list[Standardized
 def batch_standardize_job_titles(inputs: Sequence[str | None]) -> list[StandardizedJobTitle]:
     """Batch-standardize a sequence of job titles."""
     return [standardize_job_title(item) for item in inputs]
+
+
+@dataclass(frozen=True, slots=True)
+class PersonCluster:
+    """A deduplicated cluster of person records resolved to a single Golden Person Record."""
+
+    cluster_id: str
+    golden_person: StandardizedPerson
+    members: tuple[StandardizedPerson, ...]
+    raw_inputs: tuple[str, ...]
+    match_types: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the person cluster to a JSON-compatible dictionary."""
+        return {
+            "cluster_id": self.cluster_id,
+            "golden_person": self.golden_person.to_dict(),
+            "members": [m.to_dict() for m in self.members],
+            "raw_inputs": list(self.raw_inputs),
+            "match_types": list(self.match_types),
+        }
+
+
+def _person_survivorship_rank(person: StandardizedPerson) -> tuple[int, float, int, int, int]:
+    return (
+        1 if person.is_valid else 0,
+        person.confidence,
+        1 if person.middle_name else 0,
+        len(person.credentials),
+        len(person.full_name or ""),
+    )
+
+
+def deduplicate_persons(
+    persons: Sequence[str | StandardizedPerson | None],
+    *,
+    min_score: float = 0.85,
+) -> list[PersonCluster]:
+    """Cluster and deduplicate a collection of person names into Golden Person Records."""
+    if not persons:
+        return []
+
+    parsed: list[StandardizedPerson] = [
+        p if isinstance(p, StandardizedPerson) else standardize_person(p)
+        for p in persons
+    ]
+    n = len(parsed)
+    parent = list(range(n))
+    reasons: dict[int, set[str]] = {i: set() for i in range(n)}
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            cmp = compare_persons(parsed[i], parsed[j])
+            if cmp.is_match and cmp.score >= min_score:
+                ri, rj = find(i), find(j)
+                lo, hi = (ri, rj) if ri < rj else (rj, ri)
+                if lo != hi:
+                    parent[hi] = lo
+                    reasons[lo].update(reasons[hi])
+                reasons[lo].add(cmp.match_type)
+
+    groups: dict[int, list[int]] = {}
+    for idx in range(n):
+        groups.setdefault(find(idx), []).append(idx)
+
+    clusters: list[PersonCluster] = []
+    for cluster_num, (root_idx, member_indices) in enumerate(groups.items(), start=1):
+        members = tuple(parsed[i] for i in member_indices)
+        golden = max(members, key=_person_survivorship_rank)
+        match_types = tuple(sorted(reasons[root_idx] or {"SINGLETON"}))
+        clusters.append(
+            PersonCluster(
+                cluster_id=f"PERSON-CLUSTER-{cluster_num:04d}",
+                golden_person=golden,
+                members=members,
+                raw_inputs=tuple(m.raw_input for m in members),
+                match_types=match_types,
+            )
+        )
+    return clusters
+

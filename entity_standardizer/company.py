@@ -642,3 +642,94 @@ def batch_standardize_companies(
 
 
 batch_standardize_organizations = batch_standardize_companies
+
+
+@dataclass(frozen=True, slots=True)
+class CompanyCluster:
+    """A deduplicated cluster of company records resolved to a single Golden Company Record."""
+
+    cluster_id: str
+    golden_company: StandardizedCompany
+    members: tuple[StandardizedCompany, ...]
+    raw_inputs: tuple[str, ...]
+    match_types: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the company cluster to a JSON-compatible dictionary."""
+        return {
+            "cluster_id": self.cluster_id,
+            "golden_company": self.golden_company.to_dict(),
+            "members": [m.to_dict() for m in self.members],
+            "raw_inputs": list(self.raw_inputs),
+            "match_types": list(self.match_types),
+        }
+
+
+def _company_survivorship_rank(comp: StandardizedCompany) -> tuple[int, float, int, int, int]:
+    return (
+        1 if comp.is_valid else 0,
+        comp.confidence,
+        1 if comp.legal_suffix else 0,
+        1 if (comp.dba_name or comp.fka_name) else 0,
+        len(comp.legal_name or ""),
+    )
+
+
+def deduplicate_companies(
+    companies: Sequence[str | StandardizedCompany | None],
+    *,
+    country: str | None = None,
+    min_score: float = 0.90,
+) -> list[CompanyCluster]:
+    """Cluster and deduplicate a collection of company names into Golden Company Records."""
+    if not companies:
+        return []
+
+    parsed: list[StandardizedCompany] = [
+        c if isinstance(c, StandardizedCompany) else standardize_company(c, country=country)
+        for c in companies
+    ]
+    n = len(parsed)
+    parent = list(range(n))
+    reasons: dict[int, set[str]] = {i: set() for i in range(n)}
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            cmp = compare_companies(parsed[i], parsed[j])
+            if cmp.is_match and cmp.score >= min_score:
+                ri, rj = find(i), find(j)
+                lo, hi = (ri, rj) if ri < rj else (rj, ri)
+                if lo != hi:
+                    parent[hi] = lo
+                    reasons[lo].update(reasons[hi])
+                reasons[lo].add(cmp.match_type)
+
+    groups: dict[int, list[int]] = {}
+    for idx in range(n):
+        groups.setdefault(find(idx), []).append(idx)
+
+    clusters: list[CompanyCluster] = []
+    for cluster_num, (root_idx, member_indices) in enumerate(groups.items(), start=1):
+        members = tuple(parsed[i] for i in member_indices)
+        golden = max(members, key=_company_survivorship_rank)
+        match_types = tuple(sorted(reasons[root_idx] or {"SINGLETON"}))
+        clusters.append(
+            CompanyCluster(
+                cluster_id=f"COMPANY-CLUSTER-{cluster_num:04d}",
+                golden_company=golden,
+                members=members,
+                raw_inputs=tuple(m.raw_input for m in members),
+                match_types=match_types,
+            )
+        )
+    return clusters
+
+
+deduplicate_organizations = deduplicate_companies
+

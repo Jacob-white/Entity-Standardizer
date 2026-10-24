@@ -125,7 +125,13 @@ def test_register_duckdb_udfs() -> None:
             validate_phone_udf('(415) 555-2671'),
             mask_phone_udf('(415) 555-2671'),
             phone_blocking_keys('(415) 555-2671'),
-            phone_blocking_keys('')
+            phone_blocking_keys(''),
+            standardize_company_name('KKR Opportunities III S.à r.l.'),
+            company_entity_key('BlackRock, Inc. /DE/'),
+            standardize_person_name('Smith, Dr. Robert J., Jr.'),
+            person_entity_key('Bob J. Smith'),
+            standardize_email_udf('Jane.Doe+tag@gmial.com'),
+            standardize_url_domain('https://www.blackrock.com/us/individual?utm_source=x')
         """
     ).fetchone()
     assert row[:5] == (
@@ -137,6 +143,14 @@ def test_register_duckdb_udfs() -> None:
     )
     assert "e164:+14155552671" in row[5]
     assert row[6] == []
+    assert row[7:] == (
+        "KKR OPPORTUNITIES III SARL",
+        "BLACKROCK|INC",
+        "ROBERT J SMITH JR",
+        "SMITH|ROBERT",
+        "janedoe@gmail.com",
+        "blackrock.com",
+    )
 
 
 def test_native_dispatch_extended_functions(monkeypatch, tmp_path) -> None:

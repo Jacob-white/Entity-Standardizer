@@ -298,6 +298,43 @@ def test_cluster_contact_records_synergy() -> None:
     hub_clusters = cluster_contact_records(hub_records)
     assert len(hub_clusters) == 3
 
+    # Multi-pillar linkage via SHARED_EMAIL_KEY and SHARED_PERSON_AND_COMPANY_KEY
+    multi_pillar_records = [
+        {
+            "id": "mp-1",
+            "person_name": "Robert J. Smith",
+            "organization": "BlackRock, Inc.",
+            "email": "Robert.Smith+tag@gmail.com",
+            "phone": "+1 212-555-0101",
+        },
+        {
+            "id": "mp-2",
+            "person_name": "R. Smith",
+            "organization": "BLACKROCK INC /DE/",
+            "email": "robertsmith@googlemail.com",
+            "phone": "+1 415-555-0202",
+        },
+        {
+            "id": "mp-3",
+            "person_name": "Bob Smith",
+            "organization": "BlackRock Incorporated",
+            "email": "info@blackrock.com",  # role account ignored for email bucket
+            "phone": "+44 20 7946 0912",
+        },
+        {
+            "id": "mp-4",
+            "person_name": "N/A",
+            "organization": "...",
+            "email": "bad-email",
+            "phone": "+1 312-555-0303",
+        },
+    ]
+    mp_clusters = cluster_contact_records(multi_pillar_records)
+    assert len(mp_clusters) == 2
+    assert mp_clusters[0].record_ids == ("mp-1", "mp-2", "mp-3")
+    assert "SHARED_EMAIL_KEY" in mp_clusters[0].linkage_reasons
+    assert "SHARED_PERSON_AND_COMPANY_KEY" in mp_clusters[0].linkage_reasons
+
 
 
 def test_server_mcp_and_cli_phase4_endpoints(capsys) -> None:

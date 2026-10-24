@@ -7,8 +7,11 @@ import json
 import pytest
 
 from entity_standardizer import (
+    CompanyCluster,
     CompanyComparisonResult,
     CrossHealingAction,
+    EmailComparisonResult,
+    PersonCluster,
     PersonComparisonResult,
     StandardizedCompany,
     StandardizedContact,
@@ -16,6 +19,7 @@ from entity_standardizer import (
     StandardizedOrganization,
     StandardizedUrl,
     StandardizedWebsite,
+    UrlComparisonResult,
     batch_standardize_companies,
     batch_standardize_contacts,
     batch_standardize_emails,
@@ -27,8 +31,14 @@ from entity_standardizer import (
     batch_standardize_urls,
     batch_standardize_websites,
     compare_companies,
+    compare_emails,
     compare_organizations,
     compare_persons,
+    compare_urls,
+    compare_websites,
+    deduplicate_companies,
+    deduplicate_organizations,
+    deduplicate_persons,
     is_organization_name,
     standardize_company,
     standardize_contact,
@@ -916,4 +926,147 @@ def test_v2_1_web_batch_helpers_and_joint_org_rescue() -> None:
         CrossHealingAction.ORGANIZATION_RESCUED_FROM_PERSON_FIELD.value
         in rec.cross_healing_actions
     )
+
+
+def test_v2_1_entity_deduplication_web_comparison_and_endpoints(capsys) -> None:
+    from fastapi.testclient import TestClient
+
+    from phone_standardizer.mcp import handle_mcp_request
+    from phone_standardizer.server import app
+
+    # 1. Company deduplication & clustering
+    assert deduplicate_organizations is deduplicate_companies
+    assert deduplicate_companies([]) == []
+    c_clusters = deduplicate_companies(
+        [
+            "BlackRock, Inc.",
+            "BLACKROCK INCORPORATED /DE/",
+            "BlackRock LLC",
+            "Vanguard Group, Inc.",
+        ]
+    )
+    assert len(c_clusters) == 2
+    assert isinstance(c_clusters[0], CompanyCluster)
+    assert len(c_clusters[0].members) == 3
+    assert c_clusters[0].golden_company.legal_name == "BLACKROCK INC"
+    assert c_clusters[0].to_dict()["cluster_id"] == "COMPANY-CLUSTER-0001"
+    assert c_clusters[1].match_types == ("SINGLETON",)
+
+    # 2. Person deduplication & clustering
+    assert deduplicate_persons([]) == []
+    p_clusters = deduplicate_persons(
+        [
+            "Dr. Robert J. Smith, M.D.",
+            "Bob J. Smith",
+            "Robert Smith",
+            "Alice Wonderland",
+        ]
+    )
+    assert len(p_clusters) == 2
+    assert isinstance(p_clusters[0], PersonCluster)
+    assert len(p_clusters[0].members) == 3
+    assert p_clusters[0].golden_person.full_name == "ROBERT J SMITH"
+    assert p_clusters[0].to_dict()["cluster_id"] == "PERSON-CLUSTER-0001"
+
+    # 3. Sentinel domain rejection & email/URL comparison
+    e_sent = standardize_email("user@example.com")
+    assert e_sent.is_valid is False
+    assert "SENTINEL_DOMAIN_REJECTED" in e_sent.healing_actions
+
+    u_sent = standardize_url("https://www.none.com/home")
+    assert u_sent.is_valid is False
+    assert "SENTINEL_DOMAIN_REJECTED" in u_sent.healing_actions
+
+    ec_inv = compare_emails(None, "jane@stripe.com")
+    assert isinstance(ec_inv, EmailComparisonResult)
+    assert ec_inv.is_match is False and ec_inv.match_type == "INVALID_INPUT"
+
+    ec_exact = compare_emails("Jane.Doe+vip@gmail.com", "janedoe@googlemail.com")
+    assert ec_exact.is_match is True and ec_exact.match_type == "EXACT_EMAIL_KEY"
+    assert ec_exact.to_dict()["score"] == 1.0
+
+    ec_corp = compare_emails("jdoe@blackrock.com", "jdoe@blackrock.co.uk")
+    assert ec_corp.is_match is True and ec_corp.match_type == "CORPORATE_BRAND_LOCAL_MATCH"
+
+    ec_no = compare_emails("alice@stripe.com", "bob@stripe.com")
+    assert ec_no.is_match is False and ec_no.match_type == "NO_MATCH"
+    assert compare_emails("jdoe@stripe.com", "jdoe@vanguard.com").is_match is False
+
+    assert compare_websites is compare_urls
+    uc_inv = compare_urls(None, "https://stripe.com")
+    assert isinstance(uc_inv, UrlComparisonResult)
+    assert uc_inv.is_match is False and uc_inv.match_type == "INVALID_INPUT"
+
+    uc_exact = compare_urls("http://www.stripe.com/docs/?utm_source=x", "https://stripe.com/docs")
+    assert uc_exact.is_match is True and uc_exact.match_type == "EXACT_URL_KEY"
+    assert uc_exact.to_dict()["score"] == 1.0
+
+    uc_dom = compare_urls("https://stripe.com/docs", "https://dashboard.stripe.com/login")
+    assert uc_dom.is_match is True and uc_dom.match_type == "SAME_REGISTRABLE_DOMAIN"
+
+    uc_stem = compare_urls("https://blackrock.com", "https://blackrock.co.uk")
+    assert uc_stem.is_match is True and uc_stem.match_type == "SAME_BRAND_STEM"
+
+    uc_no = compare_urls("https://stripe.com", "https://vanguard.com")
+    assert uc_no.is_match is False and uc_no.match_type == "NO_MATCH"
+
+    # 4. FastAPI, MCP, and CLI endpoints for company/person comparison and job title standardization
+    client = TestClient(app)
+    r_cc = client.post(
+        "/v1/company/compare",
+        json={"company_a": "BlackRock, Inc.", "company_b": "BLACKROCK INCORPORATED"},
+    )
+    assert r_cc.status_code == 200 and r_cc.json()["is_match"] is True
+
+    r_pc = client.post(
+        "/v1/person/compare",
+        json={"person_a": "Bob Smith", "person_b": "Robert Smith"},
+    )
+    assert r_pc.status_code == 200 and r_pc.json()["is_match"] is True
+
+    r_jt = client.post("/v1/job-title", json={"title": '["Executive Officer", "Director"]'})
+    assert r_jt.status_code == 200 and r_jt.json()["is_executive"] is True
+
+    mcp_jt = handle_mcp_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 91,
+            "method": "tools/call",
+            "params": {"name": "standardize_job_title", "arguments": {"title": "FINOP"}},
+        }
+    )
+    assert '"is_executive": true' in mcp_jt["result"]["content"][0]["text"]
+
+    mcp_cc = handle_mcp_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 92,
+            "method": "tools/call",
+            "params": {
+                "name": "compare_companies",
+                "arguments": {"company_a": "Acme LLC", "company_b": "Acme L.L.C."},
+            },
+        }
+    )
+    assert '"is_match": true' in mcp_cc["result"]["content"][0]["text"]
+
+    mcp_pc = handle_mcp_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 93,
+            "method": "tools/call",
+            "params": {
+                "name": "compare_persons",
+                "arguments": {"person_a": "Bob Smith", "person_b": "Robert Smith"},
+            },
+        }
+    )
+    assert '"is_match": true' in mcp_pc["result"]["content"][0]["text"]
+
+    assert cli_main(["compare-companies", "Acme LLC", "Acme L.L.C."]) == 0
+    assert json.loads(capsys.readouterr().out)["is_match"] is True
+
+    assert cli_main(["compare-persons", "Bob Smith", "Robert Smith"]) == 0
+    assert json.loads(capsys.readouterr().out)["is_match"] is True
+
 

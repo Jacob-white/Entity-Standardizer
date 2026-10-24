@@ -209,3 +209,33 @@ def register_duckdb_udfs(con: Any, default_country: str = "US") -> None:
     con.create_function("mask_phone_udf", _mask_udf, ["VARCHAR"], "VARCHAR")
     con.create_function("phone_blocking_keys", _blocking_keys_udf, ["VARCHAR"], "VARCHAR[]")
 
+    from entity_standardizer.company import standardize_company
+    from entity_standardizer.person import standardize_person
+    from entity_standardizer.web import standardize_email, standardize_url
+
+    def _company_name_udf(name: str | None) -> str | None:
+        return standardize_company(name, country=default_country).legal_name
+
+    def _company_key_udf(name: str | None) -> str | None:
+        return standardize_company(name, country=default_country).company_key
+
+    def _person_name_udf(name: str | None) -> str | None:
+        return standardize_person(name).full_name
+
+    def _person_key_udf(name: str | None) -> str | None:
+        return standardize_person(name).person_root_key
+
+    def _email_udf(email: str | None) -> str | None:
+        return standardize_email(email).email
+
+    def _url_domain_udf(url: str | None) -> str | None:
+        return standardize_url(url).domain
+
+    con.create_function("standardize_company_name", _company_name_udf, ["VARCHAR"], "VARCHAR")
+    con.create_function("company_entity_key", _company_key_udf, ["VARCHAR"], "VARCHAR")
+    con.create_function("standardize_person_name", _person_name_udf, ["VARCHAR"], "VARCHAR")
+    con.create_function("person_entity_key", _person_key_udf, ["VARCHAR"], "VARCHAR")
+    con.create_function("standardize_email_udf", _email_udf, ["VARCHAR"], "VARCHAR")
+    con.create_function("standardize_url_domain", _url_domain_udf, ["VARCHAR"], "VARCHAR")
+
+

@@ -510,11 +510,17 @@ def cluster_contact_records(
     if not records:
         return []
 
+    from entity_standardizer.company import standardize_company
+    from entity_standardizer.person import standardize_person
+    from entity_standardizer.web import standardize_email
+
     n = len(records)
     parsed_phones: list[StandardizedPhone] = []
     addr_keys: list[str | None] = []
+    email_buckets: dict[str, list[int]] = {}
+    person_org_buckets: dict[str, list[int]] = {}
 
-    for rec in records:
+    for idx, rec in enumerate(records):
         raw_phone = rec.get(phone_field, "")
         explicit_country = rec.get(country_field)
         postal = rec.get(postal_code_field)
@@ -531,6 +537,21 @@ def cluster_contact_records(
         )
         raw_addr_key = rec.get(address_key_field)
         addr_keys.append(str(raw_addr_key).strip() if raw_addr_key else None)
+
+        raw_email = rec.get("email")
+        if raw_email:
+            em = standardize_email(str(raw_email))
+            if em.is_valid and em.email_key and not em.is_role_account and not em.is_disposable:
+                email_buckets.setdefault(em.email_key, []).append(idx)
+
+        raw_org = rec.get("organization") or rec.get("company")
+        raw_per = rec.get("person_name") or rec.get("name")
+        if raw_org and raw_per:
+            comp = standardize_company(str(raw_org))
+            per = standardize_person(str(raw_per))
+            if comp.is_valid and comp.company_key and per.is_valid and per.person_root_key:
+                po_key = f"{comp.company_key}||{per.person_root_key}"
+                person_org_buckets.setdefault(po_key, []).append(idx)
 
     parent = list(range(n))
     reasons: dict[int, set[str]] = {i: set() for i in range(n)}
@@ -595,6 +616,16 @@ def cluster_contact_records(
     for indices in addr_buckets.values():
         for i_pos in range(1, len(indices)):
             union(indices[0], indices[i_pos], "SHARED_ADDRESS_KEY")
+
+    # 3. Link by shared personal email_key
+    for indices in email_buckets.values():
+        for i_pos in range(1, len(indices)):
+            union(indices[0], indices[i_pos], "SHARED_EMAIL_KEY")
+
+    # 4. Link by shared (company_key, person_root_key)
+    for indices in person_org_buckets.values():
+        for i_pos in range(1, len(indices)):
+            union(indices[0], indices[i_pos], "SHARED_PERSON_AND_COMPANY_KEY")
 
 
     groups: dict[int, list[int]] = {}

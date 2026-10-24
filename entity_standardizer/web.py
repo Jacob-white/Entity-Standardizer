@@ -88,6 +88,24 @@ _DISPOSABLE_EMAIL_DOMAINS: frozenset[str] = frozenset(
     }
 )
 
+_SENTINEL_DOMAINS: frozenset[str] = frozenset(
+    {
+        "example.com",
+        "example.org",
+        "example.net",
+        "example.edu",
+        "test.com",
+        "invalid.com",
+        "none.com",
+        "null.com",
+        "na.com",
+        "n-a.com",
+        "tbd.com",
+        "unknown.com",
+        "localhost.localdomain",
+    }
+)
+
 _ROLE_ACCOUNT_PREFIXES: frozenset[str] = frozenset(
     {
         "admin",
@@ -568,6 +586,12 @@ def standardize_email(raw_input: str | None) -> StandardizedEmail:
     canonical_email = f"{base_local}@{norm_domain}"
     reg_domain, _, _, _ = extract_registrable_domain(norm_domain)
     effective_domain = reg_domain or norm_domain
+    if effective_domain in _SENTINEL_DOMAINS:
+        return StandardizedEmail(
+            raw_input=str(raw_input),
+            display_name=display_name,
+            healing_actions=["SENTINEL_DOMAIN_REJECTED"],
+        )
 
     is_disposable = effective_domain in _DISPOSABLE_EMAIL_DOMAINS or norm_domain in _DISPOSABLE_EMAIL_DOMAINS
     is_free_provider = effective_domain in _FREE_WEBMAIL_DOMAINS or norm_domain in _FREE_WEBMAIL_DOMAINS
@@ -645,6 +669,11 @@ def standardize_url(raw_input: str | None) -> StandardizedUrl:
     domain, subdomain, public_suffix, brand_stem = extract_registrable_domain(norm_host)
     if domain is None:
         return StandardizedUrl(raw_input=str(raw_input))
+    if domain in _SENTINEL_DOMAINS:
+        return StandardizedUrl(
+            raw_input=str(raw_input),
+            healing_actions=["SENTINEL_DOMAIN_REJECTED"],
+        )
 
     # Strip tracking query parameters
     kept_params: list[tuple[str, str]] = []
@@ -927,4 +956,158 @@ def batch_standardize_socials(
 ) -> list[StandardizedSocial]:
     """Batch-standardize a sequence of social media profiles or handles."""
     return [standardize_social(item, platform=platform) for item in inputs]
+
+
+@dataclass(slots=True)
+class EmailComparisonResult:
+    """Result of comparing two email records for entity resolution."""
+
+    is_match: bool
+    score: float
+    match_type: str
+    email_a: StandardizedEmail
+    email_b: StandardizedEmail
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the email comparison result into a JSON-compatible dictionary."""
+        return {
+            "is_match": self.is_match,
+            "score": round(self.score, 4),
+            "match_type": self.match_type,
+            "email_a": self.email_a.to_dict(),
+            "email_b": self.email_b.to_dict(),
+        }
+
+
+def compare_emails(
+    email_a: str | StandardizedEmail | None,
+    email_b: str | StandardizedEmail | None,
+) -> EmailComparisonResult:
+    """Compare two email addresses across canonical email_key, subaddress/Gmail-dot equivalence, and corporate local-part."""
+    ea = email_a if isinstance(email_a, StandardizedEmail) else standardize_email(email_a)
+    eb = email_b if isinstance(email_b, StandardizedEmail) else standardize_email(email_b)
+
+    if not ea.is_valid or not eb.is_valid or not ea.email_key or not eb.email_key:
+        return EmailComparisonResult(
+            is_match=False,
+            score=0.0,
+            match_type="INVALID_INPUT",
+            email_a=ea,
+            email_b=eb,
+        )
+
+    if ea.email_key == eb.email_key:
+        return EmailComparisonResult(
+            is_match=True,
+            score=1.0,
+            match_type="EXACT_EMAIL_KEY",
+            email_a=ea,
+            email_b=eb,
+        )
+
+    if (
+        ea.local_part == eb.local_part
+        and not ea.is_free_provider
+        and not eb.is_free_provider
+        and not ea.is_disposable
+        and not eb.is_disposable
+        and ea.domain
+        and eb.domain
+    ):
+        reg_a, _, _, stem_a = extract_registrable_domain(ea.domain)
+        reg_b, _, _, stem_b = extract_registrable_domain(eb.domain)
+        if reg_a == reg_b or (stem_a and stem_a == stem_b and len(stem_a) >= 3):
+            return EmailComparisonResult(
+                is_match=True,
+                score=0.92,
+                match_type="CORPORATE_BRAND_LOCAL_MATCH",
+                email_a=ea,
+                email_b=eb,
+            )
+
+    return EmailComparisonResult(
+        is_match=False,
+        score=0.0,
+        match_type="NO_MATCH",
+        email_a=ea,
+        email_b=eb,
+    )
+
+
+@dataclass(slots=True)
+class UrlComparisonResult:
+    """Result of comparing two website URL records for entity resolution."""
+
+    is_match: bool
+    score: float
+    match_type: str
+    url_a: StandardizedUrl
+    url_b: StandardizedUrl
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the URL comparison result into a JSON-compatible dictionary."""
+        return {
+            "is_match": self.is_match,
+            "score": round(self.score, 4),
+            "match_type": self.match_type,
+            "url_a": self.url_a.to_dict(),
+            "url_b": self.url_b.to_dict(),
+        }
+
+
+def compare_urls(
+    url_a: str | StandardizedUrl | None,
+    url_b: str | StandardizedUrl | None,
+) -> UrlComparisonResult:
+    """Compare two website URLs across canonical url_key, registrable domain, and brand_stem."""
+    ua = url_a if isinstance(url_a, StandardizedUrl) else standardize_url(url_a)
+    ub = url_b if isinstance(url_b, StandardizedUrl) else standardize_url(url_b)
+
+    if not ua.is_valid or not ub.is_valid or not ua.domain or not ub.domain:
+        return UrlComparisonResult(
+            is_match=False,
+            score=0.0,
+            match_type="INVALID_INPUT",
+            url_a=ua,
+            url_b=ub,
+        )
+
+    if ua.url_key == ub.url_key:
+        return UrlComparisonResult(
+            is_match=True,
+            score=1.0,
+            match_type="EXACT_URL_KEY",
+            url_a=ua,
+            url_b=ub,
+        )
+
+    if ua.domain == ub.domain:
+        return UrlComparisonResult(
+            is_match=True,
+            score=0.95,
+            match_type="SAME_REGISTRABLE_DOMAIN",
+            url_a=ua,
+            url_b=ub,
+        )
+
+    if ua.brand_stem and ua.brand_stem == ub.brand_stem and len(ua.brand_stem) >= 3:
+        return UrlComparisonResult(
+            is_match=True,
+            score=0.88,
+            match_type="SAME_BRAND_STEM",
+            url_a=ua,
+            url_b=ub,
+        )
+
+    return UrlComparisonResult(
+        is_match=False,
+        score=0.0,
+        match_type="NO_MATCH",
+        url_a=ua,
+        url_b=ub,
+    )
+
+
+compare_websites = compare_urls
+
 
