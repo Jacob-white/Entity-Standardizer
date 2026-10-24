@@ -121,3 +121,4 @@ ignore = ["E501"]
 
 [tool.maturin]
 features = ["extension-module"]
+python-packages = ["entity_standardizer", "phone_standardizer", "address_standardizer"]
