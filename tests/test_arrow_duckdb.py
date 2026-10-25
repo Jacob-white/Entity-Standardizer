@@ -262,11 +262,20 @@ def test_native_dispatch_extended_functions(monkeypatch, tmp_path) -> None:
     # 4. release_dir=None when _entity_standardizer_rs is installed -> returns imported module
     sentinel_mod = MagicMock()
     with monkeypatch.context() as mp:
+        mp.delenv("ENTITY_STANDARDIZER_FORCE_PURE", raising=False)
+        mp.delenv("ADDRESS_STANDARDIZER_FORCE_PURE", raising=False)
         mp.setitem(sys.modules, "_entity_standardizer_rs", sentinel_mod)
         assert native_dispatch._load_native_module(None) is sentinel_mod
 
+    # 4b. release_dir=None when ENTITY_STANDARDIZER_FORCE_PURE=1 -> returns None
+    with monkeypatch.context() as mp:
+        mp.setenv("ENTITY_STANDARDIZER_FORCE_PURE", "1")
+        assert native_dispatch._load_native_module(None) is None
+
     # 5. release_dir=None when _entity_standardizer_rs is not installed -> falls back to target/release
     with monkeypatch.context() as mp:
+        mp.delenv("ENTITY_STANDARDIZER_FORCE_PURE", raising=False)
+        mp.delenv("ADDRESS_STANDARDIZER_FORCE_PURE", raising=False)
         mp.setitem(sys.modules, "_entity_standardizer_rs", None)
         mp.setattr(Path, "is_file", lambda self: False)
         assert native_dispatch._load_native_module(None) is None
@@ -275,6 +284,7 @@ def test_native_dispatch_extended_functions(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(native_dispatch, "_native_mod", None)
     assert native_dispatch.is_native_available() is False
     assert native_dispatch.get_engine_info()["engine"] == "pure_python"
+    assert native_dispatch.fold_latin_diacritics_dispatch("Đorđe & Łódź") == "Dorde & Lodz"
     assert fold_vanity_digits_dispatch("FLOWERS") == "3569377"
     folded, changed = fold_unicode_digits_dispatch("＋８１ ３-１２３４-５６７８")
     assert changed is True and folded == "+81 3-1234-5678"
@@ -314,6 +324,7 @@ def test_native_dispatch_extended_functions(monkeypatch, tmp_path) -> None:
     from entity_standardizer._native_dispatch import standardize_batch_with_country_dispatch
 
     mock_rs = MagicMock()
+    mock_rs.fold_latin_diacritics_rs.return_value = "Dorde"
     mock_rs.fold_vanity_digits_rs.return_value = "3569377"
     mock_rs.fold_unicode_digits_rs.return_value = ("+81 3-1234-5678", True)
     mock_rs.extract_digits_rs.return_value = "14155552671"
@@ -323,6 +334,7 @@ def test_native_dispatch_extended_functions(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(native_dispatch, "_native_mod", mock_rs)
 
     assert native_dispatch.get_engine_info()["engine"] == "rust_pyo3"
+    assert native_dispatch.fold_latin_diacritics_dispatch("Đorđe") == "Dorde"
     assert fold_vanity_digits_dispatch("FLOWERS") == "3569377"
     assert fold_unicode_digits_dispatch("＋８１ ３-１２３４-５６７８") == ("+81 3-1234-5678", True)
     assert extract_digits_dispatch("+1 (415) 555-2671") == "14155552671"

@@ -764,10 +764,28 @@ fn fold_latin_diacritics_to_chars(input: &str) -> Vec<char> {
             'Ť' | 'Ţ' => out.push('T'),
             'ğ' | 'ĝ' | 'ġ' | 'ģ' => out.push('g'),
             'Ğ' | 'Ĝ' | 'Ġ' | 'Ģ' => out.push('G'),
+            'ħ' | 'ĥ' => out.push('h'),
+            'Ħ' | 'Ĥ' => out.push('H'),
+            'ĵ' => out.push('j'),
+            'Ĵ' => out.push('J'),
+            'ķ' => out.push('k'),
+            'Ķ' => out.push('K'),
+            'ŵ' => out.push('w'),
+            'Ŵ' => out.push('W'),
+            '\u{0300}'..='\u{036F}'
+            | '\u{1AB0}'..='\u{1AFF}'
+            | '\u{1DC0}'..='\u{1DFF}'
+            | '\u{20D0}'..='\u{20FF}'
+            | '\u{FE20}'..='\u{FE2F}' => {}
             _ => out.push(ch),
         }
     }
     out
+}
+
+#[pyfunction]
+pub fn fold_latin_diacritics_rs(input: &str) -> String {
+    fold_latin_diacritics_to_chars(input).into_iter().collect()
 }
 
 #[pyfunction]
@@ -934,6 +952,7 @@ pub fn get_capabilities(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
         vec![
             "compute_soundex",
             "damerau_levenshtein_distance_rs",
+            "fold_latin_diacritics_rs",
             "normalize_company_tokens_rs",
             "normalize_batch_company_tokens_rs",
             "fold_vanity_digits_rs",
@@ -954,6 +973,7 @@ fn register_all_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(standardize_batch_e164_rs, m)?)?;
     m.add_function(wrap_pyfunction!(standardize_batch_with_country_rs, m)?)?;
     m.add_function(wrap_pyfunction!(compute_soundex, m)?)?;
+    m.add_function(wrap_pyfunction!(fold_latin_diacritics_rs, m)?)?;
     m.add_function(wrap_pyfunction!(normalize_company_tokens_rs, m)?)?;
     m.add_function(wrap_pyfunction!(normalize_batch_company_tokens_rs, m)?)?;
     m.add_function(wrap_pyfunction!(get_capabilities, m)?)?;
@@ -1185,6 +1205,13 @@ mod tests {
         assert_eq!(batch[2].0, vec!["KKR", "OPPORTUNITIES", "III", "SA", "RL"]);
         assert!(batch[2].2);
         assert_eq!(batch[3].0, vec!["SOCIETE", "GENERALE", "SA"]);
+    }
+
+    #[test]
+    fn test_fold_latin_diacritics_rs() {
+        assert_eq!(fold_latin_diacritics_rs("Đorđe & Łódź"), "Dorde & Lodz");
+        assert_eq!(fold_latin_diacritics_rs("Ħal Qormi"), "Hal Qormi");
+        assert_eq!(fold_latin_diacritics_rs("Mu\u{0308}nchen ß Æ Œ Þ"), "Munchen ss AE OE TH");
     }
 }
 
