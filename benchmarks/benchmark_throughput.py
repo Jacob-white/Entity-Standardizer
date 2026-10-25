@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-from phone_standardizer import standardize_phone
+from entity_standardizer import standardize_phone
 
 SAMPLE_RECORDS: list[tuple[str, str | None]] = [
     ("+1 (415) 555-2671 ext. 104", None),

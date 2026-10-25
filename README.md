@@ -7,7 +7,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Standards](https://img.shields.io/badge/Standards-USPS%20Pub%2028%20%7C%20UPU%20S42%20%7C%20ITU--T%20E.164%20%7C%20E.123%20%7C%20RFC%203966%20%7C%20ISO%2020275%20ELF-orange.svg)](https://www.itu.int/rec/T-REC-E.164)
 
-A unified, high-performance multi-national **Entity, Organization, Person, Web, Address, and Telephone Standardization, Bidirectional Cross-Healing, and Multi-Pillar Entity Resolution Engine** (`entity_standardizer`, `address_standardizer`, and `phone_standardizer`) with an optional FastAPI HTTP microservice, Model Context Protocol (MCP) server, Apache Arrow / Polars / DuckDB vectorized integrations, and native Rust PyO3 acceleration. It parses, cleans, cross-heals, validates, compares, and deduplicates organizations (**ISO 20275 ELF**), persons & job titles, emails/URLs/socials (**RFC 5321/5322 / IDNA / eTLD+1**), physical addresses (**USPS Publication 28 / UPU S42 / ISO 19160-4**), and telephone numbers (**ITU-T E.164 / E.123 / RFC 3966 / NANP**) across all **249 ISO-3166-1 countries and territories** without external API fees or vendor lock-in. Owned and maintained by **HobbyHabbit LLC** under the **MIT License**.
+A unified, high-performance multi-national **Entity, Organization, Person, Web, Address, and Telephone Standardization, Bidirectional Cross-Healing, and Multi-Pillar Entity Resolution Engine** (`entity_standardizer`) with an optional FastAPI HTTP microservice, Model Context Protocol (MCP) server, Apache Arrow / Polars / DuckDB vectorized integrations, and native Rust PyO3 acceleration. It parses, cleans, cross-heals, validates, compares, and deduplicates organizations (**ISO 20275 ELF**), persons & job titles, emails/URLs/socials (**RFC 5321/5322 / IDNA / eTLD+1**), physical addresses (**USPS Publication 28 / UPU S42 / ISO 19160-4**), and telephone numbers (**ITU-T E.164 / E.123 / RFC 3966 / NANP**) across all **249 ISO-3166-1 countries and territories** without external API fees or vendor lock-in. Owned and maintained by **HobbyHabbit LLC** under the **MIT License**.
 
 ---
 
@@ -27,8 +27,8 @@ A unified, high-performance multi-national **Entity, Organization, Person, Web, 
 
 ## 🌟 Highlights & Enterprise Capabilities
 
-1. **Unified Package Namespace (`entity_standardizer`, `address_standardizer`, `phone_standardizer`)**:
-   - Import the entire multi-pillar surface from `entity_standardizer` (`standardize_contact`, `standardize_entity`, `compare_contacts`, `cluster_contact_records`, `standardize_company`, `compare_companies`, `deduplicate_companies`, `standardize_person`, `split_compound_persons`, `compare_persons`, `deduplicate_persons`, `standardize_job_title`, `standardize_email`, `compare_emails`, `standardize_url`, `compare_urls`, `standardize_social`, `standardize_address`, `standardize_phone`, `compare_phones`, `deduplicate_phones`) while preserving 100% backward compatibility for `import address_standardizer` and `import phone_standardizer`.
+1. **Unified Package Namespace (`entity_standardizer`)**:
+   - Import the entire multi-pillar surface from `entity_standardizer` (`standardize_contact`, `standardize_entity`, `compare_contacts`, `cluster_contact_records`, `standardize_company`, `compare_companies`, `deduplicate_companies`, `standardize_person`, `split_compound_persons`, `compare_persons`, `deduplicate_persons`, `standardize_job_title`, `standardize_email`, `compare_emails`, `standardize_url`, `compare_urls`, `standardize_social`, `standardize_address`, `standardize_phone`, `compare_phones`, `deduplicate_phones`) and dedicated address submodules from `entity_standardizer.address`.
 2. **Multi-Pillar Entity Cross-Healing (`standardize_contact` / `standardize_entity`)**:
    - **Phone, Email, URL & Organization Rescue from Misplaced Fields** (`PHONE_RESCUED_FROM_ADDRESS_FIELD`, `EMAIL_RESCUED_FROM_FIELD`, `URL_RESCUED_FROM_FIELD`, `ORGANIZATION_RESCUED_FROM_PERSON_FIELD`): Extracts misplaced phones, emails, URLs, and corporate entities (`"Augnition Global Investors US GP, LLC"`) from address or person fields before standardization.
    - **Person Rescue & Domain-to-Organization Attribution** (`PERSON_RESCUED_FROM_EMAIL_OR_CARE_OF`, `ORGANIZATION_INFERRED_FROM_DOMAIN`, `EMAIL_WEBSITE_DOMAIN_MATCH` / `MISMATCH`): Infers missing person names from `C/O` lines or email display names/local parts and attributes corporate domains to organization brand stems.
@@ -144,7 +144,7 @@ entity-standardizer country JP
 entity-standardizer batch input.csv output.csv --phone-col phone --country-col country
 
 # Run the FastAPI HTTP service (19 HTTP routes across phone, address, company, person, job-title, email, url, social, contact)
-uvicorn phone_standardizer.server:app --host 0.0.0.0 --port 8000
+uvicorn entity_standardizer.server:app --host 0.0.0.0 --port 8000
 
 # Run the Model Context Protocol (MCP) server (17 tools across all entity standardization and comparison pillars)
 entity-standardizer-mcp

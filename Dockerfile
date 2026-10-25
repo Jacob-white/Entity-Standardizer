@@ -10,8 +10,6 @@ ENV PATH="/root/.cargo/bin:${PATH}"
 WORKDIR /build
 COPY pyproject.toml Cargo.toml Cargo.lock README.md LICENSE ./
 COPY src ./src
-COPY phone_standardizer ./phone_standardizer
-COPY address_standardizer ./address_standardizer
 COPY entity_standardizer ./entity_standardizer
 
 RUN pip install --no-cache-dir maturin wheel setuptools && \
@@ -26,7 +24,7 @@ COPY --from=builder /dist/py/*.whl /tmp/py/
 
 RUN pip install --no-cache-dir "$(ls /tmp/py/entity_standardizer-*.whl | head -n 1)[server,mcp]" && \
     python -m zipfile -e "$(ls /tmp/native/*.whl | head -n 1)" /tmp/native_x && \
-    cp -r /tmp/native_x/_phone_standardizer_rs "$(python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')/" && \
+    cp -r /tmp/native_x/_entity_standardizer_rs "$(python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')/" && \
     rm -rf /tmp/native /tmp/native_x /tmp/py && \
     useradd -m appuser && \
     chown -R appuser:appuser /app
@@ -34,6 +32,4 @@ RUN pip install --no-cache-dir "$(ls /tmp/py/entity_standardizer-*.whl | head -n
 USER appuser
 EXPOSE 8000
 
-CMD ["uvicorn", "phone_standardizer.server:app", "--host", "0.0.0.0", "--port", "8000"]
-
-
+CMD ["uvicorn", "entity_standardizer.server:app", "--host", "0.0.0.0", "--port", "8000"]

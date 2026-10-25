@@ -81,11 +81,11 @@ A lookup checks L1, then L2; an L2 hit is promoted into the caller's L1. A compu
 ### Backends
 
 * **Default**: L1 LRU + SQLite L2. Unchanged behaviour.
-* **Redis** (optional): `pip install "address-standardizer[redis]"` (`redis>=5`). Select it either way:
+* **Redis** (optional): `pip install "entity-standardizer[redis]"` (`redis>=5`). Select it either way:
 
 ```python
-from address_standardizer.cache import configure_cache
-from address_standardizer.cache_backends import RedisCacheBackend
+from entity_standardizer.address.cache import configure_cache
+from entity_standardizer.address.cache_backends import RedisCacheBackend
 
 configure_cache(backend="redis://cache.internal:6379/0")           # URL form
 configure_cache(backend=RedisCacheBackend("rediss://cache:6380/1",  # explicit form
@@ -131,7 +131,7 @@ Redis backend behaviour:
 the client.
 
 ```bash
-address-standardizer serve --workers 2 &
+uvicorn entity_standardizer.server:app --workers 2 &
 python scripts/load_test.py --concurrency 16 --requests 5000
 python scripts/load_test.py --endpoint batch --batch-size 100 --duration 20 --unique --json
 python scripts/load_test.py --input my_addresses.jsonl --header "X-API-Key: <key>"
@@ -144,19 +144,18 @@ python scripts/load_test.py --input my_addresses.jsonl --header "X-API-Key: <key
 * Latency includes the client thread, HTTP and JSON; run the client on a different machine, or at least pin it away from
   the server cores, before comparing numbers.
 
-Smoke run on the same workstation against one `address-standardizer serve` process (default settings, client on the same
+Smoke run on the same workstation against one server process (default settings, client on the same
 machine, so the two compete for CPU): 300 unique single-address requests from 4 threads gave 154 req/s with p50 22 ms,
 p95 40 ms, p99 217 ms and no failures; 20 batch requests of 50 unique addresses from 2 threads gave about 900
 addresses/s. These show the tool works; they are not a capacity claim.
 
 ## Transliteration (optional)
 
-`address_standardizer.transliterate.transliterate(text)` produces a Latin rendering for display and matching. With the
-optional `anyascii` package (`pip install "address-standardizer[translit]"`, ISC license) it covers every script
+`entity_standardizer.address.transliterate.transliterate(text)` produces a Latin rendering for display and matching. With the
+optional `anyascii` package (`pip install "entity-standardizer[translit]"`, ISC license) it covers every script
 `anyascii` supports. Without it, a built-in fallback handles **Cyrillic and Greek** using the same letter tables as the
 ASCII matching keys; it is a plain lossy romanisation (not BGN/PCGN or ISO 9; hard/soft signs and Greek accents are
 dropped). Text in any other script raises `TransliterationUnavailable` (a `NotImplementedError`) with
 `errors="strict"`, or is left unchanged with `errors="passthrough"`; no placeholder characters are ever substituted.
 `std_to_latin(std)` returns `std.as_dict()` with `street1`, `street2`, `city` and `state` transliterated (passthrough by
-default), and `address-standardizer parse --latin ...` prints those fields in Latin script with the originals kept under
-`native`.
+default).

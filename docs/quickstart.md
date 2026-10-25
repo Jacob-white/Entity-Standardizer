@@ -1,6 +1,6 @@
 # 5-Minute Quickstart Guide ⚡
 
-Get up and running with **Entity Standardizer** (`entity_standardizer`, `address_standardizer`, and `phone_standardizer`) in minutes.
+Get up and running with **Entity Standardizer** (`entity_standardizer`) in minutes.
 
 ---
 
@@ -187,7 +187,7 @@ print(mask_phone("+1 (415) 555-2671", strategy="partial"))  # "+1******2671"
 ```python
 import duckdb
 from entity_standardizer import cluster_contact_records, compare_contacts
-from phone_standardizer.arrow import register_duckdb_udfs
+from entity_standardizer.arrow import register_duckdb_udfs
 
 # 1. Pairwise Multi-Pillar Contact Comparison
 cmp_c = compare_contacts(
@@ -231,7 +231,7 @@ entity-standardizer address "350 Fifth Ave" --city "New York" --state "NY" --pos
 entity-standardizer parse "+44 (0) 20 7946 0912 ext 15"
 
 # Start FastAPI HTTP Microservice
-uvicorn phone_standardizer.server:app --host 0.0.0.0 --port 8000
+uvicorn entity_standardizer.server:app --host 0.0.0.0 --port 8000
 
 # Start Model Context Protocol (MCP) Server
 entity-standardizer-mcp

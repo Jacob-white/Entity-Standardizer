@@ -94,13 +94,13 @@ Everything else is a strict token comparison, so a missing locality word or a tr
 
 ## Confidence calibration
 
-`address_standardizer/calibration.py` provides reliability bins, Expected Calibration Error (ECE, 10 equal-width
+`entity_standardizer/address/calibration.py` provides reliability bins, Expected Calibration Error (ECE, 10 equal-width
 bins), the Brier score and a pure-Python isotonic (pool-adjacent-violators) `Calibrator` with `save`/`load`/`calibrate`.
 Default behaviour of the confidence scorer is unchanged; to opt in:
 
 ```python
-from address_standardizer.calibration import Calibrator
-from address_standardizer.confidence import compute_confidence_score
+from entity_standardizer.address.calibration import Calibrator
+from entity_standardizer.address.confidence import compute_confidence_score
 cal = Calibrator.load("benchmarks/eval/calibration.json")
 result = compute_confidence_score(std, raw_input=raw, calibrator=cal)   # result.calibrated_score
 ```

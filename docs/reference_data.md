@@ -1,7 +1,7 @@
 # Reference data: validating against authoritative sources
 
 Standardization makes an address *well formed*. It does not tell you the address *exists*. The reference-data layer
-(`address_standardizer.reference`) adds an optional, offline check of the postal code, locality and state against a
+(`entity_standardizer.address.reference`) adds an optional, offline check of the postal code, locality and state against a
 reference dataset. It is off unless you pass a provider, and then it only adds information: it never changes the
 standardized fields.
 
@@ -42,7 +42,7 @@ mailed as "New York"), so a locality mismatch is a *warning*, not an error. Trea
 
 ### Plugging in a licensed source
 
-`address_standardizer.reference.AuthoritativeDeliveryProvider` is an interface only: one method,
+`entity_standardizer.address.reference.AuthoritativeDeliveryProvider` is an interface only: one method,
 `verify(std_address) -> DeliveryMatch`, where `DeliveryMatch` carries a DPV-style `match_code` (`Y`, `S`, `D`, `N`
 by USPS convention) and DPV `footnotes` (`AA`, `BB`, `N1`, ... see `delivery.DPVFootnote`). Write an adapter around
 your licensed engine or vendor API and call it yourself; there is no default implementation and none will be added
@@ -50,22 +50,27 @@ without data you are licensed to use.
 
 ## Build the index
 
-Network access happens only in `data fetch`; everything else is offline.
+Network access happens only in `fetch_geonames_zips`; everything else is offline.
 
-```bash
-# 1. download the zips (ISO alpha-2 codes, or ALL for allCountries.zip, which is large)
-address-standardizer data fetch geonames --countries US,CA,GB --out data/geonames
+```python
+from entity_standardizer.address.reference import (
+    build_geonames_index,
+    fetch_geonames_zips,
+    index_info,
+)
+
+# 1. download the zips (ISO alpha-2 codes, or ["ALL"] for allCountries.zip, which is large)
+fetch_geonames_zips(["US", "CA", "GB"], "data/geonames")
 
 # 2. build the local SQLite index from the downloaded files
-address-standardizer data build geonames --from data/geonames --out data/geonames_postal.db
+build_geonames_index("data/geonames", "data/geonames_postal.db")
 
 # 3. inspect it (coverage, row count, as_of, license, attribution)
-address-standardizer data info data/geonames_postal.db
+print(index_info("data/geonames_postal.db"))
 ```
 
-`data build` also accepts files you obtained yourself (`--from` takes a directory or a single `.zip` / `.txt`) and
-`--countries` to index a subset of `allCountries.zip`. `as_of` defaults to the build date; pass `--as-of` to record
-the snapshot date.
+`build_geonames_index` also accepts files you obtained yourself (a directory or a single `.zip` / `.txt`) and
+`countries=` to index a subset of `allCountries.zip`. `as_of` defaults to the build date.
 
 Some countries are stored at a coarser level in GeoNames than a full postal code: Canada (3-character FSA), Great
 Britain and Ireland (outward code / routing key), Netherlands (4 digits), and US ZIP+4 (5-digit ZIP). Lookups retry a
@@ -75,8 +80,8 @@ means "the area exists", not "the full code exists".
 ## Use it
 
 ```python
-from address_standardizer import standardize_address
-from address_standardizer.reference import GeoNamesPostalProvider
+from entity_standardizer import standardize_address
+from entity_standardizer.address.reference import GeoNamesPostalProvider
 
 with GeoNamesPostalProvider("data/geonames_postal.db") as provider:
     std = standardize_address("100 Wall St", city="Chicago", state="NY", postal_code="10005",
@@ -99,16 +104,12 @@ Reason codes (same `WARN_` / `ERR_` convention as `confidence.py`): `ERR_POSTAL_
 ### CLI
 
 ```bash
-address-standardizer parse "100 Wall St, Chicago, NY 10005" --reference-db data/geonames_postal.db --confidence
+entity-standardizer address "100 Wall St" --city "Chicago" --state "NY" --postal-code "10005"
 ```
-
-`--reference-db` applies to a single address (not piped input or `batch`).
 
 ### REST
 
-Set `ADDRESS_STANDARDIZER_REFERENCE_DB=/path/to/geonames_postal.db` on the server. Each `/v1/standardize` response (and
-each `/v1/batch` item) then carries a `reference_validation` object. Without the variable the response is unchanged.
-If the file cannot be opened, the object is still returned with `status: "not_checked"` and the reason in `detail`.
+Use `POST /v1/address` on `entity_standardizer.server:app` (or pass `reference_provider=GeoNamesPostalProvider(...)` in Python when calling `standardize_address` directly). If `ADDRESS_STANDARDIZER_REFERENCE_DB=/path/to/geonames_postal.db` is configured for `attach_server_reference_validation`, a `reference_validation` object is attached (`status: "not_checked"` with `detail` when the file cannot be opened).
 
 ## Accuracy limits, honestly
 

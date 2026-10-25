@@ -1,9 +1,9 @@
 [package]
-name = "_phone_standardizer_rs"
+name = "_entity_standardizer_rs"
 version = "2.1.0"
 edition = "2021"
 rust-version = "1.83"
-description = "Optional native Rust acceleration module for Entity Standardizer (Phone + Address normalization, Soundex, Damerau-Levenshtein, and batch E.164 dispatch)."
+description = "Optional native Rust acceleration module for Entity Standardizer (Phone + Address + Company normalization, Soundex, Damerau-Levenshtein, and batch E.164 dispatch)."
 authors = ["HobbyHabbit LLC <support@hobbyhabbit.com>"]
 license = "MIT"
 repository = "https://github.com/Jacob-white/Entity-Standardizer"
@@ -11,7 +11,7 @@ readme = "README.md"
 publish = false
 
 [lib]
-name = "_phone_standardizer_rs"
+name = "_entity_standardizer_rs"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]

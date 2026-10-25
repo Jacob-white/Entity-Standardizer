@@ -2,21 +2,19 @@
 
 Owned and maintained by **HobbyHabbit LLC** under the **MIT License**.
 
-> **Entity Standardizer** (`entity_standardizer`, `address_standardizer`, `phone_standardizer` `v2.1.0`) is a zero-network, deterministic Python + Rust PyO3 engine for multi-national **Organization / Company** (ISO 20275 ELF), **Person & Job Title**, **Email / Website URL / Social Profile** (RFC 5321/5322, IDNA, eTLD+1), **Physical Address** (USPS Publication 28, UPU S42, CASS/DPV, offline rooftop & H3 geocoding), and **Telephone** (ITU-T E.164, E.123, RFC 3966, NANP, 249-country dial plans, IRSF toll-fraud detection) standardization, bidirectional cross-healing, and multi-pillar entity resolution.
+> **Entity Standardizer** (`entity_standardizer` `v2.1.0`) is a zero-network, deterministic Python + Rust PyO3 engine for multi-national **Organization / Company** (ISO 20275 ELF), **Person & Job Title**, **Email / Website URL / Social Profile** (RFC 5321/5322, IDNA, eTLD+1), **Physical Address** (USPS Publication 28, UPU S42, CASS/DPV, offline rooftop & H3 geocoding), and **Telephone** (ITU-T E.164, E.123, RFC 3966, NANP, 249-country dial plans, IRSF toll-fraud detection) standardization, bidirectional cross-healing, and multi-pillar entity resolution.
 
 ---
 
 ## 1. Architecture & Package Entry Points
 
-- **`entity_standardizer`**: Unified top-level façade re-exporting all 6 entity pillars, joint contact cross-healing, pairwise comparison, graph-based deduplication, and Apache Arrow / Polars helpers.
-- **`phone_standardizer`**: Telephone standardization engine (`standardize_phone`, `explain_phone`, `compare_phones`, `deduplicate_phones`, `mask_phone`), joint 6-pillar contact engine (`phone_standardizer.joint`), multi-pillar clustering (`phone_standardizer.dedup`), FastAPI server (`phone_standardizer.server:app`), MCP server (`phone_standardizer.mcp.server`), and DuckDB/Arrow/Polars integrations (`phone_standardizer.arrow`).
-- **`address_standardizer`**: USPS Publication 28 & UPU S42 international physical address standardization, validation, typeahead autocomplete, and normalized/building/phonetic keys.
-- **`_phone_standardizer_rs` / `phone_standardizer._native_dispatch`**: Optional native Rust PyO3 extension (`src/lib.rs`) accelerating phone digit extraction, Unicode digit folding, vanity translation, Damerau-Levenshtein distance, company token normalization, and batch E.164 standardization with 100% pure-Python fallback parity.
+- **`entity_standardizer`**: Unified top-level package re-exporting all 6 entity pillars, joint contact cross-healing (`entity_standardizer.joint`), pairwise comparison, graph-based deduplication (`entity_standardizer.dedup`), telephone standardization (`entity_standardizer.standardizer`), FastAPI server (`entity_standardizer.server:app`), MCP server (`entity_standardizer.mcp.server`), and DuckDB/Arrow/Polars integrations (`entity_standardizer.arrow`).
+- **`entity_standardizer.address`**: USPS Publication 28 & UPU S42 international physical address standardization, validation, typeahead autocomplete, and normalized/building/phonetic keys.
+- **`_entity_standardizer_rs` / `entity_standardizer._native_dispatch`**: Optional native Rust PyO3 extension (`src/lib.rs`) accelerating phone digit extraction, Unicode digit folding, vanity translation, Damerau-Levenshtein distance, company token normalization, and batch E.164 standardization with 100% pure-Python fallback parity.
 
 ### CLI Entry Points (`pyproject.toml`)
-- `entity-standardizer` / `phone-standardizer` — Unified CLI (`parse`, `country`, `batch`, `compare`, `dedup`, `address`, `company`, `person`, `compare-companies`, `compare-persons`, `title`, `email`, `url`, `social`, `contact`).
-- `entity-standardizer-mcp` / `phone-standardizer-mcp` — Model Context Protocol (MCP) stdio JSON-RPC 2.0 server exposing 17 tools.
-- `address-standardizer` — Dedicated physical address CLI and microservice launcher.
+- `entity-standardizer` — Unified CLI (`parse`, `country`, `batch`, `compare`, `dedup`, `address`, `company`, `person`, `compare-companies`, `compare-persons`, `title`, `email`, `url`, `social`, `contact`).
+- `entity-standardizer-mcp` — Model Context Protocol (MCP) stdio JSON-RPC 2.0 server exposing 17 tools.
 
 ---
 
@@ -104,7 +102,7 @@ from entity_standardizer import (
     standardize_persons_arrow,
     standardize_persons_polars,
 )
-from phone_standardizer.arrow import (
+from entity_standardizer.arrow import (
     standardize_arrow,
     standardize_polars,
     register_duckdb_udfs,
@@ -115,7 +113,7 @@ from phone_standardizer.arrow import (
 
 ## 3. Complete Dataclass Schemas & Healing Action Codes
 
-### 3.1 `StandardizedContact` (`phone_standardizer.joint`)
+### 3.1 `StandardizedContact` (`entity_standardizer.joint`)
 Returned by `standardize_contact(...)`:
 - `address: StandardizedAddress`
 - `phone: StandardizedPhone`
@@ -174,13 +172,13 @@ Returned by `standardize_contact(...)`:
 - `StandardizedUrl`: `raw_input`, `url`, `scheme`, `host`, `domain` (eTLD+1), `subdomain`, `public_suffix`, `brand_stem`, `path`, `inferred_country_iso2`, `url_key`, `is_valid`, `confidence`, `healing_actions` (`"SCHEME_ADDED"`, `"SCHEME_UPGRADED_HTTPS"`, `"IDNA_PUNYCODE_NORMALIZED"`, `"WWW_STRIPPED"`, `"TRACKING_PARAMS_STRIPPED"`).
 - `StandardizedSocial`: `raw_input`, `platform` (`"LINKEDIN"`, `"X"`, `"GITHUB"`, `"INSTAGRAM"`, `"FACEBOOK"`, `"YOUTUBE"`), `handle`, `profile_type`, `url`, `social_key`, `is_valid`, `confidence`, `healing_actions` (`"WWW_STRIPPED"`, `"TWITTER_CANONICALIZED_TO_X"`, `"HANDLE_EXPANDED_TO_URL"`).
 
-### 3.6 `StandardizedAddress` (`address_standardizer.models`) & `StandardizedPhone` (`phone_standardizer.models`)
+### 3.6 `StandardizedAddress` (`entity_standardizer.address.models`) & `StandardizedPhone` (`entity_standardizer.models`)
 - `StandardizedAddress`: `street1`, `street2`, `city`, `state`, `postal_code`, `country`, `country_iso3`, `normalized_address_key`, `building_key`, `phonetic_key`, `address_status`, `is_us`, `is_private_residence`, `is_registered_agent_hub`, `deliverability`, `latitude`, `longitude`, `precision`, `confidence_score`, `routing_tier`, `rdi`, `cmra`, `vacant`, `dpv_footnotes`, `care_of`, `failure_reason_codes`, `warning_codes`.
 - `StandardizedPhone`: `raw_input`, `e164`, `national`, `international`, `rfc3966`, `country_calling_code`, `country_iso2`, `country_iso3`, `country_name`, `national_significant_number`, `area_code`, `subscriber_number`, `extension`, `vanity_alias`, `region_code`, `line_type`, `is_valid`, `is_possible`, `phone_key`, `phone_ext_key`, `confidence`, `routing_tier` (`"AUTO_PASS"`, `"FUZZY_REVIEW"`, `"MANUAL_STEWARDSHIP"`), `risk_flags` (`"PREMIUM_RATE_IRSF_RISK"`, `"FICTITIOUS_RANGE"`, `"REPEATED_DIGITS"`, `"SEQUENTIAL_DIGITS"`, `"INVALID_NANP_NPA"`), `healing_actions`.
 
 ---
 
-## 4. FastAPI HTTP Microservice Endpoints (`phone_standardizer.server:app`)
+## 4. FastAPI HTTP Microservice Endpoints (`entity_standardizer.server:app`)
 
 1. `GET /health` -> `{"status": "ok", "version": "2.1.0"}`
 2. `POST /v1/contact` (`ContactStandardizeRequest`) -> `StandardizedContact`
@@ -206,7 +204,7 @@ Returned by `standardize_contact(...)`:
 
 ## 5. Model Context Protocol (MCP) Server (`entity-standardizer-mcp`)
 
-Run via `entity-standardizer-mcp` or `python -m phone_standardizer.mcp.server`. Exposes **17 tools**:
+Run via `entity-standardizer-mcp` or `python -m entity_standardizer.mcp.server`. Exposes **17 tools**:
 - `standardize_contact`, `compare_contacts`
 - `standardize_company`, `compare_companies`
 - `standardize_person`, `compare_persons`, `standardize_job_title`

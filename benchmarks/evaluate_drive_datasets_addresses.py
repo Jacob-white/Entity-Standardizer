@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Comprehensive Google Drive Dataset Address-Standardizer Benchmark Harness.
+"""Comprehensive Google Drive Dataset Address Benchmark Harness.
 
-Evaluates Address-Standardizer (/home/jwhite/Address-Standardizer) across all
+Evaluates Entity-Standardizer (/home/jwhite/Entity-Standardizer) across all
 address-bearing dataset files in .drive_datasets/ spanning all 6 suites:
   1. AdvizorPro (AP_20261019)
   2. AdvisorAtlas (AdvisorAtlas_20261019)
@@ -22,14 +22,15 @@ from pathlib import Path
 import sys
 import time
 
-ADDR_REPO = "/home/jwhite/Address-Standardizer"
-if ADDR_REPO not in sys.path:
-    sys.path.insert(0, ADDR_REPO)
+__version__ = "2.1.0"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 import polars as pl  # noqa: E402
 
-from address_standardizer import standardize_address  # noqa: E402
-from address_standardizer._native_dispatch import get_engine_info  # noqa: E402
+from entity_standardizer.address import standardize_address  # noqa: E402
+from entity_standardizer.address._native_dispatch import get_engine_info  # noqa: E402
 
 
 @dataclass
@@ -299,7 +300,7 @@ def _read_csv_with_fallback(
 
 
 def main() -> None:
-    root = Path("/home/jwhite/Phone-Standardizer/.drive_datasets")
+    root = REPO_ROOT / ".drive_datasets"
     files = sorted(
         [p for p in root.rglob("*") if p.is_file() and p.suffix in (".csv", ".txt")]
     )
@@ -490,9 +491,7 @@ def main() -> None:
     total_fail = sum(m.parse_failed_count for m in all_metrics)
     overall_usable = (total_std + total_loc) / max(total_non_empty, 1)
 
-    out_json = Path(
-        "/home/jwhite/Phone-Standardizer/benchmarks/drive_datasets_address_results.json"
-    )
+    out_json = REPO_ROOT / "benchmarks" / "drive_datasets_address_results.json"
     out_json.write_text(
         json.dumps(
             {
@@ -515,7 +514,7 @@ def main() -> None:
         "# Google Drive Global & Financial Dataset Address-Standardizer Benchmark Report",
         "",
         f"**Execution Timestamp:** {time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}  ",
-        "**Engine:** Address-Standardizer v3.3.0 (`Rust_PyO3` + Multi-National UPU S42 & USPS Pub 28)  ",
+        "**Engine:** Entity-Standardizer v2.1.0 (`Rust_PyO3` + Multi-National UPU S42 & USPS Pub 28)  ",
         f"**Total Dataset Address Groups Evaluated:** {len(all_metrics)}  ",
         f"**Total Non-Empty Address Records Processed:** {total_non_empty:,}  ",
         f"**Total Unique Address Tuples Evaluated:** {len(global_cache):,}  ",
@@ -564,16 +563,10 @@ def main() -> None:
         )
 
     md_text = "\n".join(lines) + "\n"
-    out_md1 = Path(
-        "/home/jwhite/Phone-Standardizer/docs/GOOGLE_DRIVE_ADDRESS_BENCHMARK.md"
-    )
-    out_md1.write_text(md_text, encoding="utf-8")
-    out_md2 = Path(
-        "/home/jwhite/Address-Standardizer/docs/GOOGLE_DRIVE_ADDRESS_BENCHMARK.md"
-    )
-    out_md2.write_text(md_text, encoding="utf-8")
+    out_md = REPO_ROOT / "docs" / "GOOGLE_DRIVE_ADDRESS_BENCHMARK.md"
+    out_md.write_text(md_text, encoding="utf-8")
     print(f"\n[+] Wrote JSON results to: {out_json}")
-    print(f"[+] Wrote Markdown report to: {out_md1} and {out_md2}")
+    print(f"[+] Wrote Markdown report to: {out_md}")
 
 
 if __name__ == "__main__":

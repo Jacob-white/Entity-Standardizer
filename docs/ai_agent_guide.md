@@ -12,7 +12,7 @@ Point any LLM or coding agent at **[`llms.txt`](../llms.txt)** in the repository
 
 ## 2. Configuring the MCP Server (`entity-standardizer-mcp`)
 
-The package installs a zero-latency stdio JSON-RPC 2.0 MCP server (`entity-standardizer-mcp`, aliased as `phone-standardizer-mcp`).
+The package installs a zero-latency stdio JSON-RPC 2.0 MCP server (`entity-standardizer-mcp`).
 
 ### Claude Desktop / Cursor / Windsurf / Antigravity (`mcp_config.json`)
 
@@ -34,7 +34,7 @@ Or invoke directly via Python module:
   "mcpServers": {
     "entity-standardizer": {
       "command": "python",
-      "args": ["-m", "phone_standardizer.mcp.server"]
+      "args": ["-m", "entity_standardizer.mcp.server"]
     }
   }
 }

@@ -75,44 +75,10 @@ pub fn extract_digits_rs(input: &str) -> String {
     input.chars().filter(|c| c.is_ascii_digit()).collect()
 }
 
-/// Compute Optimal String Alignment (Damerau-Levenshtein) distance between two strings.
+/// Compute Damerau-Levenshtein distance between two strings.
 #[pyfunction]
 pub fn damerau_levenshtein_distance_rs(s1: &str, s2: &str) -> usize {
-    if s1 == s2 {
-        return 0;
-    }
-    let a: Vec<char> = s1.chars().collect();
-    let b: Vec<char> = s2.chars().collect();
-    let len1 = a.len();
-    let len2 = b.len();
-    if len1 == 0 {
-        return len2;
-    }
-    if len2 == 0 {
-        return len1;
-    }
-
-    let mut dp = vec![vec![0usize; len2 + 1]; len1 + 1];
-    for (i, row) in dp.iter_mut().enumerate().take(len1 + 1) {
-        row[0] = i;
-    }
-    for j in 0..=len2 {
-        dp[0][j] = j;
-    }
-
-    for i in 1..=len1 {
-        for j in 1..=len2 {
-            let cost = usize::from(a[i - 1] != b[j - 1]);
-            let mut best = (dp[i - 1][j] + 1)
-                .min(dp[i][j - 1] + 1)
-                .min(dp[i - 1][j - 1] + cost);
-            if i > 1 && j > 1 && a[i - 1] == b[j - 2] && a[i - 2] == b[j - 1] {
-                best = best.min(dp[i - 2][j - 2] + 1);
-            }
-            dp[i][j] = best;
-        }
-    }
-    dp[len1][len2]
+    damerau_levenshtein(s1, s2)
 }
 
 /// Return True if input contains a clock time expression like "8:00AM" or "6:00 PM".
@@ -1045,12 +1011,7 @@ fn register_all_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
 }
 
 #[pymodule]
-fn _phone_standardizer_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    register_all_functions(m)
-}
-
-#[pymodule]
-fn _address_standardizer_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn _entity_standardizer_rs(m: &Bound<'_, PyModule>) -> PyResult<()> {
     register_all_functions(m)
 }
 

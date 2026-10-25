@@ -1,6 +1,6 @@
-# Entity Standardizer .NET SDK (`PhoneStandardizer.Client` `v2.1.0`)
+# Entity Standardizer .NET SDK (`EntityStandardizer.Client` `v2.1.0`)
 
-Typed async HTTP client for the **Entity Standardizer** microservice (`phone_standardizer.server:app`) targeting `net8.0` and `netstandard2.0`.
+Typed async HTTP client for the **Entity Standardizer** microservice (`entity_standardizer.server:app`) targeting `net8.0` and `netstandard2.0`.
 
 ## Quickstart
 

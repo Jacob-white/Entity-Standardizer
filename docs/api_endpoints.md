@@ -1,16 +1,16 @@
 # HTTP Microservice Endpoints 🌐
 
-**Entity Standardizer API 2.1.0** (`phone_standardizer.server:app`), OpenAPI 3.1.0.
+**Entity Standardizer API 2.1.0** (`entity_standardizer.server:app`), OpenAPI 3.1.0.
 The machine-readable OpenAPI schema is committed at [`docs/openapi.json`](openapi.json); a running server also serves interactive Swagger UI at `/docs` and ReDoc at `/redoc`.
 
 ---
 
-## 1. Unified 6-Pillar Microservice (`phone_standardizer.server:app`)
+## 1. Unified 6-Pillar Microservice (`entity_standardizer.server:app`)
 
 Start the unified multi-pillar microservice:
 
 ```bash
-uvicorn phone_standardizer.server:app --host 0.0.0.0 --port 8000
+uvicorn entity_standardizer.server:app --host 0.0.0.0 --port 8000
 ```
 
 ### 1.1 Health & Country Metadata Endpoints
@@ -136,13 +136,3 @@ Clusters and deduplicates a list of raw phone numbers into Golden Phone Records.
 Batch-standardizes a list of phone numbers in a single request.
 - **Request body**: `PhoneBatchRequest` (`phones: list[string]`, `default_country: string = "US"`)
 - **Response (`200 OK`)**: `{"count": int, "results": list[StandardizedPhone]}`.
-
----
-
-## 2. Dedicated Address Daemon (`address_standardizer.server:app`)
-
-When running the dedicated address daemon (`uvicorn address_standardizer.server:app --port 8001`), the following specialized endpoints are also available:
-- `GET /health`, `GET /ready`, `GET /metrics` (`?format=json|prometheus`)
-- `POST /v1/standardize` — Single address standardization with optional `include_explanation` and `alternatives`.
-- `POST /v1/batch` — High-throughput batch address standardization (`?format=json|ndjson`).
-- `GET /v1/autocomplete` & `POST /v1/autocomplete` — Real-time typeahead address autocomplete with proximity biasing and secondary unit prompting.

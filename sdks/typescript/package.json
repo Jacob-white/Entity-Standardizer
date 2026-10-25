@@ -1,8 +1,8 @@
 {
-  "name": "@phone-standardizer/client",
+  "name": "@entity-standardizer/client",
   "version": "2.1.0",
   "type": "module",
-  "description": "Enterprise multi-platform client SDK and React <PhoneInput /> controller for Phone Standardizer",
+  "description": "Enterprise multi-platform client SDK and React <PhoneInput /> controller for Entity Standardizer",
   "main": "dist/index.js",
   "module": "dist/index.js",
   "types": "dist/index.d.ts",

@@ -7,7 +7,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from phone_standardizer import (
+from entity_standardizer import (
     HealingAction,
     LRUCache,
     MultiTierCache,
@@ -26,8 +26,8 @@ from phone_standardizer import (
     resolve_timezones,
     standardize_phone,
 )
-from phone_standardizer.mcp import handle_mcp_request
-from phone_standardizer.server import app
+from entity_standardizer.mcp import handle_mcp_request
+from entity_standardizer.server import app
 
 
 def test_intelligence_locality_timezones_and_carrier() -> None:

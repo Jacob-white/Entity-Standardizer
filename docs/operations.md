@@ -1,10 +1,8 @@
 # Operations guide: running the HTTP services in production
 
-Entity Standardizer provides two FastAPI HTTP services:
-1. **Unified 6-Pillar Entity Standardizer Service (`phone_standardizer.server:app`)**: Started via `uvicorn phone_standardizer.server:app --host 0.0.0.0 --port 8000`. Exposes all 19 routes across Joint Contact (`/v1/contact`, `/v1/contact/compare`), Company (`/v1/company`, `/v1/company/compare`), Person & Job Title (`/v1/person`, `/v1/person/compare`, `/v1/job-title`), Email/URL/Social (`/v1/email`, `/v1/url`, `/v1/social`), Physical Address (`/v1/address`), and Telephone (`/v1/standardize`, `/v1/explain`, `/v1/compare`, `/v1/deduplicate`, `/v1/batch`, `/v1/countries`).
-2. **Dedicated Address Standardizer Daemon (`address_standardizer.server:app`)**: Started via `address-standardizer serve` or `uvicorn address_standardizer.server:app --host 0.0.0.0 --port 8001`. Includes built-in API-key authentication, token-bucket rate limiting, tenant-isolated SQLite audit ledgers, Prometheus `/metrics`, `/ready`, and `/v1/autocomplete`.
+Entity Standardizer provides the unified FastAPI HTTP microservice (`entity_standardizer.server:app`), started via `uvicorn entity_standardizer.server:app --host 0.0.0.0 --port 8000`. It exposes all 19 routes across Joint Contact (`/v1/contact`, `/v1/contact/compare`), Company (`/v1/company`, `/v1/company/compare`), Person & Job Title (`/v1/person`, `/v1/person/compare`, `/v1/job-title`), Email/URL/Social (`/v1/email`, `/v1/url`, `/v1/social`), Physical Address (`/v1/address`), and Telephone (`/v1/standardize`, `/v1/explain`, `/v1/compare`, `/v1/deduplicate`, `/v1/batch`, `/v1/countries`).
 
-Every feature below for `address_standardizer.server:app` is **opt-in through environment variables**: with none of them set, the server behaves
+Every operational feature below is **opt-in through environment variables**: with none of them set, the server behaves
 exactly as it does in local development (open, no limits, `*` CORS). Configuration is read **once, when the app is
 created** (process start); restart to change it. Misconfigured security settings (a malformed key list, a bad rate
 limit) stop the process at startup rather than silently running unprotected.
@@ -121,7 +119,7 @@ logging.getLogger("address_standardizer.access").setLevel(logging.INFO)
 Cardinality is bounded: at most 64 endpoint labels and 64 key labels; further values fold into `other`. Metrics are
 per process; with several workers scrape each one or aggregate at the collector.
 
-**Tracing (optional).** Install the extra: `pip install "address-standardizer[otel]"` (the OpenTelemetry API; add
+**Tracing (optional).** Install the extra: `pip install "entity-standardizer[otel]"` (the OpenTelemetry API; add
 `opentelemetry-sdk` and an exporter, or run with the `opentelemetry-instrument` launcher, to ship spans). When the API
 is importable the service opens one span per request named `METHOD /route/template` with attributes
 `http.request.method`, `http.route`, `http.response.status_code`, `address_standardizer.request_id` and (when
@@ -130,14 +128,7 @@ authenticated) `address_standardizer.key_name`. Without the SDK configured the A
 
 ## Health and readiness
 
-- `GET /health`: **liveness**. Always 200 while the process answers; includes version, engine capabilities and cache
-  statistics. Use it for liveness probes and container health checks.
-- `GET /ready`: **readiness**. Verifies that the cache, audit ledger and reference database are usable. Returns
-  `200 {"status":"ready","checks":{...}}` or `503 {"status":"not_ready","checks":{"reference_db":"unavailable"}}`
-  (names only; the cause is in the server log). Use it for load-balancer / Kubernetes readiness probes. Code that adds
-  a data store can register a check with `address_standardizer.service.readiness.register_check(name, fn)`.
-
-Neither endpoint requires a key or counts against rate limits (see `AUTH_OPEN_PATHS`).
+- `GET /health`: **liveness**. Always 200 while the process answers (`{"status": "ok", "version": "2.1.0"}`). Use it for liveness probes and container health checks.
 
 ## Tenant isolation
 
@@ -175,8 +166,8 @@ settings through the environment and mount the keys as a secret:
 
 ```yaml
 services:
-  address-standardizer:
-    image: address-standardizer:latest
+  entity-standardizer:
+    image: entity-standardizer:latest
     read_only: true
     tmpfs: [/tmp]
     ports: ["127.0.0.1:8000:8000"]         # publish deliberately; terminate TLS in front
@@ -192,7 +183,7 @@ services:
     secrets: [as_api_keys]
     volumes: ["audit:/data/audit"]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/ready"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
 secrets:
   as_api_keys:
     file: ./secrets/api_keys.txt          # lines of name:key (or name:sha256:<hex>)

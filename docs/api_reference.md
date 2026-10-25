@@ -1,12 +1,12 @@
 # Complete API Reference 📖
 
-This document specifies the public Python API, dataclasses, CLI subcommands, FastAPI HTTP microservice endpoints, Model Context Protocol (MCP) tools, and Apache Arrow / Polars / DuckDB integrations for **Entity Standardizer** (`entity_standardizer`, `address_standardizer`, and `phone_standardizer` `v2.1.0`).
+This document specifies the public Python API, dataclasses, CLI subcommands, FastAPI HTTP microservice endpoints, Model Context Protocol (MCP) tools, and Apache Arrow / Polars / DuckDB integrations for **Entity Standardizer** (`entity_standardizer` `v2.1.0`).
 
 ---
 
 ## 1. Core Data Models
 
-### 1.1 Joint Contact & Multi-Pillar Models (`phone_standardizer.joint`, `phone_standardizer.dedup`)
+### 1.1 Joint Contact & Multi-Pillar Models (`entity_standardizer.joint`, `entity_standardizer.dedup`)
 
 #### `StandardizedContact` (alias: `StandardizedEntity`)
 - `address: StandardizedAddress` — Standardized USPS Pub 28 / UPU S42 address record.
@@ -135,7 +135,7 @@ This document specifies the public Python API, dataclasses, CLI subcommands, Fas
 
 ---
 
-### 1.5 Address & Telephone Models (`address_standardizer.models`, `phone_standardizer.models`)
+### 1.5 Address & Telephone Models (`entity_standardizer.address.models`, `entity_standardizer.models`)
 
 - `StandardizedAddress`: `street1`, `street2`, `city`, `state`, `postal_code`, `country`, `country_iso3`, `normalized_address_key`, `building_key`, `phonetic_key`, `address_status`, `is_us`, `is_private_residence`, `is_registered_agent_hub`, `deliverability`, `latitude`, `longitude`, `precision`, `confidence_score`, `routing_tier`, `rdi`, `cmra`, `vacant`, `dpv_footnotes`, `care_of`, `failure_reason_codes`, `warning_codes`.
 - `StandardizedPhone`: `raw_input`, `e164`, `national`, `international`, `rfc3966`, `country_calling_code`, `country_iso2`, `country_iso3`, `country_name`, `national_significant_number`, `area_code`, `subscriber_number`, `extension`, `vanity_alias`, `region_code`, `line_type`, `is_valid`, `is_possible`, `phone_key`, `phone_ext_key`, `confidence`, `routing_tier`, `risk_flags`, `healing_actions`.
@@ -156,7 +156,7 @@ This document specifies the public Python API, dataclasses, CLI subcommands, Fas
 
 ---
 
-## 3. FastAPI HTTP Microservice Endpoints (`phone_standardizer.server:app`)
+## 3. FastAPI HTTP Microservice Endpoints (`entity_standardizer.server:app`)
 
 | Method & Path | Request Model | Description |
 | :--- | :--- | :--- |
@@ -183,7 +183,7 @@ This document specifies the public Python API, dataclasses, CLI subcommands, Fas
 
 ## 4. Model Context Protocol (MCP) Tools (`entity-standardizer-mcp`)
 
-The stdio JSON-RPC 2.0 MCP server (`phone_standardizer.mcp.server`) exposes **17 tools**:
+The stdio JSON-RPC 2.0 MCP server (`entity_standardizer.mcp.server`) exposes **17 tools**:
 1. `standardize_contact`
 2. `compare_contacts`
 3. `standardize_company`

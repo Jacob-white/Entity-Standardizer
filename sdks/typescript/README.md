@@ -1,17 +1,17 @@
-# `@phone-standardizer/client` — TypeScript & React SDK (`v2.1.0`)
+# `@entity-standardizer/client` — TypeScript & React SDK (`v2.1.0`)
 
-Typed client library, offline `formatAsYouType` formatter, and headless `PhoneInputController` / `usePhoneInput()` React hook for the **Entity Standardizer** microservice (`phone_standardizer.server:app`).
+Typed client library, offline `formatAsYouType` formatter, and headless `PhoneInputController` / `usePhoneInput()` React hook for the **Entity Standardizer** microservice (`entity_standardizer.server:app`).
 
 ## Quickstart
 
 ```ts
 import {
-  PhoneStandardizerClient,
+  EntityStandardizerClient,
   formatAsYouType,
   PhoneInputController,
-} from "@phone-standardizer/client";
+} from "@entity-standardizer/client";
 
-const client = new PhoneStandardizerClient({ baseUrl: "http://127.0.0.1:8000" });
+const client = new EntityStandardizerClient({ baseUrl: "http://127.0.0.1:8000" });
 
 // 1. Joint Multi-Pillar Contact Standardization & Comparison
 const contact = await client.standardizeContact({

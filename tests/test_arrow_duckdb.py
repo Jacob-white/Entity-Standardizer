@@ -9,9 +9,9 @@ import polars as pl
 import pyarrow as pa
 import pytest
 
-import phone_standardizer._native_dispatch as native_dispatch
-import phone_standardizer.arrow as arrow_mod
-from phone_standardizer import (
+import entity_standardizer._native_dispatch as native_dispatch
+import entity_standardizer.arrow as arrow_mod
+from entity_standardizer import (
     extract_digits_dispatch,
     fold_unicode_digits_dispatch,
     register_duckdb_udfs,
@@ -67,33 +67,23 @@ def test_standardize_arrow_and_polars_errors(monkeypatch) -> None:
 
     # Simulate missing optional dependencies via both None override and lazy _UNSET import failure
     import sys
-    import address_standardizer.arrow as addr_arrow_mod
 
-    for mod, fn_arrow, fn_polars, fn_duckdb in (
-        (arrow_mod, standardize_arrow, standardize_polars, register_duckdb_udfs),
-        (
-            addr_arrow_mod,
-            addr_arrow_mod.standardize_arrow,
-            addr_arrow_mod.standardize_polars,
-            addr_arrow_mod.register_duckdb_udfs,
-        ),
+    for attr, mod_name, fn in (
+        ("pa", "pyarrow", standardize_arrow),
+        ("pl", "polars", standardize_polars),
+        ("duckdb", "duckdb", register_duckdb_udfs),
     ):
-        for attr, mod_name, fn in (
-            ("pa", "pyarrow", fn_arrow),
-            ("pl", "polars", fn_polars),
-            ("duckdb", "duckdb", fn_duckdb),
-        ):
-            with monkeypatch.context() as mp:
-                mp.setattr(mod, attr, None)
-                with pytest.raises(ImportError, match=mod_name):
-                    fn(tbl if attr != "duckdb" else None)
+        with monkeypatch.context() as mp:
+            mp.setattr(arrow_mod, attr, None)
+            with pytest.raises(ImportError, match=mod_name):
+                fn(tbl if attr != "duckdb" else None)
 
-            with monkeypatch.context() as mp:
-                mp.setattr(mod, attr, mod._UNSET)
-                mp.setitem(sys.modules, mod_name, None)
-                with pytest.raises(ImportError, match=mod_name):
-                    fn(tbl if attr != "duckdb" else None)
-                assert getattr(mod, attr) is None
+        with monkeypatch.context() as mp:
+            mp.setattr(arrow_mod, attr, arrow_mod._UNSET)
+            mp.setitem(sys.modules, mod_name, None)
+            with pytest.raises(ImportError, match=mod_name):
+                fn(tbl if attr != "duckdb" else None)
+            assert getattr(arrow_mod, attr) is None
 
 
 
@@ -207,7 +197,7 @@ def test_native_dispatch_extended_functions(monkeypatch, tmp_path) -> None:
     from pathlib import Path
     import sys
 
-    from phone_standardizer import (
+    from entity_standardizer import (
         damerau_levenshtein_distance_dispatch,
         fold_vanity_digits_dispatch,
     )
@@ -216,7 +206,7 @@ def test_native_dispatch_extended_functions(monkeypatch, tmp_path) -> None:
     assert native_dispatch._load_native_module(tmp_path) is None
 
     # 2. release_dir has an invalid shared library -> hits except Exception: continue -> returns None
-    bad_so = tmp_path / "lib_phone_standardizer_rs.so"
+    bad_so = tmp_path / "lib_entity_standardizer_rs.so"
     bad_so.write_bytes(b"corrupt")
     assert native_dispatch._load_native_module(tmp_path) is None
 
@@ -234,15 +224,15 @@ def test_native_dispatch_extended_functions(monkeypatch, tmp_path) -> None:
         )
         assert native_dispatch._load_native_module(tmp_path) is not None
 
-    # 4. release_dir=None when _phone_standardizer_rs is installed -> returns imported module
+    # 4. release_dir=None when _entity_standardizer_rs is installed -> returns imported module
     sentinel_mod = MagicMock()
     with monkeypatch.context() as mp:
-        mp.setitem(sys.modules, "_phone_standardizer_rs", sentinel_mod)
+        mp.setitem(sys.modules, "_entity_standardizer_rs", sentinel_mod)
         assert native_dispatch._load_native_module(None) is sentinel_mod
 
-    # 5. release_dir=None when _phone_standardizer_rs is not installed -> falls back to target/release
+    # 5. release_dir=None when _entity_standardizer_rs is not installed -> falls back to target/release
     with monkeypatch.context() as mp:
-        mp.setitem(sys.modules, "_phone_standardizer_rs", None)
+        mp.setitem(sys.modules, "_entity_standardizer_rs", None)
         mp.setattr(Path, "is_file", lambda self: False)
         assert native_dispatch._load_native_module(None) is None
 
@@ -258,6 +248,7 @@ def test_native_dispatch_extended_functions(monkeypatch, tmp_path) -> None:
     assert damerau_levenshtein_distance_dispatch("", "123") == 3
     assert damerau_levenshtein_distance_dispatch("123", "") == 3
     assert damerau_levenshtein_distance_dispatch("4155552671", "4155552617") == 1
+    assert damerau_levenshtein_distance_dispatch("ABC", "CA") == 2
 
     batch_py = standardize_batch_e164_dispatch(
         [
@@ -285,7 +276,7 @@ def test_native_dispatch_extended_functions(monkeypatch, tmp_path) -> None:
     assert batch_de == ["+493012345678", "+493012345678"]
 
     # Native Rust dispatch path
-    from phone_standardizer._native_dispatch import standardize_batch_with_country_dispatch
+    from entity_standardizer._native_dispatch import standardize_batch_with_country_dispatch
 
     mock_rs = MagicMock()
     mock_rs.fold_vanity_digits_rs.return_value = "3569377"
