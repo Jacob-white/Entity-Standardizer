@@ -18,7 +18,7 @@ from entity_standardizer.web import standardize_email, standardize_social, stand
 from phone_standardizer.audit import explain_phone
 from phone_standardizer.batch import batch_standardize_phones
 from phone_standardizer.dedup import compare_phones, deduplicate_phones
-from phone_standardizer.joint import standardize_contact
+from phone_standardizer.joint import compare_contacts, standardize_contact
 from phone_standardizer.registry import CountryDialRegistry, get_dial_plan
 from phone_standardizer.standardizer import standardize_phone
 
@@ -136,6 +136,15 @@ class ContactStandardizeRequest(BaseModel):
     website: str | None = Field(default=None, description="Optional raw contact website URL.")
     social: str | None = Field(default=None, description="Optional raw contact social URL or @handle.")
     default_country: str = Field(default="US", description="Fallback ISO country code.")
+
+
+class ContactCompareRequest(BaseModel):
+    """Request payload for /v1/contact/compare."""
+
+    contact_a: dict[str, Any] = Field(..., description="First raw contact/entity dictionary.")
+    contact_b: dict[str, Any] = Field(..., description="Second raw contact/entity dictionary.")
+    default_country: str = Field(default="US", description="Fallback ISO country code.")
+
 
 
 def create_app() -> FastAPI:
@@ -277,6 +286,14 @@ def create_app() -> FastAPI:
             default_country=req.default_country,
         )
         return res.to_dict()
+
+    @app.post("/v1/contact/compare")
+    def contact_compare_endpoint(req: ContactCompareRequest) -> dict[str, Any]:
+        return compare_contacts(
+            req.contact_a,
+            req.contact_b,
+            default_country=req.default_country,
+        ).to_dict()
 
     return app
 

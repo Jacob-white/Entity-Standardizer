@@ -546,6 +546,13 @@ def standardize_person(raw_input: str | None) -> StandardizedPerson:
             healing_actions=["ORGANIZATION_DETECTED_IN_PERSON_FIELD"],
         )
 
+    from entity_standardizer.company import _fold_latin_diacritics
+
+    folded_working = _fold_latin_diacritics(working)
+    if folded_working != working:
+        working = folded_working
+        actions.append("DIACRITICS_FOLDED")
+
     salutation: str | None = None
     nickname: str | None = None
     generational_suffix: str | None = None
@@ -1179,4 +1186,72 @@ def deduplicate_persons(
             )
         )
     return clusters
+
+
+_COUPLE_PREFIX_RE = re.compile(
+    r"^(?P<t1>MR|MRS|MS|DR)\.?\s+(?:&|AND)\s+(?P<t2>MR|MRS|MS|DR)\.?\s+(?P<rest>.+)$",
+    re.IGNORECASE,
+)
+_CONJUNCTION_SPLIT_RE = re.compile(r"\s+(?:&|AND)\s+", re.IGNORECASE)
+
+
+def split_compound_persons(raw_input: str | None) -> list[StandardizedPerson]:
+    """Split a joint/couple person string (e.g., 'John & Jane Smith') into individual StandardizedPerson records."""
+    if raw_input is None:
+        return []
+    cleaned = str(raw_input).strip()
+    if not cleaned:
+        return []
+
+    if is_organization_name(cleaned):
+        return [standardize_person(cleaned)]
+
+    couple_match = _COUPLE_PREFIX_RE.match(cleaned)
+    if couple_match:
+        t1 = couple_match.group("t1")
+        t2 = couple_match.group("t2")
+        rest = couple_match.group("rest")
+        results = [
+            standardize_person(f"{t1} {rest}"),
+            standardize_person(f"{t2} {rest}"),
+        ]
+        for p in results:
+            p.healing_actions.append("COMPOUND_PERSON_SPLIT")
+        return results
+
+    if "," in cleaned:
+        last_part, given_part = cleaned.split(",", 1)
+        given_splits = [s.strip() for s in _CONJUNCTION_SPLIT_RE.split(given_part) if s.strip()]
+        if len(given_splits) >= 2:
+            results = [
+                standardize_person(f"{given} {last_part.strip()}")
+                for given in given_splits
+            ]
+            for p in results:
+                p.healing_actions.append("COMPOUND_PERSON_SPLIT")
+            return results
+
+    parts = [s.strip() for s in _CONJUNCTION_SPLIT_RE.split(cleaned) if s.strip()]
+    if len(parts) >= 2:
+        tail_person = standardize_person(parts[-1])
+        shared_last = tail_person.last_name
+        results = []
+        for part in parts[:-1]:
+            part_tokens = [
+                t.strip(".").upper()
+                for t in part.split()
+                if t.strip(".").upper() not in _SALUTATIONS
+            ]
+            if len(part_tokens) == 1 and shared_last:
+                p = standardize_person(f"{part} {shared_last}")
+            else:
+                p = standardize_person(part)
+            p.healing_actions.append("COMPOUND_PERSON_SPLIT")
+            results.append(p)
+        tail_person.healing_actions.append("COMPOUND_PERSON_SPLIT")
+        results.append(tail_person)
+        return results
+
+    return [standardize_person(cleaned)]
+
 

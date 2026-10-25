@@ -113,6 +113,49 @@ def test_standardize_polars_df_and_lazy() -> None:
     assert lazy_out.collect()["phone_e164"].to_list() == ["+14155552671", "+493012345678"]
 
 
+def test_standardize_companies_and_persons_arrow_and_polars() -> None:
+    from entity_standardizer import (
+        standardize_companies_arrow,
+        standardize_companies_polars,
+        standardize_persons_arrow,
+        standardize_persons_polars,
+    )
+
+    comp_tbl = pa.table(
+        {
+            "company": ["BlackRock, Inc. /DE/", "KKR Opportunities III S.à r.l."],
+            "country": ["US", "LU"],
+        }
+    )
+    with pytest.raises(ValueError, match="company_col"):
+        standardize_companies_arrow(comp_tbl, company_col="missing")
+
+    out_comp_tbl = standardize_companies_arrow(comp_tbl, company_col="company", country_col="country")
+    assert out_comp_tbl.column("company_legal_name").to_pylist() == [
+        "BLACKROCK INC",
+        "KKR OPPORTUNITIES III SARL",
+    ]
+
+    comp_df = pl.DataFrame({"company": ["Acme Real Estate LLC - Series A"]})
+    out_comp_df = standardize_companies_polars(comp_df, company_col="company")
+    assert out_comp_df["company_legal_suffix"].to_list() == ["LLC"]
+
+    per_tbl = pa.table({"person": ["Smith, Dr. Robert J., Jr.", "José María Núñez"]})
+    with pytest.raises(ValueError, match="person_col"):
+        standardize_persons_arrow(per_tbl, person_col="missing")
+
+    out_per_tbl = standardize_persons_arrow(per_tbl, person_col="person")
+    assert out_per_tbl.column("person_full_name").to_pylist() == [
+        "ROBERT J SMITH JR",
+        "JOSE MARIA NUNEZ",
+    ]
+
+    per_df = pl.DataFrame({"person": ["Bob J. Smith"]})
+    out_per_df = standardize_persons_polars(per_df, person_col="person")
+    assert out_per_df["person_root_first_name"].to_list() == ["ROBERT"]
+
+
+
 def test_register_duckdb_udfs() -> None:
     con = duckdb.connect(":memory:")
     register_duckdb_udfs(con, default_country="US")

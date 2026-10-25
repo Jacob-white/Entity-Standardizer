@@ -764,37 +764,81 @@ pub fn normalize_batch_ascii_rs(inputs: Vec<String>) -> Vec<String> {
         .collect()
 }
 
-fn fold_latin_diacritic(ch: char) -> char {
-    match ch {
-        'à' | 'á' | 'â' | 'ã' | 'ä' | 'å' | 'ā' | 'ă' | 'ą' => 'a',
-        'À' | 'Á' | 'Â' | 'Ã' | 'Ä' | 'Å' | 'Ā' | 'Ă' | 'Ą' => 'A',
-        'è' | 'é' | 'ê' | 'ë' | 'ē' | 'ĕ' | 'ė' | 'ę' | 'ě' => 'e',
-        'È' | 'É' | 'Ê' | 'Ë' | 'Ē' | 'Ĕ' | 'Ė' | 'Ę' | 'Ě' => 'E',
-        'ì' | 'í' | 'î' | 'ï' | 'ĩ' | 'ī' | 'ĭ' | 'į' => 'i',
-        'Ì' | 'Í' | 'Î' | 'Ï' | 'Ĩ' | 'Ī' | 'Ĭ' | 'Į' => 'I',
-        'ò' | 'ó' | 'ô' | 'õ' | 'ö' | 'ø' | 'ō' | 'ŏ' | 'ő' => 'o',
-        'Ò' | 'Ó' | 'Ô' | 'Õ' | 'Ö' | 'Ø' | 'Ō' | 'Ŏ' | 'Ő' => 'O',
-        'ù' | 'ú' | 'û' | 'ü' | 'ũ' | 'ū' | 'ŭ' | 'ů' | 'ű' | 'ų' => 'u',
-        'Ù' | 'Ú' | 'Û' | 'Ü' | 'Ũ' | 'Ū' | 'Ŭ' | 'Ů' | 'Ű' | 'Ų' => 'U',
-        'ç' | 'ć' | 'č' | 'ĉ' | 'ċ' => 'c',
-        'Ç' | 'Ć' | 'Č' | 'Ĉ' | 'Ċ' => 'C',
-        'ñ' | 'ń' | 'ň' | 'ņ' => 'n',
-        'Ñ' | 'Ń' | 'Ň' | 'Ņ' => 'N',
-        'ý' | 'ÿ' | 'ŷ' => 'y',
-        'Ý' | 'Ÿ' | 'Ŷ' => 'Y',
-        'ž' | 'ź' | 'ż' => 'z',
-        'Ž' | 'Ź' | 'Ż' => 'Z',
-        'š' | 'ś' | 'ŝ' | 'ş' => 's',
-        'Š' | 'Ś' | 'Ŝ' | 'Ş' => 'S',
-        'ł' | 'ľ' | 'ĺ' | 'ļ' => 'l',
-        'Ł' | 'Ľ' | 'Ĺ' | 'Ļ' => 'L',
-        _ => ch,
+fn fold_latin_diacritics_to_chars(input: &str) -> Vec<char> {
+    let mut out = Vec::with_capacity(input.len() + 8);
+    for ch in input.chars() {
+        match ch {
+            'ß' => {
+                out.push('s');
+                out.push('s');
+            }
+            'ẞ' => {
+                out.push('S');
+                out.push('S');
+            }
+            'æ' => {
+                out.push('a');
+                out.push('e');
+            }
+            'Æ' => {
+                out.push('A');
+                out.push('E');
+            }
+            'œ' => {
+                out.push('o');
+                out.push('e');
+            }
+            'Œ' => {
+                out.push('O');
+                out.push('E');
+            }
+            'þ' => {
+                out.push('t');
+                out.push('h');
+            }
+            'Þ' => {
+                out.push('T');
+                out.push('H');
+            }
+            'à' | 'á' | 'â' | 'ã' | 'ä' | 'å' | 'ā' | 'ă' | 'ą' => out.push('a'),
+            'À' | 'Á' | 'Â' | 'Ã' | 'Ä' | 'Å' | 'Ā' | 'Ă' | 'Ą' => out.push('A'),
+            'è' | 'é' | 'ê' | 'ë' | 'ē' | 'ĕ' | 'ė' | 'ę' | 'ě' => out.push('e'),
+            'È' | 'É' | 'Ê' | 'Ë' | 'Ē' | 'Ĕ' | 'Ė' | 'Ę' | 'Ě' => out.push('E'),
+            'ì' | 'í' | 'î' | 'ï' | 'ĩ' | 'ī' | 'ĭ' | 'į' => out.push('i'),
+            'Ì' | 'Í' | 'Î' | 'Ï' | 'Ĩ' | 'Ī' | 'Ĭ' | 'Į' => out.push('I'),
+            'ò' | 'ó' | 'ô' | 'õ' | 'ö' | 'ø' | 'ō' | 'ŏ' | 'ő' => out.push('o'),
+            'Ò' | 'Ó' | 'Ô' | 'Õ' | 'Ö' | 'Ø' | 'Ō' | 'Ŏ' | 'Ő' => out.push('O'),
+            'ù' | 'ú' | 'û' | 'ü' | 'ũ' | 'ū' | 'ŭ' | 'ů' | 'ű' | 'ų' => out.push('u'),
+            'Ù' | 'Ú' | 'Û' | 'Ü' | 'Ũ' | 'Ū' | 'Ŭ' | 'Ů' | 'Ű' | 'Ų' => out.push('U'),
+            'ç' | 'ć' | 'č' | 'ĉ' | 'ċ' => out.push('c'),
+            'Ç' | 'Ć' | 'Č' | 'Ĉ' | 'Ċ' => out.push('C'),
+            'ñ' | 'ń' | 'ň' | 'ņ' => out.push('n'),
+            'Ñ' | 'Ń' | 'Ň' | 'Ņ' => out.push('N'),
+            'ý' | 'ÿ' | 'ŷ' => out.push('y'),
+            'Ý' | 'Ÿ' | 'Ŷ' => out.push('Y'),
+            'ž' | 'ź' | 'ż' => out.push('z'),
+            'Ž' | 'Ź' | 'Ż' => out.push('Z'),
+            'š' | 'ś' | 'ŝ' | 'ş' => out.push('s'),
+            'Š' | 'Ś' | 'Ŝ' | 'Ş' => out.push('S'),
+            'ł' | 'ľ' | 'ĺ' | 'ļ' => out.push('l'),
+            'Ł' | 'Ľ' | 'Ĺ' | 'Ļ' => out.push('L'),
+            'đ' | 'ð' | 'ď' => out.push('d'),
+            'Đ' | 'Ð' | 'Ď' => out.push('D'),
+            'ř' | 'ŕ' => out.push('r'),
+            'Ř' | 'Ŕ' => out.push('R'),
+            'ť' | 'ţ' => out.push('t'),
+            'Ť' | 'Ţ' => out.push('T'),
+            'ğ' | 'ĝ' | 'ġ' | 'ģ' => out.push('g'),
+            'Ğ' | 'Ĝ' | 'Ġ' | 'Ģ' => out.push('G'),
+            _ => out.push(ch),
+        }
     }
+    out
 }
 
 #[pyfunction]
 pub fn normalize_company_tokens_rs(input: &str) -> (Vec<String>, bool, bool) {
-    let chars: Vec<char> = input.chars().map(fold_latin_diacritic).collect();
+    let chars: Vec<char> = fold_latin_diacritics_to_chars(input);
     let n = chars.len();
     let mut stage1 = String::with_capacity(input.len() + 16);
     let mut amp_normalized = false;

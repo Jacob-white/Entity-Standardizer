@@ -1070,3 +1070,221 @@ def test_v2_1_entity_deduplication_web_comparison_and_endpoints(capsys) -> None:
     assert json.loads(capsys.readouterr().out)["is_match"] is True
 
 
+def test_v2_1_person_diacritics_compound_splitting_international_suffixes_and_contact_comparison() -> None:
+    from fastapi.testclient import TestClient
+
+    from entity_standardizer import (
+        ContactComparisonResult,
+        compare_contacts,
+        compare_entities,
+        split_compound_persons,
+    )
+    from phone_standardizer.mcp import handle_mcp_request
+    from phone_standardizer.server import app
+
+    # 1. Person Latin diacritics & ligatures folding
+    p_es = standardize_person("José María Núñez")
+    assert p_es.full_name == "JOSE MARIA NUNEZ"
+    assert p_es.first_name == "JOSE"
+    assert p_es.middle_name == "MARIA"
+    assert p_es.last_name == "NUNEZ"
+    assert "DIACRITICS_FOLDED" in p_es.healing_actions
+
+    p_nordic = standardize_person("Søren Kierkegaard")
+    assert p_nordic.full_name == "SOREN KIERKEGAARD"
+    assert "DIACRITICS_FOLDED" in p_nordic.healing_actions
+
+    p_de = standardize_person("Jürgen Weiß")
+    assert p_de.full_name == "JURGEN WEISS"
+
+    p_pl = standardize_person("Łukasz Kowalski")
+    assert p_pl.full_name == "LUKASZ KOWALSKI"
+
+    # 2. Compound / couple person splitting
+    assert split_compound_persons(None) == []
+    assert split_compound_persons("   ") == []
+
+    org_split = split_compound_persons("Johnson & Johnson LLC")
+    assert len(org_split) == 1 and org_split[0].is_organization is True
+
+    couple_prefix = split_compound_persons("Mr. and Mrs. Robert J. Smith")
+    assert len(couple_prefix) == 2
+    assert couple_prefix[0].salutation == "MR" and couple_prefix[0].full_name == "ROBERT J SMITH"
+    assert couple_prefix[1].salutation == "MRS" and couple_prefix[1].full_name == "ROBERT J SMITH"
+    assert "COMPOUND_PERSON_SPLIT" in couple_prefix[0].healing_actions
+
+    comma_couple = split_compound_persons("Smith, John & Jane")
+    assert [p.full_name for p in comma_couple] == ["JOHN SMITH", "JANE SMITH"]
+
+    comma_single = split_compound_persons("Smith, John")
+    assert len(comma_single) == 1 and comma_single[0].full_name == "JOHN SMITH"
+
+    shared_last = split_compound_persons("John & Jane Smith")
+    assert [p.full_name for p in shared_last] == ["JOHN SMITH", "JANE SMITH"]
+
+    distinct_last = split_compound_persons("John Smith & Jane Doe")
+    assert [p.full_name for p in distinct_last] == ["JOHN SMITH", "JANE DOE"]
+
+    single_plain = split_compound_persons("Alice Wonderland")
+    assert len(single_plain) == 1 and single_plain[0].full_name == "ALICE WONDERLAND"
+
+    # 3. International ISO 20275 legal suffixes & Series/Segregated Portfolio extraction
+    c_pl = standardize_company("Allegro.pl Sp. z o.o.")
+    assert c_pl.legal_suffix == "SP Z OO" and c_pl.inferred_country_iso2 == "PL"
+
+    c_kgaa = standardize_company("Henkel AG & Co. KGaA")
+    assert c_kgaa.legal_suffix == "KGAA" and c_kgaa.inferred_country_iso2 == "DE"
+
+    c_sg = standardize_company("Grab Holdings Pte. Ltd.")
+    assert c_sg.legal_suffix == "PTE LTD" and c_sg.inferred_country_iso2 == "SG"
+
+    c_in = standardize_company("Flipkart Internet Pvt. Ltd.")
+    assert c_in.legal_suffix == "PVT LTD" and c_in.inferred_country_iso2 == "IN"
+
+    c_my = standardize_company("Petronas Dagangan Sdn. Bhd.")
+    assert c_my.legal_suffix == "SDN BHD" and c_my.inferred_country_iso2 == "MY"
+
+    c_bhd = standardize_company("Maybank Berhad")
+    assert c_bhd.legal_suffix == "BHD" and c_bhd.inferred_country_iso2 == "MY"
+
+    c_se = standardize_company("Allianz Societas Europaea")
+    assert c_se.legal_suffix == "SE"
+
+    c_hu = standardize_company("OTP Bank Kft.")
+    assert c_hu.legal_suffix == "KFT" and c_hu.inferred_country_iso2 == "HU"
+
+    c_cz = standardize_company("Avast Software s.r.o.")
+    assert c_cz.legal_suffix == "SRO" and c_cz.inferred_country_iso2 == "CZ"
+
+    c_ee = standardize_company("Bolt Technology OÜ")
+    assert c_ee.legal_suffix == "OU" and c_ee.inferred_country_iso2 == "EE"
+
+    c_series = standardize_company("Acme Real Estate LLC - Series A")
+    assert c_series.legal_suffix == "LLC"
+    assert c_series.branch_unit == "SERIES A"
+    assert c_series.base_name == "ACME REAL ESTATE"
+
+    c_spc_port = standardize_company("Apex Master Fund SPC (Segregated Portfolio 1)")
+    assert c_spc_port.legal_suffix == "SPC"
+    assert c_spc_port.branch_unit == "SEGREGATED PORTFOLIO 1"
+
+    # 4. Multi-pillar contact comparison
+    assert compare_entities is compare_contacts
+    cmp_empty = compare_contacts({}, {})
+    assert isinstance(cmp_empty, ContactComparisonResult)
+    assert cmp_empty.is_match is False and cmp_empty.match_type == "INSUFFICIENT_PILLARS"
+
+    cmp_gen = compare_contacts(
+        {"person_name": "Robert J. Smith Jr.", "organization": "Acme LLC"},
+        {"person_name": "Robert J. Smith Sr.", "organization": "Acme LLC"},
+    )
+    assert cmp_gen.is_match is False and cmp_gen.match_type == "PERSON_GENERATIONAL_CONFLICT"
+
+    c1 = standardize_contact(
+        organization="BlackRock, Inc.",
+        person_name="Bob Smith",
+        phone="(212) 555-0199",
+        email="bob.smith@blackrock.com",
+        website="https://www.blackrock.com",
+        street1="50 Hudson Yards",
+        city="New York",
+        state="NY",
+        postal_code="10001",
+    )
+    c2 = standardize_contact(
+        organization="BLACKROCK INCORPORATED /DE/",
+        person_name="Robert Smith",
+        phone="+1-212-555-0199",
+        email="bob.smith+vip@blackrock.com",
+        website="http://blackrock.com/?utm_source=x",
+        street1="50 Hudson Yards",
+        city="New York",
+        state="NY",
+        postal_code="10001",
+    )
+    cmp_multi = compare_contacts(c1, c2)
+    assert cmp_multi.is_match is True
+    assert cmp_multi.match_type == "MULTI_PILLAR_MATCH"
+    assert set(cmp_multi.matched_pillars) == {
+        "organization",
+        "person",
+        "phone",
+        "email",
+        "website",
+        "address",
+    }
+    assert cmp_multi.to_dict()["score"] == 1.0
+
+    # Building key match (different suites at same building) + single pillar match + non-match
+    cmp_bldg = compare_contacts(
+        {
+            "street1": "50 Hudson Yards Suite 100",
+            "city": "New York",
+            "state": "NY",
+            "postal_code": "10001",
+        },
+        {
+            "street1": "50 Hudson Yards Suite 200",
+            "city": "New York",
+            "state": "NY",
+            "postal_code": "10001",
+        },
+    )
+    assert cmp_bldg.is_match is True
+    assert cmp_bldg.match_type == "SINGLE_PILLAR_ADDRESS_MATCH"
+    assert cmp_bldg.pillar_scores["address"] == 0.92
+
+    cmp_no = compare_contacts(
+        {
+            "organization": "BlackRock Inc.",
+            "person_name": "Alice Wonderland",
+            "phone": "(212) 555-0199",
+            "email": "alice@blackrock.com",
+            "website": "https://blackrock.com",
+            "street1": "50 Hudson Yards",
+            "city": "New York",
+            "state": "NY",
+            "postal_code": "10001",
+        },
+        {
+            "organization": "Vanguard Group Inc.",
+            "person_name": "Bob Builder",
+            "phone": "(415) 555-2671",
+            "email": "bob@vanguard.com",
+            "website": "https://vanguard.com",
+            "street1": "100 Market St",
+            "city": "San Francisco",
+            "state": "CA",
+            "postal_code": "94105",
+        },
+    )
+    assert cmp_no.is_match is False and cmp_no.match_type == "NO_MATCH"
+
+    client = TestClient(app)
+    r_cc = client.post(
+        "/v1/contact/compare",
+        json={
+            "contact_a": {"organization": "Acme LLC", "phone": "(415) 555-2671"},
+            "contact_b": {"organization": "Acme L.L.C.", "phone": "+14155552671"},
+        },
+    )
+    assert r_cc.status_code == 200 and r_cc.json()["is_match"] is True
+
+    mcp_cc = handle_mcp_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 99,
+            "method": "tools/call",
+            "params": {
+                "name": "compare_contacts",
+                "arguments": {
+                    "contact_a": {"organization": "Acme LLC"},
+                    "contact_b": {"organization": "Acme L.L.C."},
+                },
+            },
+        }
+    )
+    assert '"is_match": true' in mcp_cc["result"]["content"][0]["text"]
+
+
+

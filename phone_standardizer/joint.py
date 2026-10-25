@@ -814,10 +814,192 @@ def batch_standardize_contacts(
 
 batch_standardize_entities = batch_standardize_contacts
 
-from entity_standardizer.company import StandardizedCompany, standardize_company  # noqa: E402
+
+@dataclass(slots=True)
+class ContactComparisonResult:
+    """Result of comparing two multi-pillar contact/entity records."""
+
+    is_match: bool
+    score: float
+    match_type: str
+    matched_pillars: list[str]
+    pillar_scores: dict[str, float]
+    contact_a: StandardizedContact
+    contact_b: StandardizedContact
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the multi-pillar contact comparison result to a JSON-compatible dictionary."""
+        return {
+            "is_match": self.is_match,
+            "score": round(self.score, 4),
+            "match_type": self.match_type,
+            "matched_pillars": list(self.matched_pillars),
+            "pillar_scores": {k: round(v, 4) for k, v in self.pillar_scores.items()},
+            "contact_a": self.contact_a.to_dict(),
+            "contact_b": self.contact_b.to_dict(),
+        }
+
+
+def _coerce_contact(
+    contact: StandardizedContact | dict[str, Any],
+    default_country: str = "US",
+) -> StandardizedContact:
+    if isinstance(contact, StandardizedContact):
+        return contact
+    return batch_standardize_contacts([contact], default_country=default_country)[0]
+
+
+def compare_contacts(
+    contact_a: StandardizedContact | dict[str, Any],
+    contact_b: StandardizedContact | dict[str, Any],
+    *,
+    default_country: str = "US",
+) -> ContactComparisonResult:
+    """Compare two contact/entity records across organization, person, phone, email, website, and address pillars."""
+    from phone_standardizer.dedup import compare_phones
+
+    ca = _coerce_contact(contact_a, default_country=default_country)
+    cb = _coerce_contact(contact_b, default_country=default_country)
+
+    matched_pillars: list[str] = []
+    pillar_scores: dict[str, float] = {}
+    person_conflict = False
+
+    if (
+        ca.organization is not None
+        and cb.organization is not None
+        and ca.organization.is_valid
+        and cb.organization.is_valid
+    ):
+        org_cmp = compare_companies(ca.organization, cb.organization)
+        pillar_scores["organization"] = org_cmp.score
+        if org_cmp.is_match:
+            matched_pillars.append("organization")
+
+    if (
+        ca.person is not None
+        and cb.person is not None
+        and ca.person.is_valid
+        and cb.person.is_valid
+    ):
+        per_cmp = compare_persons(ca.person, cb.person)
+        pillar_scores["person"] = per_cmp.score
+        if per_cmp.is_match:
+            matched_pillars.append("person")
+        elif per_cmp.match_type == "GENERATIONAL_SUFFIX_CONFLICT":
+            person_conflict = True
+
+    if ca.phone.is_valid and cb.phone.is_valid:
+        ph_cmp = compare_phones(ca.phone, cb.phone)
+        pillar_scores["phone"] = ph_cmp.similarity_score
+        if ph_cmp.is_exact_match or ph_cmp.is_extension_variant or ph_cmp.is_fuzzy_match:
+            matched_pillars.append("phone")
+
+    if (
+        ca.email is not None
+        and cb.email is not None
+        and ca.email.is_valid
+        and cb.email.is_valid
+    ):
+        em_cmp = compare_emails(ca.email, cb.email)
+        pillar_scores["email"] = em_cmp.score
+        if em_cmp.is_match:
+            matched_pillars.append("email")
+
+    if (
+        ca.website is not None
+        and cb.website is not None
+        and ca.website.is_valid
+        and cb.website.is_valid
+    ):
+        web_cmp = compare_urls(ca.website, cb.website)
+        pillar_scores["website"] = web_cmp.score
+        if web_cmp.is_match:
+            matched_pillars.append("website")
+
+    addr_a_key = ca.address.normalized_address_key or ca.address.building_key
+    addr_b_key = cb.address.normalized_address_key or cb.address.building_key
+    if (
+        ca.address.address_status != "parse_failed"
+        and cb.address.address_status != "parse_failed"
+        and addr_a_key
+        and addr_b_key
+    ):
+        if (
+            ca.address.normalized_address_key
+            and ca.address.normalized_address_key == cb.address.normalized_address_key
+        ):
+            pillar_scores["address"] = 1.0
+            matched_pillars.append("address")
+        elif ca.address.building_key and ca.address.building_key == cb.address.building_key:
+            pillar_scores["address"] = 0.92
+            matched_pillars.append("address")
+        else:
+            pillar_scores["address"] = 0.0
+
+    if not pillar_scores:
+        return ContactComparisonResult(
+            is_match=False,
+            score=0.0,
+            match_type="INSUFFICIENT_PILLARS",
+            matched_pillars=[],
+            pillar_scores={},
+            contact_a=ca,
+            contact_b=cb,
+        )
+
+    if person_conflict:
+        return ContactComparisonResult(
+            is_match=False,
+            score=0.45,
+            match_type="PERSON_GENERATIONAL_CONFLICT",
+            matched_pillars=matched_pillars,
+            pillar_scores=pillar_scores,
+            contact_a=ca,
+            contact_b=cb,
+        )
+
+    if matched_pillars:
+        best = max(pillar_scores[p] for p in matched_pillars)
+        bonus = min(0.08, 0.03 * (len(matched_pillars) - 1))
+        score = round(min(1.0, best + bonus), 4)
+        match_type = (
+            "MULTI_PILLAR_MATCH"
+            if len(matched_pillars) >= 2
+            else f"SINGLE_PILLAR_{matched_pillars[0].upper()}_MATCH"
+        )
+        return ContactComparisonResult(
+            is_match=True,
+            score=score,
+            match_type=match_type,
+            matched_pillars=matched_pillars,
+            pillar_scores=pillar_scores,
+            contact_a=ca,
+            contact_b=cb,
+        )
+
+    return ContactComparisonResult(
+        is_match=False,
+        score=round(max(pillar_scores.values()), 4),
+        match_type="NO_MATCH",
+        matched_pillars=[],
+        pillar_scores=pillar_scores,
+        contact_a=ca,
+        contact_b=cb,
+    )
+
+
+compare_entities = compare_contacts
+
+from entity_standardizer.company import (  # noqa: E402
+    StandardizedCompany,
+    compare_companies,
+    standardize_company,
+)
 from entity_standardizer.person import (  # noqa: E402
     StandardizedJobTitle,
     StandardizedPerson,
+    compare_persons,
     standardize_job_title,
     standardize_person,
 )
@@ -826,6 +1008,8 @@ from entity_standardizer.web import (  # noqa: E402
     StandardizedSocial,
     StandardizedUrl,
     _FREE_WEBMAIL_DOMAINS,
+    compare_emails,
+    compare_urls,
     extract_registrable_domain,
     standardize_email,
     standardize_social,

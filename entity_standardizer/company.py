@@ -12,11 +12,13 @@ import unicodedata
 # Mapped to (canonical_suffix, unambiguous_country_iso2)
 _MULTI_TOKEN_LEGAL_SUFFIXES: tuple[tuple[tuple[str, ...], str, str | None], ...] = (
     (("SOCIEDAD", "ANONIMA", "DE", "CAPITAL", "VARIABLE"), "SA DE CV", "MX"),
+    (("SPOLKA", "Z", "OGRANICZONA", "ODPOWIEDZIALNOSCIA"), "SP Z OO", "PL"),
     (("SOCIETE", "A", "RESPONSABILITE", "LIMITEE"), "SARL", "FR"),
     (("LIMITED", "LIABILITY", "LIMITED", "PARTNERSHIP"), "LLLP", None),
     (("SA", "DE", "CV"), "SA DE CV", "MX"),
     (("S", "A", "DE", "C", "V"), "SA DE CV", "MX"),
     (("PROFESSIONAL", "LIMITED", "LIABILITY", "COMPANY"), "PLLC", None),
+    (("KOMMANDITGESELLSCHAFT", "AUF", "AKTIEN"), "KGAA", "DE"),
     (("REAL", "ESTATE", "INVESTMENT", "TRUST"), "REIT", None),
     (("LIMITED", "LIABILITY", "COMPANY"), "LLC", None),
     (("LIMITED", "LIABILITY", "PARTNERSHIP"), "LLP", None),
@@ -26,10 +28,21 @@ _MULTI_TOKEN_LEGAL_SUFFIXES: tuple[tuple[tuple[str, ...], str, str | None], ...]
     (("UNLIMITED", "LIABILITY", "COMPANY"), "ULC", "CA"),
     (("PUBLIC", "LIMITED", "COMPANY"), "PLC", "GB"),
     (("FEDERAL", "SAVINGS", "BANK"), "FSB", "US"),
+    (("SP", "Z", "O", "O"), "SP Z OO", "PL"),
+    (("SP", "Z", "OO"), "SP Z OO", "PL"),
     (("PROPRIETARY", "LIMITED"), "PTY LTD", "AU"),
     (("PROPRIETARY", "LTD"), "PTY LTD", "AU"),
     (("PTY", "LIMITED"), "PTY LTD", "AU"),
     (("PTY", "LTD"), "PTY LTD", "AU"),
+    (("PRIVATE", "LIMITED"), "PTE LTD", "SG"),
+    (("PRIVATE", "LTD"), "PTE LTD", "SG"),
+    (("PTE", "LIMITED"), "PTE LTD", "SG"),
+    (("PTE", "LTD"), "PTE LTD", "SG"),
+    (("PVT", "LIMITED"), "PVT LTD", "IN"),
+    (("PVT", "LTD"), "PVT LTD", "IN"),
+    (("SENDIRIAN", "BERHAD"), "SDN BHD", "MY"),
+    (("SDN", "BHD"), "SDN BHD", "MY"),
+    (("SOCIETAS", "EUROPAEA"), "SE", None),
     (("GMBH", "AND", "CO", "KG"), "GMBH", "DE"),
     (("KABUSHIKI", "KAISHA"), "KK", "JP"),
     (("KABUSHIKI", "GAISHA"), "KK", "JP"),
@@ -88,6 +101,14 @@ _SINGLE_TOKEN_LEGAL_SUFFIXES: dict[str, tuple[str, str | None]] = {
     "AS": ("AS", None),
     "ASA": ("AS", "NO"),
     "APS": ("APS", "DK"),
+    "SE": ("SE", None),
+    "KGAA": ("KGAA", "DE"),
+    "KFT": ("KFT", "HU"),
+    "SRO": ("SRO", "CZ"),
+    "DOO": ("DOO", None),
+    "OU": ("OU", "EE"),
+    "BHD": ("BHD", "MY"),
+    "BERHAD": ("BHD", "MY"),
 }
 
 _GENERIC_BRAND_TAIL_WORDS: frozenset[str] = frozenset(
@@ -125,7 +146,7 @@ _GENERIC_BRAND_TAIL_WORDS: frozenset[str] = frozenset(
 )
 
 _BRANCH_KEYWORDS_RE = re.compile(
-    r"\b(?:DIVISION|DIV|BRANCH|UNIT|DEPARTMENT|DEPT|OFFICE|REGION|STORE|PLANT|FACILITY|HEADQUARTERS|HQ|OPERATIONS|PROGRAM\s+MANAGER|PLAN\s+SPONSOR|GENERAL\s+PARTNER|MANAGING\s+MEMBER)\b",
+    r"\b(?:DIVISION|DIV|BRANCH|UNIT|DEPARTMENT|DEPT|OFFICE|REGION|STORE|PLANT|FACILITY|HEADQUARTERS|HQ|OPERATIONS|PROGRAM\s+MANAGER|PLAN\s+SPONSOR|GENERAL\s+PARTNER|MANAGING\s+MEMBER|SERIES|PORTFOLIO|TRANCHE|SUB[\-\s]?FUND)\b",
     re.IGNORECASE,
 )
 
@@ -151,7 +172,24 @@ _TRUST_AGREEMENT_GUARD_RE = re.compile(
     re.IGNORECASE,
 )
 
-_DIACRITIC_STROKE_MAP = str.maketrans({"ø": "o", "Ø": "O", "ł": "l", "Ł": "L"})
+_DIACRITIC_STROKE_MAP = str.maketrans(
+    {
+        "ø": "o",
+        "Ø": "O",
+        "ł": "l",
+        "Ł": "L",
+        "ß": "ss",
+        "ẞ": "SS",
+        "æ": "ae",
+        "Æ": "AE",
+        "œ": "oe",
+        "Œ": "OE",
+        "ð": "d",
+        "Ð": "D",
+        "þ": "th",
+        "Þ": "TH",
+    }
+)
 
 _PAREN_DBA_RE = re.compile(
     r"\(\s*(?:D\s*/\s*B\s*/\s*A|D\.B\.A\.?|DBA|DOING\s+BUSINESS\s+AS|TRADING\s+AS|T\s*/\s*A|A\s*/\s*K\s*/\s*A|AKA)\b[:\s\-]*([^()]+)\)",

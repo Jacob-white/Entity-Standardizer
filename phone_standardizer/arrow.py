@@ -239,3 +239,104 @@ def register_duckdb_udfs(con: Any, default_country: str = "US") -> None:
     con.create_function("standardize_url_domain", _url_domain_udf, ["VARCHAR"], "VARCHAR")
 
 
+def standardize_companies_arrow(
+    table: Any,
+    company_col: str = "company",
+    country_col: str | None = None,
+    output_prefix: str = "company_",
+) -> Any:
+    """Standardize company/organization names in an Apache Arrow Table."""
+    from entity_standardizer.company import standardize_company
+
+    col_names = table.column_names
+    if company_col not in col_names:
+        raise ValueError(f"company_col {company_col!r} is not a column of the input (columns: {col_names})")
+
+    num_rows = table.num_rows
+    names = [str(v) if v is not None else None for v in table.column(company_col).to_pylist()]
+    countries = (
+        [str(v) if v is not None else None for v in table.column(country_col).to_pylist()]
+        if country_col and country_col in col_names
+        else [None] * num_rows
+    )
+
+    records = [standardize_company(names[i], country=countries[i]) for i in range(num_rows)]
+    arrays_map: list[tuple[str, Any]] = [
+        ("legal_name", pa.array([r.legal_name for r in records], type=pa.string())),
+        ("base_name", pa.array([r.base_name for r in records], type=pa.string())),
+        ("brand_stem", pa.array([r.brand_stem for r in records], type=pa.string())),
+        ("legal_suffix", pa.array([r.legal_suffix for r in records], type=pa.string())),
+        ("inferred_country_iso2", pa.array([r.inferred_country_iso2 for r in records], type=pa.string())),
+        ("company_key", pa.array([r.company_key for r in records], type=pa.string())),
+        ("is_valid", pa.array([r.is_valid for r in records], type=pa.bool_())),
+        ("confidence", pa.array([r.confidence for r in records], type=pa.float64())),
+    ]
+
+    result_table = table
+    for name, arr in arrays_map:
+        result_table = result_table.append_column(f"{output_prefix}{name}", arr)
+    return result_table
+
+
+def standardize_companies_polars(
+    df: Any,
+    company_col: str = "company",
+    country_col: str | None = None,
+    output_prefix: str = "company_",
+) -> Any:
+    """Standardize company/organization names in a Polars DataFrame."""
+    std_tbl = standardize_companies_arrow(
+        df.to_arrow(),
+        company_col=company_col,
+        country_col=country_col,
+        output_prefix=output_prefix,
+    )
+    return pl.from_arrow(std_tbl)
+
+
+def standardize_persons_arrow(
+    table: Any,
+    person_col: str = "person",
+    output_prefix: str = "person_",
+) -> Any:
+    """Standardize person full names in an Apache Arrow Table."""
+    from entity_standardizer.person import standardize_person
+
+    col_names = table.column_names
+    if person_col not in col_names:
+        raise ValueError(f"person_col {person_col!r} is not a column of the input (columns: {col_names})")
+
+    names = [str(v) if v is not None else None for v in table.column(person_col).to_pylist()]
+    records = [standardize_person(n) for n in names]
+    arrays_map: list[tuple[str, Any]] = [
+        ("full_name", pa.array([r.full_name for r in records], type=pa.string())),
+        ("first_name", pa.array([r.first_name for r in records], type=pa.string())),
+        ("root_first_name", pa.array([r.root_first_name for r in records], type=pa.string())),
+        ("last_name", pa.array([r.last_name for r in records], type=pa.string())),
+        ("person_key", pa.array([r.person_key for r in records], type=pa.string())),
+        ("person_root_key", pa.array([r.person_root_key for r in records], type=pa.string())),
+        ("is_valid", pa.array([r.is_valid for r in records], type=pa.bool_())),
+        ("confidence", pa.array([r.confidence for r in records], type=pa.float64())),
+    ]
+
+    result_table = table
+    for name, arr in arrays_map:
+        result_table = result_table.append_column(f"{output_prefix}{name}", arr)
+    return result_table
+
+
+def standardize_persons_polars(
+    df: Any,
+    person_col: str = "person",
+    output_prefix: str = "person_",
+) -> Any:
+    """Standardize person full names in a Polars DataFrame."""
+    std_tbl = standardize_persons_arrow(
+        df.to_arrow(),
+        person_col=person_col,
+        output_prefix=output_prefix,
+    )
+    return pl.from_arrow(std_tbl)
+
+
+

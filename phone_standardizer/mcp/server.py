@@ -16,7 +16,7 @@ from entity_standardizer.person import (
 from entity_standardizer.web import standardize_email, standardize_social, standardize_url
 from phone_standardizer.audit import explain_phone
 from phone_standardizer.dedup import compare_phones, deduplicate_phones
-from phone_standardizer.joint import standardize_contact
+from phone_standardizer.joint import compare_contacts, standardize_contact
 from phone_standardizer.registry import get_dial_plan
 from phone_standardizer.standardizer import mask_phone, standardize_phone
 
@@ -233,6 +233,19 @@ MCP_TOOLS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "name": "compare_contacts",
+        "description": "Compare two multi-pillar contact/entity records across organization, person, phone, email, website, and address.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "contact_a": {"type": "object"},
+                "contact_b": {"type": "object"},
+                "default_country": {"type": "string", "default": "US"},
+            },
+            "required": ["contact_a", "contact_b"],
+        },
+    },
 ]
 
 
@@ -428,6 +441,19 @@ def handle_mcp_request(request: dict[str, Any]) -> dict[str, Any]:
                 "id": req_id,
                 "result": {
                     "content": [{"type": "text", "text": json.dumps(contact_res.to_dict())}]
+                },
+            }
+        if tool_name == "compare_contacts":
+            cmp_contact_res = compare_contacts(
+                args.get("contact_a") or {},
+                args.get("contact_b") or {},
+                default_country=args.get("default_country", "US"),
+            )
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {
+                    "content": [{"type": "text", "text": json.dumps(cmp_contact_res.to_dict())}]
                 },
             }
         return {
