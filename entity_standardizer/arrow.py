@@ -271,13 +271,44 @@ def register_duckdb_udfs(con: Any, default_country: str = "US") -> None:
     con.create_function("standardize_url_domain", _url_domain_udf, ["VARCHAR"], "VARCHAR", null_handling="special")
 
     from entity_standardizer.address.standardizer import standardize_address
+    from entity_standardizer.joint import standardize_contact
+    from entity_standardizer.web import standardize_social
 
     def _address_udf(addr: str | None, country: str | None) -> str | None:
         res = standardize_address(addr, country=country or default_country)
         return res.full_rooftop_address or res.street1 or None
 
+    def _social_udf(profile: str | None, platform: str | None) -> str | None:
+        return standardize_social(profile, platform=platform).url
+
+    def _contact_key_udf(
+        street1: str | None,
+        phone: str | None,
+        organization: str | None,
+        person_name: str | None,
+        email: str | None,
+    ) -> str | None:
+        return standardize_contact(
+            street1=street1,
+            phone=phone,
+            organization=organization,
+            person_name=person_name,
+            email=email,
+            default_country=default_country,
+        ).entity_key
+
     con.create_function(
         "es_standardize_address", _address_udf, ["VARCHAR", "VARCHAR"], "VARCHAR", null_handling="special"
+    )
+    con.create_function(
+        "es_standardize_social", _social_udf, ["VARCHAR", "VARCHAR"], "VARCHAR", null_handling="special"
+    )
+    con.create_function(
+        "es_standardize_contact_key",
+        _contact_key_udf,
+        ["VARCHAR", "VARCHAR", "VARCHAR", "VARCHAR", "VARCHAR"],
+        "VARCHAR",
+        null_handling="special",
     )
 
 
@@ -532,6 +563,63 @@ def standardize_urls_polars(
     std_tbl = standardize_urls_arrow(
         df.to_arrow(),
         url_col=url_col,
+        output_prefix=output_prefix,
+    )
+    out_df = pl.from_arrow(std_tbl)
+    return out_df.lazy() if is_lazy else out_df  # type: ignore[union-attr]
+
+
+def standardize_socials_arrow(
+    table_or_batch: Any,
+    social_col: str = "social",
+    platform_col: str | None = None,
+    default_platform: str | None = None,
+    output_prefix: str = "social_",
+    as_struct: bool = False,
+) -> Any:
+    """Standardize social media profiles in an Apache Arrow Table or RecordBatch."""
+    table, is_batch = _unwrap_arrow_input(table_or_batch)
+    from entity_standardizer.web import standardize_social
+
+    col_names = table.column_names
+    if social_col not in col_names:
+        raise ValueError(f"social_col {social_col!r} is not a column of the input (columns: {col_names})")
+
+    num_rows = table.num_rows
+    socials = [str(v) if v is not None else None for v in table.column(social_col).to_pylist()]
+    platforms = (
+        [str(v) if v is not None else None for v in table.column(platform_col).to_pylist()]
+        if platform_col and platform_col in col_names
+        else [default_platform] * num_rows
+    )
+    records = [standardize_social(socials[i], platform=platforms[i] or default_platform) for i in range(num_rows)]
+    arrays_map: list[tuple[str, Any]] = [
+        ("platform", pa.array([r.platform for r in records], type=pa.string())),
+        ("profile_type", pa.array([r.profile_type for r in records], type=pa.string())),
+        ("handle", pa.array([r.handle for r in records], type=pa.string())),
+        ("url", pa.array([r.url for r in records], type=pa.string())),
+        ("social_key", pa.array([r.social_key for r in records], type=pa.string())),
+        ("is_valid", pa.array([r.is_valid for r in records], type=pa.bool_())),
+        ("confidence", pa.array([r.confidence for r in records], type=pa.float64())),
+    ]
+
+    return _finalize_arrow_output(table, is_batch, output_prefix, arrays_map, as_struct)
+
+
+def standardize_socials_polars(
+    df_or_lazy: Any,
+    social_col: str = "social",
+    platform_col: str | None = None,
+    default_platform: str | None = None,
+    output_prefix: str = "social_",
+) -> Any:
+    """Standardize social media profiles in a Polars DataFrame or LazyFrame."""
+    df, is_lazy = _unwrap_polars_input(df_or_lazy)
+    std_tbl = standardize_socials_arrow(
+        df.to_arrow(),
+        social_col=social_col,
+        platform_col=platform_col,
+        default_platform=default_platform,
         output_prefix=output_prefix,
     )
     out_df = pl.from_arrow(std_tbl)

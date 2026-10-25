@@ -178,6 +178,23 @@ def test_standardize_companies_and_persons_arrow_and_polars(monkeypatch) -> None
     out_per_df = standardize_persons_polars(per_df, person_col="person")
     assert out_per_df["person_root_first_name"].to_list() == ["ROBERT"]
 
+    from entity_standardizer import standardize_socials_arrow, standardize_socials_polars
+
+    soc_tbl = pa.table({"social": ["@openai", "https://linkedin.com/company/acme"], "platform": ["X", "LINKEDIN"]})
+    with pytest.raises(ValueError, match="social_col"):
+        standardize_socials_arrow(soc_tbl, social_col="missing")
+
+    out_soc_tbl = standardize_socials_arrow(soc_tbl, social_col="social", platform_col="platform")
+    assert out_soc_tbl.column("social_platform").to_pylist() == ["X", "LINKEDIN"]
+    assert out_soc_tbl.column("social_url").to_pylist() == [
+        "https://x.com/openai",
+        "https://linkedin.com/company/acme",
+    ]
+
+    soc_df = pl.DataFrame({"social": ["@openai"]})
+    out_soc_df = standardize_socials_polars(soc_df, social_col="social", default_platform="X")
+    assert out_soc_df["social_handle"].to_list() == ["openai"]
+
 
 def test_register_duckdb_udfs() -> None:
     con = duckdb.connect(":memory:")
@@ -201,7 +218,9 @@ def test_register_duckdb_udfs() -> None:
             es_standardize_address('350 Fifth Avenue, New York, NY 10118', 'US'),
             es_standardize_address('350 Fifth Avenue, New York, NY 10118', NULL),
             es_standardize_address(NULL, 'US'),
-            es_standardize_address('', 'US')
+            es_standardize_address('', 'US'),
+            es_standardize_social('@openai', 'X'),
+            es_standardize_contact_key('350 Fifth Avenue, New York, NY 10118', '(212) 555-2368', 'Acme Inc.', 'Bob Smith', 'bob@acme.com')
         """
     ).fetchone()
     assert row[:5] == (
@@ -213,7 +232,7 @@ def test_register_duckdb_udfs() -> None:
     )
     assert "e164:+14155552671" in row[5]
     assert row[6] == []
-    assert row[7:] == (
+    assert row[7:18] == (
         "KKR OPPORTUNITIES III SARL",
         "BLACKROCK|INC",
         "ROBERT J SMITH JR",
@@ -224,7 +243,9 @@ def test_register_duckdb_udfs() -> None:
         "350 5TH AVE, NEW YORK, NY 10118",
         None,
         None,
+        "https://x.com/openai",
     )
+    assert "ACME|INC" in row[18] and "+12125552368" in row[18]
 
 
 def test_native_dispatch_extended_functions(monkeypatch, tmp_path) -> None:

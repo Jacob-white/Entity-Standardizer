@@ -614,3 +614,191 @@ def test_regional_grammars_deep_branches() -> None:
     assert std_de_pf.country == "DEU" and "POSTFACH" in std_de_pf.street1
     std_nl_add = standardize_address("Keizersgracht 421-B, 1016 EK Amsterdam, Netherlands", country="NL")
     assert std_nl_add.country == "NLD" and std_nl_add.street2 == "APT B"
+
+
+def test_cjk_uk_ireland_offshore_eastern_europe_hk_romance_branches() -> None:
+    from entity_standardizer.address.international.cjk import CJKGrammar
+    from entity_standardizer.address.international.eastern_europe import (
+        EasternEuropeGrammar,
+        split_cyrillic_locality,
+    )
+    from entity_standardizer.address.international.hong_kong import HongKongGrammar
+    from entity_standardizer.address.international.ireland import (
+        IrelandGrammar,
+        IrelandParsedAddressComponents,
+        format_eircode,
+        is_valid_eircode,
+    )
+    from entity_standardizer.address.international.offshore import OffshoreGrammar
+    from entity_standardizer.address.international.romance import (
+        RE_ROMANCE_SEC,
+        RomanceGrammar,
+        expand_italian_street_abbreviation,
+        parse_street2_unit,
+    )
+    from entity_standardizer.address.international.uk import UKGrammar
+
+    # 1. CJKGrammar branches
+    cjk = CJKGrammar()
+    # 2-part and 1-part comma addresses & 3+ part with leading number
+    assert cjk.standardize(street1="6-10-1 Roppongi, Tokyo", country="JPN").city == "TOKYO"
+    assert cjk.standardize(street1="100 Nanjing Road, Huangpu, Shanghai, China", country="CHN").city is not None
+    # Single-line Romaji with trailing postal code and city prefix
+    assert cjk.standardize(street1="Tokyo Roppongi6-10-1 106-6132", country="JPN").postal_code == "106-6132"
+    assert cjk.standardize(street1="Roppongi 6-10-1 106-6132", country="JPN").postal_code == "106-6132"
+    # Native CJK whitespace-delimited tokens (JP, KR, CN, TW)
+    assert cjk.standardize(street1="〒106-6132 東京都 港区 六本木 6-10-1 森タワー 32階", country="JPN").postal_code == "106-6132"
+    assert cjk.standardize(street1="서울특별시 강남구 테헤란로 152 강남파이낸스센터 10층", country="KOR").city is not None
+    assert cjk.standardize(street1="서울특별시 주흥길 78", country="KOR").city == "서울특별시"
+    assert cjk.standardize(street1="105 台北市 復興北路231巷34", country="TWN").postal_code == "105"
+    assert cjk.standardize(street1="北京市 海淀区 中关村南大街1号 海淀大厦 501室", country="CHN").unit_number is not None
+    # Contiguous CJK hierarchies (JP, CN province, KR, TW) + tail tokens
+    assert cjk.standardize(street1="東京都港区六本木6-10-1 六本木ヒルズ 3201室 106-6132", country="JPN").postal_code == "106-6132"
+    assert cjk.standardize(street1="广东省深圳市南山区科技南十二路18号", street2="502室", country="CHN").unit_number in ("502", "502室")
+    assert cjk.standardize(street1="서울특별시강남구테헤란로 152 06236", street2="10F", country="KOR").postal_code == "06236"
+    assert cjk.standardize(street1="台北市信義區信義路五段7號8樓", country="TWN").unit_number is not None
+    assert cjk.standardize(street1="6-10-1 Roppongi, Suite 500", city="Tokyo", country="JPN").street_name is not None
+
+    # 2. UKGrammar branches
+    uk = UKGrammar()
+    assert uk.extract_premise_and_thoroughfare("") == (None, None, None)
+    assert uk.extract_premise_and_thoroughfare("Abbey House, 10 High Street") == ("ABBEY HOUSE", "10", "HIGH ST")
+    assert uk.extract_premise_and_thoroughfare("10 High Street, Extra") == (None, "10", "HIGH ST EXTRA")
+    assert uk.extract_premise_and_thoroughfare("GDN")[2] is None
+    assert uk._normalize_street_tokens("") == ""
+    assert "RD" in uk._normalize_street_tokens("Stratford-upon-Road North-West")
+    assert uk.standardize(street1="Flat 2, SW1A 2AA", country="GBR").postal_code == "SW1A 2AA"
+    assert uk.standardize(street1="London, SW1A 2AA", country="GBR").city == "LONDON"
+    assert uk.standardize(street1="10, Downing Street, SW1A 2AA", country="GBR").street_number == "10"
+    assert uk.standardize(street1="Abbey House, 10 Downing Street, London, SW1A 2AA", country="GBR").building_name == "ABBEY HOUSE"
+    assert uk.standardize(street1="10 High St", street2="Flat 4, Abbey House", city="London", country="GBR").building_name == "ABBEY HOUSE"
+    assert uk.standardize(street1="10 High St", street2="Flat 4, Westminster", city="London", country="GBR").dependent_locality == "WESTMINSTER"
+    assert uk.standardize(street1="10 High St", street2="Westminster", city="London", country="GBR").dependent_locality == "WESTMINSTER"
+    assert uk.standardize(street1="Flats 1 & 2, 10 High Street", city="London", country="GBR").unit_number == "1 & 2"
+    assert uk.standardize(street1="Flat 3 (A)", city="London", country="GBR").unit_number == "3A"
+    assert uk.standardize(street1="3rd Floor West, 10 High Street", city="London", country="GBR").unit_number == "3RD WEST"
+    assert uk.standardize(street1="2nd Floor, Flat", city="London", country="GBR").unit_type == "APT"
+    assert uk.standardize(street1="PO Box 100, 10 High Street", city="London", country="GBR").unit_type == "PO BOX"
+    assert uk.standardize(street1="Suite 5 B", city="London", country="GBR").unit_number == "5B"
+    assert uk.standardize(street1="Suite 500", city="London", country="GBR").unit_number == "500"
+
+    # 3. IrelandGrammar branches
+    ie = IrelandGrammar()
+    assert is_valid_eircode(None) is False
+    assert is_valid_eircode("SHORT") is False
+    assert is_valid_eircode("1234567") is False
+    assert is_valid_eircode("D02 X285") is True
+    assert format_eircode("") == ""
+    assert format_eircode("D02X285") == "D02 X285"
+    assert format_eircode(" Dublin D02 X285 ") == "D02 X285"
+    assert format_eircode("INVALID") == "INVALID"
+
+    ie_c1 = IrelandParsedAddressComponents(
+        street_number="10",
+        pre_directional="N",
+        street_name="CUSTOM HOUSE",
+        street_type="QUAY",
+        post_directional="E",
+        building_name="IFSC HOUSE",
+        unit_type="UNIT",
+        unit_number="4",
+    )
+    assert "10 N CUSTOM HOUSE QUAY E" == ie_c1.format_street1()
+    assert "UNIT 4 IFSC HOUSE" == ie_c1.format_street2()
+    ie_c2 = IrelandParsedAddressComponents(street_name="12", unit_type="APT", unit_number="3", building_name="BLOCK A")
+    assert ie_c2.format_street1() == "12 APT 3" and ie_c2.format_street2() == "BLOCK A"
+    ie_c3 = IrelandParsedAddressComponents(street_number="12", unit_type="APT", unit_number="3")
+    assert ie_c3.format_street1() == "12 APT 3" and ie_c3.format_street2() == ""
+
+    assert ie.extract_premise_and_thoroughfare("") == (None, None, None)
+    assert ie.extract_premise_and_thoroughfare("Treasury Building, 10 Grand Canal Street Lower")[0] == "TREASURY BUILDING"
+    assert ie.extract_premise_and_thoroughfare("12")[2] is None
+    assert ie._normalize_street_tokens("") == ""
+    assert "QUAY" in ie._normalize_street_tokens("Custom House Quays Lower Upper North")
+    assert ie.standardize(street1="9 High Street Galway H91 KW97", country="IRL").city == "GALWAY"
+    assert ie.standardize(street1="10 Patrick St", state="County Cork", postal_code="T12 AB12", country="IRL").state == "CO CORK"
+    assert ie.standardize(street1="Treasury Bldg, 10 Grand Canal St, Flat 2, Grand Canal Dock, Dublin 2, D02 X285, Ireland", country="IRL").city == "DUBLIN"
+    assert ie.standardize(street1="10 Custom House Quay Block A IFSC", city="Dublin 1", country="IRL").dependent_locality == "IFSC"
+    assert ie.standardize(street1="10 Grafton St", street2="Suite 5", postal_code="D02 X285", country="IRL").city == "DUBLIN"
+
+    # 4. OffshoreGrammar branches
+    off = OffshoreGrammar()
+    assert off.normalize_postal_code("") == ""
+    assert off.normalize_postal_code("VG1110") == "VG1110"
+    assert off.normalize_postal_code("HM12") == "HM 12"
+    assert off.normalize_postal_code("0816") == "KY1-0816"
+    assert off.normalize_postal_code("PAN-0816") == "PAN-0816"
+    assert off.extract_premise_and_thoroughfare("") == (None, None, None)
+    assert off.extract_premise_and_thoroughfare("Maples, LLC, 10 Fort Street")[0] == "MAPLES, LLC"
+    assert off.extract_premise_and_thoroughfare("Maples, LLC") == (None, None, None)
+    assert off.extract_premise_and_thoroughfare("Ugland House 10 South Church Street")[0] == "UGLAND HOUSE"
+    assert off._normalize_street_tokens("") == ""
+    assert off.standardize(street1="15 Harbour Drive, Road Town, Tortola, VG1110, BVI", country="VGB").city == "ROAD TOWN"
+    assert off.standardize(street1="PO Box 309, KY1-1104", country="CYM").unit_type == "PO BOX"
+    assert off.standardize(street1="10 Fort St", street2="PO Box 309", city="George Town", country="CYM").unit_type == "PO BOX"
+    assert off.standardize(street1="Calle 50", street2="Apartado 0816", city="Panama City", country="PAN").unit_type == "APARTADO"
+    assert off.standardize(street1="PO Box 309", street2="Suite 100", city="George Town", country="CYM").street_name == "PO BOX 309"
+    assert off.standardize(street1="10 Fort St Apartado 55", city="Panama City", country="PAN").unit_type == "APARTADO"
+
+    # 5. EasternEuropeGrammar branches
+    ee = EasternEuropeGrammar()
+    assert split_cyrillic_locality("101000 Москва улица Ленина 5") == ("101000", "Москва", "улица Ленина 5")
+    assert split_cyrillic_locality("Санкт-Петербург Невский проспект 10")[1] == "Санкт-Петербург"
+    assert split_cyrillic_locality("Пречистенская набережная, 9") == ("", "", "Пречистенская набережная, 9")
+    assert split_cyrillic_locality("БезТипаУлицы 10") == ("", "", "БезТипаУлицы 10")
+
+    assert ee.normalize_postal_code("") == ""
+    assert ee.normalize_postal_code("PL-00-950") == "00-950"
+    assert ee.normalize_postal_code("CZ-110 00") == "110 00"
+    assert ee.normalize_postal_code("010011") == "010011"
+    assert ee.normalize_postal_code("1000") == "1000"
+    assert ee.normalize_postal_code("11000") == "11000"
+    assert ee.extract_premise_and_thoroughfare("") == (None, None, None)
+    assert ee.extract_premise_and_thoroughfare("91, M. Alexandrou Str.")[1] == "91"
+    assert ee.extract_premise_and_thoroughfare("12") == (None, None, None)
+    for code in ("POL", "HUN", "CZE", "ROU", "GRC", "BGR", "SRB", "UKR", "RUS", "EST", "UNKNOWN"):
+        assert len(ee._resolve_country_iso(code)) == 3
+    assert ee._resolve_country_iso(None) == "POL"
+
+    assert ee.standardize(street1="ul. Marszałkowska, 12, lok. 4, Warszawa 00-624, Poland", country="POL").postal_code == "00-624"
+    assert ee.standardize(street1="00-950 Warszawa", country="POL").postal_code == "00-950"
+    assert ee.standardize(street1="101000 Москва улица Тверская 10", street2="кв. 5", country="RUS").city is not None
+    assert ee.standardize(street1="ul. Długa 5 00-950", city="00-950 Warszawa", postal_code="00950", country="POL").postal_code == "00-950"
+    assert ee.standardize(street1="Václavské náměstí 1", city="Praha", postal_code="11000", country="CZE").postal_code == "110 00"
+
+    # 6. HongKongGrammar branches
+    hk = HongKongGrammar()
+    assert hk.normalize_postal_code("") == ""
+    assert hk.normalize_postal_code("999077") == ""
+    assert hk.normalize_postal_code("12345") == ""
+    assert hk.extract_premise_and_thoroughfare("") == (None, None, None)
+    assert hk.extract_premise_and_thoroughfare("TWO INTERNATIONAL FINANCE CENTRE") == ("TWO INTERNATIONAL FINANCE CENTRE", None, None)
+    assert hk.extract_premise_and_thoroughfare("TWO INTERNATIONAL FINANCE CENTRE, FINANCE STREET")[0] == "TWO INTERNATIONAL FINANCE CENTRE"
+    assert hk.extract_premise_and_thoroughfare("Cheung Kong Center, Queen's Road Central")[0] == "CHEUNG KONG CENTER"
+    assert hk.extract_premise_and_thoroughfare("Cheung Kong Center")[0] == "CHEUNG KONG CENTER"
+    assert hk.standardize(street1="Flat A, 12F, 8 Finance Street, Central", country="HKG").unit_number is not None
+    assert hk.standardize(street1="Flat A, 12th Floor, 8 Finance Street, Central", country="HKG").unit_number is not None
+    assert hk.standardize(street1="12F, Room 301, 8 Finance Street, Central", country="HKG").unit_number is not None
+    assert hk.standardize(street1="12th Floor, Room 301, 8 Finance Street, Central", country="HKG").unit_number is not None
+    assert hk.standardize(street1="Level 8, 100 Nathan Road, Tsim Sha Tsui", country="HKG").city == "TSIM SHA TSUI"
+    assert hk.standardize(street1="8th Floor, 10 Sha Tin Centre Street, Sha Tin", country="HKG").city == "SHA TIN"
+    assert hk.standardize(street1="Room 101, 2 Queen's Road Central", city="Tsim Sha Tsui", country="HKG").city == "TSIM SHA TSUI"
+    assert hk.standardize(street1="8 Finance Street", street2="Suite 500", city="Kowloon", state="Central", country="HKG").unit_type == "STE"
+
+    # 7. RomanceGrammar branches
+    rom = RomanceGrammar()
+    assert parse_street2_unit("", RE_ROMANCE_SEC) == (None, None)
+    assert parse_street2_unit("3ème étage, 2º B, Bât. A", RE_ROMANCE_SEC)[1] is not None
+    assert parse_street2_unit("3ème étage", RE_ROMANCE_SEC) == (None, "ETAGE 3")
+    assert parse_street2_unit("Apto 32", RE_ROMANCE_SEC) == ("APTO", "32")
+    assert parse_street2_unit("2º B", RE_ROMANCE_SEC) == (None, "2 B")
+    assert expand_italian_street_abbreviation("V. Dante 53") == "Via Dante 53"
+    assert expand_italian_street_abbreviation("Via Dante 53") == "Via Dante 53"
+    assert rom.normalize_postal_code("") == ""
+    assert rom.normalize_postal_code("01310200") == "01310-200"
+    assert rom.normalize_postal_code("1150 011") == "1150-011"
+    assert rom.extract_premise_and_thoroughfare("") == (None, None, None)
+    assert rom.extract_premise_and_thoroughfare("Calle 72 No. 10-07")[2] == "CALLE 72 NO. 10-07"
+    assert rom.standardize(street1="V. Dante 53, 20121 Milano, MI, Italy", country="ITA").city == "MILANO"
+    assert rom.standardize(street1="Rua Augusta 100 - Consolação, 01305-100, São Paulo - SP", country="PRT").state == "SP"
+    assert rom.standardize(street1="Calle Mayor 45, 28013 Madrid", street2="Piso 2", country="ESP").city == "MADRID"

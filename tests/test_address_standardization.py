@@ -308,3 +308,378 @@ def test_us_street_parser_and_native_dispatch_branches(monkeypatch: pytest.Monke
         addr_nd.override_engine_for_testing(None)
         addr_nd.force_pure_python(False)
 
+
+def test_explain_and_alternatives_deep_branches() -> None:
+    from types import SimpleNamespace
+    from entity_standardizer.address.explain import (
+        Recorder,
+        _city_records,
+        _country_records,
+        _outcome_records,
+        _postal_records,
+        _reference_records,
+        _state_records,
+        _street_records,
+        _token_diff,
+        build_alternatives,
+        build_evidence,
+        build_trace,
+        standardize_explained,
+    )
+
+    rec = Recorder({"street1": "100 Main St", "street2": "", "city": "Boston", "state": "MA", "postal_code": "02110", "country": ""})
+    rec.add("street1", "100 MAIN ST", "street_normalized")
+    assert rec.current("street1") == "100 MAIN ST"
+    rec.country("", "JPN", "", "", "JPN")
+    rec.country("", "CAN", "ON", "", None)
+    rec.country("", "GBR", "", "SW1A 2AA", None)
+    rec.country("", "USA", "", "", None)
+    rec.country("", "FRA", "", "", None)
+
+    # _token_diff across replace (equal len & unequal len), insert, delete, and moved_out
+    assert len(_token_diff("street1", "One Hundred Main Steret", "100 MAIN ST")) >= 1
+    assert len(_token_diff("street1", "100 Nroth Main St", "100 N MAIN ST")) >= 1
+    assert len(_token_diff("street1", "100 First Ave", "100 1ST AVE")) >= 1
+    assert len(_token_diff("street1", "100 North Main Street", "100 N MAIN ST")) >= 1
+    assert len(_token_diff("street1", "100 Twenty First St", "100 21ST ST")) >= 1
+    assert len(_token_diff("street1", "100 Peachtre St", "100 PEACHTREE ST")) >= 1
+    assert len(_token_diff("street2", "400", "STE 400")) >= 1
+    assert len(_token_diff("street1", "100 Main St Extra", "100 MAIN ST")) >= 1
+    assert len(_token_diff("street1", "100 Main St Boston", "100 MAIN ST", moved_out={"BOSTON": "locality_moved_from_street"})) >= 1
+
+    # _street_records branches: private residence, street1_moved_to_street2, secondary_promoted_to_street, unit_split, house_number_moved_to_front
+    std_priv = standardize_address("Confidential", city="Boston", state="MA", postal_code="02110")
+    assert any(r["rule"] == "private_residence_detected" for r in _street_records(Recorder({"street1": "Confidential", "street2": ""}), std_priv))
+
+    std_moved_s2 = SimpleNamespace(street1="", street2="STE 200", city="BOSTON", state="MA", postal_code="02110", is_private_residence=False, building_name=None)
+    assert any(r["rule"] == "street1_moved_to_street2" for r in _street_records(Recorder({"street1": "Suite 200", "street2": ""}), std_moved_s2))
+
+    std_prom = SimpleNamespace(street1="PO BOX 450", street2="", city="BOSTON", state="MA", postal_code="02110", is_private_residence=False, building_name=None)
+    assert any(r["rule"] == "secondary_promoted_to_street" for r in _street_records(Recorder({"street1": "", "street2": "PO Box 450"}), std_prom))
+
+    std_sec = standardize_address("100 Main Street, Suite 200", city="Boston", state="MA", postal_code="02110")
+    s_recs = _street_records(Recorder({"street1": "100 Main Street, Suite 200", "street2": "", "city": "Boston", "state": "MA", "postal_code": "02110"}), std_sec)
+    assert any(r["rule"] == "unit_split" for r in s_recs)
+
+    std_hn = standardize_address("St. Louis Ave 100", city="Chicago", state="IL", postal_code="60601")
+    hn_recs = _street_records(Recorder({"street1": "St. Louis Ave 100", "street2": "", "city": "Chicago", "state": "IL", "postal_code": "60601"}), std_hn)
+    assert any(r["rule"] == "house_number_moved_to_front" for r in hn_recs)
+
+    # _city_records, _state_records, _postal_records, _country_records, _outcome_records, _reference_records
+    std_city = standardize_address("100 Main St", city="Bosotn", state="MA", postal_code="02110")
+    assert any(r["rule"] == "city_inferred_from_text" for r in _city_records(Recorder({"city": ""}), std_city))
+    assert any(r["rule"] == "city_discarded" for r in _city_records(Recorder({"city": "Noise"}), SimpleNamespace(city="", is_us=True)))
+    assert any(r["rule"] == "case_normalized" for r in _city_records(Recorder({"city": "boston"}), std_city))
+    assert any(r["rule"] == "punctuation_normalized" for r in _city_records(Recorder({"city": "Boston."}), std_city))
+    assert any(r["rule"] == "diacritics_folded" for r in _city_records(Recorder({"city": "Bóstón"}), std_city))
+    assert any(r["rule"] == "typo_heal_city" for r in _city_records(Recorder({"city": "Bosotn"}), std_city))
+    assert any(r["rule"] == "city_canonicalized" for r in _city_records(Recorder({"city": "CompletelyDifferent"}), std_city))
+
+    assert any(r["rule"] == "state_from_zip" for r in _state_records(Recorder({"state": "", "postal_code": "02110"}), std_city))
+    assert any(r["rule"] == "state_inferred_from_text" for r in _state_records(Recorder({"state": "", "postal_code": ""}), std_city))
+    assert any(r["rule"] == "state_abbreviated" for r in _state_records(Recorder({"state": "Massachusetts", "postal_code": "02110"}), std_city))
+    assert any(r["rule"] == "state_normalized" for r in _state_records(Recorder({"state": "UnknownState", "postal_code": "02110"}), std_city))
+
+    assert any(r["rule"] == "postal_extracted_from_text" for r in _postal_records(Recorder({"postal_code": ""}), std_city))
+    assert any(r["rule"] == "postal_discarded" for r in _postal_records(Recorder({"postal_code": "999077"}), SimpleNamespace(postal_code="")))
+    assert any(r["rule"] == "postal_transposition_healed" for r in _postal_records(Recorder({"postal_code": "20110"}), std_city))
+    assert any(r["rule"] == "postal_normalized" for r in _postal_records(Recorder({"postal_code": "2110"}), std_city))
+
+    std_uk = standardize_address("10 Downing St", city="London", postal_code="SW1A 2AA", country="GB")
+    assert any(r["rule"] == "country_defaulted_us" for r in _country_records(Recorder({"country": ""}), std_city))
+    assert any(r["rule"] == "case_normalized" for r in _country_records(Recorder({"country": "gbr"}), std_uk))
+    assert any(r["rule"] == "country_normalized" for r in _country_records(Recorder({"country": "GB"}), std_uk))
+
+    std_hub = standardize_address("1209 Orange St", city="Wilmington", state="DE", postal_code="19801")
+    std_hub.is_registered_agent_hub = True
+    assert any(r["rule"] == "registered_agent_hub_detected" for r in _outcome_records(std_hub, Recorder({})))
+    std_loc = standardize_address(city="Boston", state="MA", postal_code="02110", allow_locality=True)
+    assert any(r["rule"] == "locality_only_accepted" for r in _outcome_records(std_loc, Recorder({})))
+    std_fail = standardize_address("")
+    assert any(r["rule"] == "parse_failed" for r in _outcome_records(std_fail, Recorder({})))
+    std_zsm = standardize_address("100 Main St", city="Boston", state="NY", postal_code="02110")
+    assert any(r["rule"] == "zip_state_mismatch_kept" for r in _outcome_records(std_zsm, Recorder({})))
+    std_bad_pc = SimpleNamespace(
+        is_registered_agent_hub=False,
+        address_status="standardized",
+        is_locality_only=False,
+        is_us=False,
+        postal_code="INVALID_PC",
+        state="",
+        country="GBR",
+    )
+    assert any(r["rule"] == "postal_format_invalid" for r in _outcome_records(std_bad_pc, Recorder({})))
+
+    std_ref_ok = standardize_address("100 Main St", city="Boston", state="MA", postal_code="02110", enable_reference_validation=True)
+    assert len(_reference_records(std_ref_ok)) >= 1
+    std_ref_bad = standardize_address("100 Main St", city="Miami", state="MA", postal_code="02110", enable_reference_validation=True)
+    assert len(_reference_records(std_ref_bad)) >= 1
+
+    # build_trace, build_evidence, and build_alternatives (country, city, and unit alternatives)
+    rec_alt = Recorder({"street1": "100 Main St, Suite 200", "street2": "", "city": "Bosotn", "state": "MA", "postal_code": "02110", "country": ""})
+    rec_alt.country("", "USA", "", "02110", None)
+    std_alt = standardize_address("100 Main St, Suite 200", city="Bosotn", state="MA", postal_code="02110")
+    std_alt.dependent_locality = "DOWNTOWN"
+    std_alt.building_name = "TOWER ONE"
+    trace_alt = build_trace(rec_alt, std_alt)
+    ev_alt = build_evidence(rec_alt, std_alt, trace_alt)
+    assert ev_alt["zip_state"] == "agree"
+    alts = build_alternatives(
+        std_alt,
+        rec_alt,
+        trace_alt,
+        {"street1": "100 Main St, Suite 200", "city": "Bosotn", "state": "MA", "postal_code": "02110"},
+        limit=5,
+    )
+    assert len(alts) >= 2
+
+    # _city_alternatives without state
+    rec_nostate = Recorder({"city": "Bosotn"})
+    std_nostate = SimpleNamespace(is_us=True, city="BOSTON", state="")
+    from entity_standardizer.address.explain import _city_alternatives
+
+    assert len(_city_alternatives(std_nostate, rec_nostate)) >= 1
+
+    # standardize_explained with care_of, city_noise, state_corrected_from_zip, script_single_line_split, and calibrator
+    fake_cal = SimpleNamespace(calibrate=lambda v: 0.99)
+    exp_full = standardize_explained(
+        True,
+        3,
+        fake_cal,
+        {
+            "street": "c/o Acme Corp, 100 Main St, Suite 200",
+            "street2": "Attn: Legal Dept, Fl 3",
+            "city": "Bosotn",
+            "state": "NY",
+            "postal_code": "02110",
+            "correct_state_from_zip": True,
+        },
+    )
+    assert exp_full.explanation is not None
+    assert exp_full.field_confidence is not None
+    assert exp_full.alternatives is not None
+
+    exp_noise = standardize_explained(
+        True,
+        1,
+        None,
+        {"street1": "NYC", "city": "New York", "state": "NY", "postal_code": "10005", "allow_locality": True},
+    )
+    assert exp_noise.explanation is not None
+
+    exp_script = standardize_explained(
+        True,
+        1,
+        None,
+        {"street1": "〒106-6132 東京都港区六本木6-10-1"},
+    )
+    assert exp_script.explanation is not None
+
+
+def test_fast_path_and_autocomplete_deep_branches() -> None:
+    from entity_standardizer.address.autocomplete import AutocompleteEngine
+    from entity_standardizer.address.fast_path import (
+        _fast_num_to_ordinal,
+        _normalize_fast_sec_unit,
+        _normalize_fast_street_phrase,
+        fast_path_parse,
+    )
+
+    assert _fast_num_to_ordinal(11) == "11TH"
+    assert _fast_num_to_ordinal(1) == "1ST"
+    assert _fast_num_to_ordinal(2) == "2ND"
+    assert _fast_num_to_ordinal(3) == "3RD"
+    assert _fast_num_to_ordinal(4) == "4TH"
+
+    assert _normalize_fast_sec_unit("") == ""
+    assert _normalize_fast_sec_unit("200 OAK AVE APT 3") is None
+    assert _normalize_fast_sec_unit("#400") == "STE 400"
+    assert _normalize_fast_sec_unit("BASEMENT") == "BSMT"
+    assert _normalize_fast_sec_unit("5 OAK") is None
+    assert _normalize_fast_sec_unit("3RD FLOOR") == "FL 3"
+    assert _normalize_fast_sec_unit("UNKNOWN_TOKEN") is None
+
+    assert _normalize_fast_street_phrase("   ") is None
+    assert _normalize_fast_street_phrase("USA") is None
+    assert _normalize_fast_street_phrase("PO BOX 100") is None
+    assert _normalize_fast_street_phrase("100 Front Royal Pike") is None
+    assert _normalize_fast_street_phrase("100 Main St Basement") == ("100 MAIN ST", "BSMT")
+    assert _normalize_fast_street_phrase("100 Main St #200") == ("100 MAIN ST", "STE 200")
+    assert _normalize_fast_street_phrase("100") is None
+    assert _normalize_fast_street_phrase("123-45 82nd Ave") is None
+    assert _normalize_fast_street_phrase("100 1/2 Main St") is None
+    assert _normalize_fast_street_phrase("ONE Main St") is None
+    assert _normalize_fast_street_phrase("100 County Road 12") is None
+    assert _normalize_fast_street_phrase("100 N County Road 12") is None
+    assert _normalize_fast_street_phrase("100 Texas 71 Frontage Rd") is None
+    assert _normalize_fast_street_phrase("100 South St") is None
+    assert _normalize_fast_street_phrase("100 North East St") is None
+    assert _normalize_fast_street_phrase("100 Nroth Main Steret Nroth") == ("100 N MAIN ST N", "")
+    assert _normalize_fast_street_phrase("100 Main UnknownSuffix", enable_fuzzy=True) is None
+    assert _normalize_fast_street_phrase("100 Main Steret", enable_fuzzy=False) is None
+    assert _normalize_fast_street_phrase("100 Twenty First St") == ("100 21ST ST", "")
+    assert _normalize_fast_street_phrase("100 First St") == ("100 1ST ST", "")
+    assert _normalize_fast_street_phrase("100 A & B St") == ("100 A & B ST", "")
+    assert _normalize_fast_street_phrase("100 5 St") == ("100 5TH ST", "")
+    assert _normalize_fast_street_phrase("100 1000 St") == ("100 1000 ST", "")
+    assert _normalize_fast_street_phrase("100 42nd St") == ("100 42ND ST", "")
+    assert _normalize_fast_street_phrase("100 Main St", enable_fuzzy=False) == ("100 MAIN ST", "")
+
+    # fast_path_parse Path A & Path B
+    assert fast_path_parse(street1="100 Main St", city="Toronto", state="ON", postal_code="M5J 2J5", country="CAN") is None
+    assert fast_path_parse(street1="100 Main St", city="Boston", state="INVALID_ST", postal_code="02110") is None
+    assert fast_path_parse(street1="100 Main St", city="Boston", state="MA", postal_code="ABC") is None
+    fp_zip4 = fast_path_parse(street1="100 Main St, Ste 10", street2="Fl 2", city="Bosotn", state="MA", postal_code="20110-1234", enable_fuzzy=True)
+    assert fp_zip4 is not None and fp_zip4.postal_code == "02110-1234" and "STE 10" in fp_zip4.street2
+    fp_priv_a = fast_path_parse(street1="CONFIDENTIAL", city="Boston", state="MA", postal_code="02110 1234")
+    assert fp_priv_a is not None and fp_priv_a.is_private_residence is True
+    fp_priv_b = fast_path_parse(street1="PRIVATE RESIDENCE, BOSTON, MA 02110")
+    assert fp_priv_b is not None and fp_priv_b.is_private_residence is True
+    fp_comma = fast_path_parse(street1="100 Main St, Ste 200, Bosotn, MA 20110-1234", enable_fuzzy=True)
+    assert fp_comma is not None and fp_comma.postal_code == "02110-1234" and fp_comma.city == "BOSTON"
+
+    # AutocompleteEngine extra methods and branches
+    ac = AutocompleteEngine(seed=False)
+    ac.index_addresses([
+        {
+            "street1": "100 WALL ST",
+            "city": "NEW YORK",
+            "state": "NY",
+            "postal_code": "10005",
+            "is_multi_unit": True,
+            "known_units": ["STE 100", "STE 200"],
+            "latitude": 40.7061,
+            "longitude": -74.0060,
+        },
+        {
+            "street1": "200 BROADWAY",
+            "street2": "FL 5",
+            "city": "NEW YORK",
+            "state": "NY",
+            "postal_code": "10007",
+            "latitude": 999.0,  # out of bounds -> None
+            "longitude": -74.0,
+        },
+    ])
+    assert ac.load_reference_stream([{"street1": "300 PARK AVE", "city": "NEW YORK", "state": "NY", "postal_code": "10022"}]) == 1
+    n_conn1 = ac.connect_reference_index()
+    assert n_conn1 >= 0
+    n_conn2 = ac.connect_reference_index()
+    assert n_conn2 == 0
+
+    assert ac.search("100 WALL", max_results=0) == []
+    assert ac.search("   ") == []
+    assert ac.search("...") == []
+    # Typo tolerance ("WLL" -> "WALL")
+    typo_res = ac.search("100 WLL", typo_tolerance=True)
+    assert len(typo_res) >= 1 and typo_res[0].secondary_prompt_required is True
+    # Secondary unit fallback when unit isn't indexed
+    fallback_res = ac.search("100 WALL ST APT 999", typo_tolerance=True)
+    assert len(fallback_res) >= 1
+    # Radius filtering with radius_miles (excludes record without coords and outside radius)
+    rad_in = ac.search("100 WALL", latitude=40.7061, longitude=-74.0060, radius_miles=2.0)
+    assert len(rad_in) >= 1
+    rad_out = ac.search("100 WALL", latitude=34.0522, longitude=-118.2437, radius_miles=2.0)
+    assert rad_out == []
+    assert ac.search("200 BROADWAY", latitude=40.7061, longitude=-74.0060, radius_miles=10.0) == []
+    s2_res = ac.search("200 BROADWAY")
+    assert len(s2_res) == 1 and "FL 5" in s2_res[0].text
+
+
+def test_standardizer_and_us_street_parser_deep_branches(monkeypatch: pytest.MonkeyPatch) -> None:
+    import entity_standardizer.address.us_street_parser as usp
+
+    # Single-line correct_state_from_zip
+    s_zip_fix = standardize_address("100 Main St, Los Angeles, NY 90012", correct_state_from_zip=True, use_cache=False)
+    assert s_zip_fix.state == "CA"
+
+    # MAX_FIELD_LENGTH exceeded with non-US country
+    s_long = standardize_address("A" * 5000, country="GBR")
+    assert s_long.address_status == "parse_failed" and s_long.country == "GBR"
+
+    # Suite words to numbers in street2 + multiline bleed in city and street1 + BRANCH OFFICE suffix
+    s_bleed = standardize_address(
+        street1="100 Main St\n3rd Floor\nCORPORATE OFFICE",
+        street2="Suite Five Hundred",
+        city="Boston Main Office\nSuite 200\nMAIN OFFICE\n100 Main St",
+        state="MA",
+        postal_code="02110",
+        use_cache=False,
+    )
+    assert s_bleed.street1 == "100 MAIN ST" and s_bleed.city == "BOSTON"
+
+    # City noise in street1
+    s_noise = standardize_address(street1="NYC", city="New York", state="NY", postal_code="10005", allow_locality=True, use_cache=False)
+    assert s_noise.address_status == "locality_only"
+
+    # Region city/state swap for CAN, AUS, BRA, IND, MEX
+    assert standardize_address("100 King St", city="ON", state="Toronto", postal_code="M5J 2J5", country="CAN").city == "TORONTO"
+    assert standardize_address("100 George St", city="NSW", state="Sydney", postal_code="2000", country="AUS").city == "SYDNEY"
+    assert standardize_address("Av Paulista 1000", city="SP", state="Campinas", postal_code="13010-100", country="BRA").city == "CAMPINAS"
+    assert standardize_address("100 MG Road", city="MH", state="Mumbai", postal_code="400001", country="IND").city == "MUMBAI"
+    assert standardize_address("Av Vallarta 100", city="JAL", state="Guadalajara", postal_code="44100", country="MEX").city == "GUADALAJARA"
+
+    # Intersection address
+    s_inter = standardize_address("Hollywood Blvd and Vine St", city="Los Angeles", state="CA", postal_code="90028")
+    assert "&" in s_inter.street1 or "AND" in s_inter.street1
+
+    # International PO Box + unit swap & locality-only promotion
+    s_intl_po = standardize_address("PO Box 450", street2="Suite 400", city="George Town", country="CYM")
+    assert "PO BOX" in s_intl_po.street1 or "PO BOX" in s_intl_po.street2
+    s_intl_loc = standardize_address(street1="", street2="ZURICH", country="CHE", allow_locality=True)
+    assert s_intl_loc.address_status == "locality_only" and s_intl_loc.city == "ZURICH"
+    s_intl_priv = standardize_address("PRIVATE RESIDENCE", city="London", state="US", postal_code="00000", country="GBR")
+    assert s_intl_priv.is_private_residence is True and s_intl_priv.state == "" and s_intl_priv.postal_code == ""
+
+    # validate_address with dict, str, None, and strict/non-strict rejection reasons
+    v_dict = validate_address({"street1": "100 Wall St", "city": "New York", "state": "NY", "postal_code": "10005"}, country="USA", strict=True)
+    assert isinstance(v_dict.as_dict(), dict)
+    v_str = validate_address("100 Wall St Ste 400, New York, NY 10005")
+    assert v_str.is_deliverable is True
+    v_err = validate_address("")
+    assert v_err.is_valid is False and v_err.rejection_reason is not None
+    v_mismatch = validate_address({"street1": "100 Main St", "city": "Boston", "state": "NY", "postal_code": "02110"})
+    assert v_mismatch.is_valid is False
+
+    # _parse_us_street_tokens special branches: RR, HC, Military in single string, multi-word city without comma, zip-only tail
+    assert usp._parse_us_street_tokens("RR 2 Box 14, Springfield, IL 62701")[0] == "RR 2 BOX 14"
+    assert usp._parse_us_street_tokens("HC 1 Box 9, Austin, TX 78701")[0] == "HC 1 BOX 9"
+    assert usp._parse_us_street_tokens("PSC 2 BOX 100, APO, AE 09012")[0] == "PSC 2 BOX 100"
+    assert usp._parse_us_street_tokens("100 Main St New York City NY 10005")[3].upper() == "NEW YORK CITY"
+    assert usp._parse_us_street_tokens("100 Main St, Boston 02110")[3].upper() == "BOSTON"
+    assert usp._parse_us_street_tokens("Boston 02110")[3].upper() == "BOSTON"
+    assert usp._parse_us_street_tokens("100 Main St Boston 02110")[3].upper() == "BOSTON"
+
+    # Mock usaddress.parse to exercise specific CRF tag recovery branches in _parse_us_street_tokens
+    if usp.usaddress is not None:
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [
+                ("100", "AddressNumber"),
+                ("N", "StreetName"),
+                ("EAST", "StreetName"),
+                ("ST", "StreetNamePostType"),
+                ("PH-1A", "PlaceName"),
+                ("BSMT", "PlaceName"),
+                ("2B", "OccupancyIdentifier"),
+                ("FLOOR", "StateName"),
+                ("3", "ZipCode"),
+            ],
+        )
+        res_crf1 = usp._parse_us_street_tokens("dummy")
+        assert "NORTH EAST" in res_crf1[0] and "FL 3" in res_crf1[1]
+
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [
+                ("LIGHTON", "PlaceName"),
+                ("PLAZA", "PlaceName"),
+                ("II", "StreetName"),
+                ("LLC", "StateName"),
+            ],
+        )
+        res_crf2 = usp._parse_us_street_tokens("Lighton Plaza II", city_raw="Overland Park")
+        assert "LIGHTON PLAZA II" in res_crf2[0]
+
