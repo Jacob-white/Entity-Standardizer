@@ -59,8 +59,8 @@ jobs:
           pip install maturin -r requirements-dev.txt -e ".[server,mcp,arrow]"
           maturin build --release --locked --out dist
           python -m zipfile -e dist/*.whl native_x
-          cp -r native_x/_phone_standardizer_rs "$(python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')/"
-          python -c "import entity_standardizer as es, phone_standardizer as ps, address_standardizer as as_; assert es.is_native_available() and ps.is_native_available() and as_.is_native_available(), 'Native extension not loaded'"
+          cp -r native_x/_entity_standardizer_rs "$(python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')/"
+          python -c "import entity_standardizer as es, entity_standardizer.address as as_; assert es.is_native_available() and as_.is_native_available(), 'Native extension not loaded'"
           pytest --cov --cov-report=term-missing
 
   sdks:
@@ -89,4 +89,4 @@ jobs:
           go vet ./...
           go test -v ./...
       - name: .NET SDK
-        run: dotnet build sdks/dotnet/PhoneStandardizer.Client.csproj -c Release
+        run: dotnet build sdks/dotnet/EntityStandardizer.Client.csproj -c Release

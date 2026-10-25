@@ -6,7 +6,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 import re
 from typing import Any
-import unicodedata
+
+from entity_standardizer._native_dispatch import normalize_company_tokens_dispatch
+from entity_standardizer.normalization import fold_latin_diacritics
 
 # Multi-token and single-token legal entity forms (ISO 20275 ELF)
 # Mapped to (canonical_suffix, unambiguous_country_iso2)
@@ -172,25 +174,6 @@ _TRUST_AGREEMENT_GUARD_RE = re.compile(
     re.IGNORECASE,
 )
 
-_DIACRITIC_STROKE_MAP = str.maketrans(
-    {
-        "ø": "o",
-        "Ø": "O",
-        "ł": "l",
-        "Ł": "L",
-        "ß": "ss",
-        "ẞ": "SS",
-        "æ": "ae",
-        "Æ": "AE",
-        "œ": "oe",
-        "Œ": "OE",
-        "ð": "d",
-        "Ð": "D",
-        "þ": "th",
-        "Þ": "TH",
-    }
-)
-
 _PAREN_DBA_RE = re.compile(
     r"\(\s*(?:D\s*/\s*B\s*/\s*A|D\.B\.A\.?|DBA|DOING\s+BUSINESS\s+AS|TRADING\s+AS|T\s*/\s*A|A\s*/\s*K\s*/\s*A|AKA)\b[:\s\-]*([^()]+)\)",
     re.IGNORECASE,
@@ -263,19 +246,12 @@ class StandardizedCompany:
 StandardizedOrganization = StandardizedCompany
 
 
-def _fold_latin_diacritics(text: str) -> str:
-    """Fold Latin diacritics and stroked characters (ø, ł) to ASCII letters."""
-    translated = text.translate(_DIACRITIC_STROKE_MAP)
-    return "".join(
-        ch
-        for ch in unicodedata.normalize("NFKD", translated)
-        if not unicodedata.combining(ch)
-    )
+_fold_latin_diacritics = fold_latin_diacritics
 
 
 def _pure_normalize_tokens(text: str, actions: list[str] | None = None) -> list[str]:
     """Pure-Python normalization of punctuation, ampersands, and spaced/dotted initialisms into uppercase tokens."""
-    working = _AS_SLASH_RE.sub(" AS ", _fold_latin_diacritics(text))
+    working = _AS_SLASH_RE.sub(" AS ", fold_latin_diacritics(text))
 
     if "&" in working or "+" in working:
         working = re.sub(r"\s*[&+]\s*", " AND ", working)
@@ -323,16 +299,15 @@ def _pure_normalize_tokens(text: str, actions: list[str] | None = None) -> list[
 
 def _normalize_tokens(text: str, actions: list[str] | None = None) -> list[str]:
     """Normalize punctuation, ampersands, and spaced/dotted initialisms into uppercase tokens."""
-    from phone_standardizer._native_dispatch import _native_mod
-
-    if _native_mod is not None and hasattr(_native_mod, "normalize_company_tokens_rs"):
-        tokens, amp_norm, init_col = _native_mod.normalize_company_tokens_rs(text)
+    native_res = normalize_company_tokens_dispatch(text)
+    if native_res is not None:
+        tokens, amp_norm, init_col = native_res
         if actions is not None:
             if amp_norm:
                 actions.append("AMPERSAND_NORMALIZED")
             if init_col:
                 actions.append("INITIALISM_COLLAPSED")
-        return list(tokens)
+        return tokens
     return _pure_normalize_tokens(text, actions)
 
 
@@ -529,8 +504,8 @@ def standardize_company(
     branch_tokens = _normalize_tokens(branch_raw) if branch_raw else []
     branch_unit = " ".join(branch_tokens) if branch_tokens else None
 
-    from address_standardizer.phonetics import compute_soundex
-    from phone_standardizer.registry import normalize_country_iso2
+    from entity_standardizer.address.phonetics import compute_soundex
+    from entity_standardizer.registry import normalize_country_iso2
 
     explicit_country = normalize_country_iso2(country) if country else None
     inferred_country_iso2 = explicit_country or suffix_country or sec_country
@@ -591,7 +566,7 @@ def compare_companies(
     company_b: str | StandardizedCompany | None,
 ) -> CompanyComparisonResult:
     """Compare two company names or StandardizedCompany objects across canonical, alias, brand, and phonetic keys."""
-    from phone_standardizer._native_dispatch import damerau_levenshtein_distance_dispatch
+    from entity_standardizer._native_dispatch import damerau_levenshtein_distance_dispatch
 
     ca = company_a if isinstance(company_a, StandardizedCompany) else standardize_company(company_a)
     cb = company_b if isinstance(company_b, StandardizedCompany) else standardize_company(company_b)
@@ -727,36 +702,22 @@ def deduplicate_companies(
         c if isinstance(c, StandardizedCompany) else standardize_company(c, country=country)
         for c in companies
     ]
-    n = len(parsed)
-    parent = list(range(n))
-    reasons: dict[int, set[str]] = {i: set() for i in range(n)}
+    from entity_standardizer.dedup import DisjointSet
 
-    def find(i: int) -> int:
-        while parent[i] != i:
-            parent[i] = parent[parent[i]]
-            i = parent[i]
-        return i
+    n = len(parsed)
+    dsu = DisjointSet(range(n))
 
     for i in range(n):
         for j in range(i + 1, n):
             cmp = compare_companies(parsed[i], parsed[j])
             if cmp.is_match and cmp.score >= min_score:
-                ri, rj = find(i), find(j)
-                lo, hi = (ri, rj) if ri < rj else (rj, ri)
-                if lo != hi:
-                    parent[hi] = lo
-                    reasons[lo].update(reasons[hi])
-                reasons[lo].add(cmp.match_type)
-
-    groups: dict[int, list[int]] = {}
-    for idx in range(n):
-        groups.setdefault(find(idx), []).append(idx)
+                dsu.union(i, j, cmp.match_type)
 
     clusters: list[CompanyCluster] = []
-    for cluster_num, (root_idx, member_indices) in enumerate(groups.items(), start=1):
+    for cluster_num, (root_idx, member_indices) in enumerate(dsu.groups().items(), start=1):
         members = tuple(parsed[i] for i in member_indices)
         golden = max(members, key=_company_survivorship_rank)
-        match_types = tuple(sorted(reasons[root_idx] or {"SINGLETON"}))
+        match_types = tuple(sorted(dsu.reasons[root_idx] or {"SINGLETON"}))
         clusters.append(
             CompanyCluster(
                 cluster_id=f"COMPANY-CLUSTER-{cluster_num:04d}",

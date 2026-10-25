@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from phone_standardizer import (
+from entity_standardizer import (
     CountryDialRegistry,
     get_dial_plan,
     normalize_country_iso2,

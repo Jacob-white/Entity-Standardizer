@@ -37,13 +37,13 @@ if str(REPO_ROOT) not in sys.path:
 
 import polars as pl  # noqa: E402
 
-from phone_standardizer import (  # noqa: E402
+from entity_standardizer import (  # noqa: E402
     PhoneRiskFlag,
     PhoneRoutingTier,
     StandardizedPhone,
     standardize_phone,
 )
-import phone_standardizer._native_dispatch as nd  # noqa: E402
+import entity_standardizer._native_dispatch as nd  # noqa: E402
 
 # -----------------------------------------------------------------------------
 # Column Auto-Detection Patterns

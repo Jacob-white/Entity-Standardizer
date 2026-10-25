@@ -53,8 +53,8 @@ from entity_standardizer import (
 )
 from entity_standardizer.company import _normalize_tokens, _pure_normalize_tokens
 from entity_standardizer.web import extract_registrable_domain, infer_country_from_domain
-import phone_standardizer._native_dispatch as native_dispatch
-from phone_standardizer.cli import main as cli_main
+import entity_standardizer._native_dispatch as native_dispatch
+from entity_standardizer.cli import main as cli_main
 
 
 def test_company_standardization_and_legal_suffixes() -> None:
@@ -931,8 +931,8 @@ def test_v2_1_web_batch_helpers_and_joint_org_rescue() -> None:
 def test_v2_1_entity_deduplication_web_comparison_and_endpoints(capsys) -> None:
     from fastapi.testclient import TestClient
 
-    from phone_standardizer.mcp import handle_mcp_request
-    from phone_standardizer.server import app
+    from entity_standardizer.mcp import handle_mcp_request
+    from entity_standardizer.server import app
 
     # 1. Company deduplication & clustering
     assert deduplicate_organizations is deduplicate_companies
@@ -1079,8 +1079,8 @@ def test_v2_1_person_diacritics_compound_splitting_international_suffixes_and_co
         compare_entities,
         split_compound_persons,
     )
-    from phone_standardizer.mcp import handle_mcp_request
-    from phone_standardizer.server import app
+    from entity_standardizer.mcp import handle_mcp_request
+    from entity_standardizer.server import app
 
     # 1. Person Latin diacritics & ligatures folding
     p_es = standardize_person("José María Núñez")
@@ -1285,6 +1285,15 @@ def test_v2_1_person_diacritics_compound_splitting_international_suffixes_and_co
         }
     )
     assert '"is_match": true' in mcp_cc["result"]["content"][0]["text"]
+
+    # Model serialization parity (.to_dict() on StandardizedAddress and AddressValidationResult)
+    from entity_standardizer import standardize_address, validate_address
+
+    addr_obj = standardize_address(street1="350 Fifth Ave", city="New York", state="NY", postal_code="10118")
+    assert addr_obj.to_dict() == addr_obj.as_dict()
+    val_obj = validate_address("350 Fifth Ave, New York, NY 10118")
+    assert val_obj.to_dict() == val_obj.as_dict()
+
 
 
 

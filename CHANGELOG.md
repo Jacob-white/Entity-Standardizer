@@ -1,10 +1,14 @@
 # Changelog
 
-All notable changes to **Entity Standardizer** (`entity_standardizer`, `phone_standardizer`, and `address_standardizer`) will be documented in this file.
+All notable changes to **Entity Standardizer** (`entity_standardizer`) will be documented in this file.
 
-## [2.1.0] - 2026-10-24
+## [2.1.0] - 2026-10-25
 
 ### Added & Fixed
+- **Single-Package Consolidation & Technical Debt Deduplication (`entity_standardizer/`, `src/lib.rs`, `pyproject.toml`, `sdks/`)**:
+  - Consolidated `phone_standardizer/` and `address_standardizer/` into the single `entity_standardizer/` package (`entity_standardizer.*` and `entity_standardizer.address.*`), removed duplicate standalone address CLI/server/MCP/Arrow/schema shims, and eliminated the circular import cycle between `address` and `joint`.
+  - Renamed the unified PyO3 native extension crate to `_entity_standardizer_rs` (`Cargo.toml`, `src/lib.rs`, `entity_standardizer/_native_dispatch.py`, `entity_standardizer/address/_native_dispatch.py`) and unified `damerau_levenshtein_distance_rs`, `fold_latin_diacritics`, `normalize_company_tokens_dispatch`, `DisjointSet` Union-Find clustering, `compute_soundex` phonetics, and `.to_dict()` / `.as_dict()` parity on `StandardizedAddress` and `AddressValidationResult`.
+  - Renamed SDK packages to `@entity-standardizer/client` (`sdks/typescript/package.json`), `github.com/Jacob-white/Entity-Standardizer/sdks/go` (`sdks/go/go.mod`), and `EntityStandardizer.Client.csproj` (`sdks/dotnet/`).
 - **Corporate Latin Diacritics & Ligatures, Offshore/International ISO 20275 Legal Forms & SEC/Trust Hygiene (`entity_standardizer/company.py`, `src/lib.rs`)**:
   - Added Unicode NFKD + Nordic/Polish/German/Icelandic stroke and ligature folding (`_fold_latin_diacritics` in Python and `fold_latin_diacritics_to_chars` in Rust `src/lib.rs`) so dotted and accented legal forms (`S.à r.l.`, `Société à responsabilité limitée`, `OÜ`, `Weiß`, `Ørsted`) collapse cleanly to ASCII (`SARL`, `SOCIETE`, `OU`, `WEISS`, `ORSTED`).
   - Expanded `_MULTI_TOKEN_LEGAL_SUFFIXES` and `_SINGLE_TOKEN_LEGAL_SUFFIXES` with offshore fund and international ISO 20275 legal forms and country inference: `SCSP` (`LU` Special Limited Partnership / `S.C.Sp.`), `SPC` (`KY` Segregated Portfolio Company), `DST` (`US` Delaware Statutory Trust), `REIT` (`Real Estate Investment Trust`), `SP Z OO` (`PL`), `KGAA` (`DE`), `PTE LTD` (`SG`), `PVT LTD` (`IN`), `SDN BHD` & `BHD` (`MY`), `SE` (`Societas Europaea`), `KFT` (`HU`), `SRO` (`CZ`), `DOO`, and `OU` (`EE`).

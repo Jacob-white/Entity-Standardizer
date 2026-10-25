@@ -1,6 +1,6 @@
 # Entity Standardizer Documentation & Technical Specifications 📚
 
-**Entity Standardizer** (`entity_standardizer`, `address_standardizer`, and `phone_standardizer`) is owned and maintained by **HobbyHabbit LLC** under the **MIT License**. This directory contains the developer guides, API references, operational manuals, and architectural blueprints for the unified multi-pillar platform.
+**Entity Standardizer** (`entity_standardizer`) is owned and maintained by **HobbyHabbit LLC** under the **MIT License**. This directory contains the developer guides, API references, operational manuals, and architectural blueprints for the unified multi-pillar platform.
 
 ---
 
@@ -10,7 +10,7 @@
 - **[Complete API Reference](api_reference.md)** — Reference for all Python models, functions, cross-healing enums, CLI commands, 18 FastAPI endpoints, 17 MCP tools, and Arrow/Polars/DuckDB UDFs.
 - **[AI Agent & MCP Integration Guide](ai_agent_guide.md)** & **[`llms.txt`](../llms.txt)** — Model Context Protocol (MCP) configuration, 17-tool catalog, autonomous agent decision tree, and token-efficient LLM context index.
 - **[Developer Cookbook & Production Recipes](developer_cookbook.md)** — Production recipes for SEC/Form ADV hygiene, couple splitting, multi-pillar deduplication, Polars/Arrow/DuckDB ETL, and TCPA/IRSF anti-fraud guardrails.
-- **[Python API Docstrings](python_api.md)** — MkDocs docstring index for `entity_standardizer`, `address_standardizer`, and `phone_standardizer`.
+- **[Python API Docstrings](python_api.md)** — MkDocs docstring index for `entity_standardizer` and `entity_standardizer.address`.
 - **[Multi-Platform Client SDKs](../sdks/README.md)** — Official client libraries for TypeScript/React, .NET, and Go.
 - **[Operations & Deployment Guide](operations.md)** — Production deployment, observability, caching, and SLA configuration.
 - **[Versioning Policy](VERSIONING.md)** & **[Release Guide](RELEASING.md)** — Semantic versioning guarantees and automated release pipeline.

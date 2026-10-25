@@ -98,7 +98,7 @@ from entity_standardizer import (
     standardize_persons_arrow,
     standardize_persons_polars,
 )
-from phone_standardizer.arrow import (
+from entity_standardizer.arrow import (
     standardize_arrow,
     standardize_polars,
     register_duckdb_udfs,

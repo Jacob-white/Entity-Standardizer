@@ -8,9 +8,9 @@ from unittest.mock import MagicMock
 
 from fastapi.testclient import TestClient
 
-import phone_standardizer.__main__ as main_mod
-import phone_standardizer._native_dispatch as native_dispatch
-from phone_standardizer import (
+import entity_standardizer.__main__ as main_mod
+import entity_standardizer._native_dispatch as native_dispatch
+from entity_standardizer import (
     HealingAction,
     PhoneLineType,
     PhoneRiskFlag,
@@ -34,9 +34,9 @@ from phone_standardizer import (
     stream_standardize_jsonl,
     validate_phone,
 )
-from phone_standardizer.cli import main as cli_main
-from phone_standardizer.mcp import handle_mcp_request
-from phone_standardizer.server import app
+from entity_standardizer.cli import main as cli_main
+from entity_standardizer.mcp import handle_mcp_request
+from entity_standardizer.server import app
 
 
 def test_us_and_nanp_standardization() -> None:
@@ -215,8 +215,8 @@ def test_international_dial_plans_and_healing() -> None:
     assert HealingAction.IDD_EXIT_PREFIX_STRIPPED in idd.healing_actions
 
     # Short 5-digit NSN formatting (Falkland Islands +500, allow 6-digit in general fallback or test _format_numbers)
-    from phone_standardizer.models import CountryDialPlan
-    from phone_standardizer.standardizer import _format_numbers, _split_area_and_subscriber
+    from entity_standardizer.models import CountryDialPlan
+    from entity_standardizer.standardizer import _format_numbers, _split_area_and_subscriber
     short_plan = CountryDialPlan(
         iso2="FK", iso3="FLK", numeric="238", name="Falkland Islands", calling_code="500", nsn_lengths=(5,)
     )
@@ -810,7 +810,7 @@ def test_phase6_global_remediations_and_edge_cases() -> None:
 
 
 def test_milestone3_drive_dataset_remediations() -> None:
-    from phone_standardizer.normalization import extract_extension, split_primary_phone
+    from entity_standardizer.normalization import extract_extension, split_primary_phone
 
     # 1. Multi-number comma splitting without space
     p_multi = standardize_phone("5853254140,5854358032")
@@ -1092,7 +1092,7 @@ def test_milestone3_drive_dataset_remediations() -> None:
 
 def test_joint_cross_healing_and_phase7_upgrades() -> None:
     from entity_standardizer import standardize_entity as std_ent
-    from phone_standardizer import (
+    from entity_standardizer import (
         CrossHealingAction,
         batch_standardize_contacts,
         infer_nanp_npa_from_context,
@@ -1238,10 +1238,12 @@ def test_joint_cross_healing_and_phase7_upgrades() -> None:
     assert len(batch_res) == 1 and batch_res[0].phone.e164 == "+12125552368"
 
     # G. Regression tests for v2.0.0 cross-healing & UK 11-digit trunk prefix ordering
-    import address_standardizer as addr_pkg
+    import subprocess
+    import sys
+
     import entity_standardizer as ent_pkg
     import entity_standardizer.__main__ as ent_main
-    import pytest
+    import entity_standardizer.address as addr_pkg
 
     assert ent_main.main is not None
     assert ent_pkg.is_native_available() == addr_pkg.is_native_available()
@@ -1253,41 +1255,8 @@ def test_joint_cross_healing_and_phase7_upgrades() -> None:
     assert ent_pkg.generate_phonetic_address_key is not None
     assert ent_pkg.autocomplete_address is not None
     assert ent_pkg.explain_phone is not None
-    assert "standardize_arrow" in dir(addr_pkg)
-    assert "create_app" in dir(addr_pkg)
-    assert "AddressSchema" in dir(addr_pkg)
-    assert addr_pkg.arrow is not None
-    assert addr_pkg.server is not None
-    assert addr_pkg.schemas is not None
-    assert callable(addr_pkg.standardize_arrow)
-    assert callable(addr_pkg.create_app)
-    assert addr_pkg.AddressSchema is not None
-    with pytest.raises(AttributeError):
-        _ = addr_pkg.nonexistent_attr_xyz
-
-    # Verify PEP 562 __getattr__ returns None when optional dependency import raises ImportError
-    import importlib
-    import subprocess
-    import sys
-
-    saved_create_app = addr_pkg.__dict__.get("create_app")
-    try:
-        addr_pkg.__dict__.pop("create_app", None)
-        orig_import_module = importlib.import_module
-
-        def _fail_import(name: str, package: str | None = None):
-            if name == "address_standardizer.server":
-                raise ImportError("simulated missing fastapi")
-            return orig_import_module(name, package)
-
-        importlib.import_module = _fail_import  # type: ignore[assignment]
-        try:
-            assert addr_pkg.create_app is None
-        finally:
-            importlib.import_module = orig_import_module  # type: ignore[assignment]
-    finally:
-        if saved_create_app is not None:
-            addr_pkg.__dict__["create_app"] = saved_create_app
+    assert "standardize_arrow" in dir(ent_pkg)
+    assert callable(ent_pkg.standardize_arrow)
 
     # Verify cold import in a fresh process does not load heavy optional integrations
     proc = subprocess.run(
@@ -1295,12 +1264,11 @@ def test_joint_cross_healing_and_phase7_upgrades() -> None:
             sys.executable,
             "-c",
             (
-                "import sys, entity_standardizer, address_standardizer, phone_standardizer; "
+                "import sys, entity_standardizer, entity_standardizer.address; "
                 "heavy = ('pyarrow', 'polars', 'duckdb', 'fastapi', 'pydantic'); "
                 "loaded = [m for m in heavy if m in sys.modules]; "
                 "assert not loaded, f'Unexpectedly loaded: {loaded}'; "
-                "assert 'standardize_arrow' in dir(address_standardizer); "
-                "assert address_standardizer.arrow is not None"
+                "assert 'standardize_arrow' in dir(entity_standardizer)"
             ),
         ],
         capture_output=True,
@@ -1378,7 +1346,7 @@ def test_joint_cross_healing_and_phase7_upgrades() -> None:
     assert c_uk_def_no_ph.address.country == "GBR"
 
     # Single-line US address with trailing <City> <5-digit ZIP> (with or without comma, no state) must not be overwritten by foreign phone
-    import address_standardizer.us_street_parser as usp
+    import entity_standardizer.address.us_street_parser as usp
 
     saved_usa = usp.usaddress
     try:
@@ -1451,7 +1419,7 @@ def test_joint_cross_healing_and_phase7_upgrades() -> None:
     assert c_fr_lyon_single.address.street1 == "10 AV VICTOR HUGO"
 
     # Batch E.164 dispatch parity for 11-digit UK domestic numbers (both native and pure Python)
-    from phone_standardizer import _native_dispatch as nd
+    from entity_standardizer import _native_dispatch as nd
 
     assert nd.standardize_batch_e164_dispatch(["01212345678", "02079460912"], "1") == [
         "+441212345678",

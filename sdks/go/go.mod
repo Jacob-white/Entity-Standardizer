@@ -1,3 +1,3 @@
-module github.com/Jacob-white/Phone-Standardizer/sdks/go
+module github.com/Jacob-white/Entity-Standardizer/sdks/go
 
 go 1.21

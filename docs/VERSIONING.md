@@ -1,6 +1,6 @@
 # Versioning policy
 
-The project follows [Semantic Versioning 2.0.0](https://semver.org/). The Python package (`phone-standardizer` / `entity_standardizer`), the Rust crate (`Cargo.toml`), the npm package (`@phone-standardizer/client`), and the NuGet package (`PhoneStandardizer.Client`) always share one version number (`2.1.0`); `tests/test_sdk_contract.py` enforces this on every test run. The Go SDK is tagged separately (`sdks/go/vX.Y.Z`).
+The project follows [Semantic Versioning 2.0.0](https://semver.org/). The Python package (`entity-standardizer` / `entity_standardizer`), the Rust crate (`Cargo.toml`), the npm package (`@entity-standardizer/client`), and the NuGet package (`EntityStandardizer.Client`) always share one version number (`2.1.0`); `tests/test_sdk_contract.py` enforces this on every test run. The Go SDK is tagged separately (`sdks/go/vX.Y.Z`).
 Every release has a section in [CHANGELOG.md](../CHANGELOG.md).
 
 ## What each version part means
@@ -15,9 +15,9 @@ Every release has a section in [CHANGELOG.md](../CHANGELOG.md).
 
 These are covered by the policy:
 
-- Python: names exported from `entity_standardizer`, `phone_standardizer`, and `address_standardizer` and documented in the [API reference](api_reference.md), the CLI commands and flags (`entity-standardizer`, `phone-standardizer`, `address-standardizer`, `entity-standardizer-mcp`), and the environment variables documented in `SECURITY.md` and `operations.md`.
-- HTTP API: paths, methods, request fields, response fields and their types and nullability, HTTP status codes across `phone_standardizer.server:app` and `address_standardizer.server:app`.
-- MCP Server: tool names and input schemas exposed by `phone_standardizer.mcp.server`.
+- Python: names exported from `entity_standardizer` and `entity_standardizer.address` and documented in the [API reference](api_reference.md), the CLI commands and flags (`entity-standardizer`, `entity-standardizer-mcp`), and the environment variables documented in `SECURITY.md` and `operations.md`.
+- HTTP API: paths, methods, request fields, response fields and their types and nullability, HTTP status codes across `entity_standardizer.server:app`.
+- MCP Server: tool names and input schemas exposed by `entity_standardizer.mcp.server`.
 - SDKs: public types and functions of the TypeScript, .NET and Go clients (`sdks/typescript`, `sdks/dotnet`, `sdks/go`).
 - Machine-readable values: `healing_actions`, `cross_healing_actions`, `risk_flags`, `failure_reason_codes`, routing tiers, precision names, DPV footnotes, error codes and error response shapes.
 - Matching and cache **key formats** (`entity_key`, `company_key`, `brand_key`, `person_key`, `person_root_key`, `email_key`, `url_key`, `social_key`, `phone_key`, `phone_ext_key`, `normalized_address_key`, `building_key`, `phonetic_key`). Persisted keys are part of customers' data, so changing how a key is derived is a breaking change.

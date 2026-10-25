@@ -1,10 +1,8 @@
 # Operations guide: running the HTTP services in production
 
-Entity Standardizer provides two FastAPI HTTP services:
-1. **Unified 6-Pillar Entity Standardizer Service (`phone_standardizer.server:app`)**: Started via `uvicorn phone_standardizer.server:app --host 0.0.0.0 --port 8000`. Exposes all 19 routes across Joint Contact (`/v1/contact`, `/v1/contact/compare`), Company (`/v1/company`, `/v1/company/compare`), Person & Job Title (`/v1/person`, `/v1/person/compare`, `/v1/job-title`), Email/URL/Social (`/v1/email`, `/v1/url`, `/v1/social`), Physical Address (`/v1/address`), and Telephone (`/v1/standardize`, `/v1/explain`, `/v1/compare`, `/v1/deduplicate`, `/v1/batch`, `/v1/countries`).
-2. **Dedicated Address Standardizer Daemon (`address_standardizer.server:app`)**: Started via `address-standardizer serve` or `uvicorn address_standardizer.server:app --host 0.0.0.0 --port 8001`. Includes built-in API-key authentication, token-bucket rate limiting, tenant-isolated SQLite audit ledgers, Prometheus `/metrics`, `/ready`, and `/v1/autocomplete`.
+Entity Standardizer provides the unified FastAPI HTTP microservice (`entity_standardizer.server:app`), started via `uvicorn entity_standardizer.server:app --host 0.0.0.0 --port 8000`. It exposes all 19 routes across Joint Contact (`/v1/contact`, `/v1/contact/compare`), Company (`/v1/company`, `/v1/company/compare`), Person & Job Title (`/v1/person`, `/v1/person/compare`, `/v1/job-title`), Email/URL/Social (`/v1/email`, `/v1/url`, `/v1/social`), Physical Address (`/v1/address`), and Telephone (`/v1/standardize`, `/v1/explain`, `/v1/compare`, `/v1/deduplicate`, `/v1/batch`, `/v1/countries`).
 
-Every feature below for `address_standardizer.server:app` is **opt-in through environment variables**: with none of them set, the server behaves
+Every operational feature below is **opt-in through environment variables**: with none of them set, the server behaves
 exactly as it does in local development (open, no limits, `*` CORS). Configuration is read **once, when the app is
 created** (process start); restart to change it. Misconfigured security settings (a malformed key list, a bad rate
 limit) stop the process at startup rather than silently running unprotected.

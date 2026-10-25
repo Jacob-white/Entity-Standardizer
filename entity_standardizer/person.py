@@ -8,6 +8,8 @@ import json
 import re
 from typing import Any
 
+from entity_standardizer.normalization import fold_latin_diacritics
+
 _SALUTATIONS: dict[str, str] = {
     "DR": "DR",
     "DOCTOR": "DR",
@@ -546,9 +548,7 @@ def standardize_person(raw_input: str | None) -> StandardizedPerson:
             healing_actions=["ORGANIZATION_DETECTED_IN_PERSON_FIELD"],
         )
 
-    from entity_standardizer.company import _fold_latin_diacritics
-
-    folded_working = _fold_latin_diacritics(working)
+    folded_working = fold_latin_diacritics(working)
     if folded_working != working:
         working = folded_working
         actions.append("DIACRITICS_FOLDED")
@@ -706,7 +706,7 @@ def standardize_person(raw_input: str | None) -> StandardizedPerson:
     )
     person_root_key = f"{last_name or ''}|{root_first_name or ''}"
 
-    from address_standardizer.phonetics import compute_soundex
+    from entity_standardizer.address.phonetics import compute_soundex
 
     last_snd = compute_soundex(last_name.split()[-1]) if last_name else ""
     first_snd = compute_soundex(root_first_name or first_name or "")
@@ -1002,7 +1002,7 @@ def compare_persons(
     person_b: str | StandardizedPerson | None,
 ) -> PersonComparisonResult:
     """Compare two person names or StandardizedPerson objects across exact, root-nickname, initial, and phonetic keys."""
-    from phone_standardizer._native_dispatch import damerau_levenshtein_distance_dispatch
+    from entity_standardizer._native_dispatch import damerau_levenshtein_distance_dispatch
 
     pa = person_a if isinstance(person_a, StandardizedPerson) else standardize_person(person_a)
     pb = person_b if isinstance(person_b, StandardizedPerson) else standardize_person(person_b)
@@ -1146,36 +1146,22 @@ def deduplicate_persons(
         p if isinstance(p, StandardizedPerson) else standardize_person(p)
         for p in persons
     ]
-    n = len(parsed)
-    parent = list(range(n))
-    reasons: dict[int, set[str]] = {i: set() for i in range(n)}
+    from entity_standardizer.dedup import DisjointSet
 
-    def find(i: int) -> int:
-        while parent[i] != i:
-            parent[i] = parent[parent[i]]
-            i = parent[i]
-        return i
+    n = len(parsed)
+    dsu = DisjointSet(range(n))
 
     for i in range(n):
         for j in range(i + 1, n):
             cmp = compare_persons(parsed[i], parsed[j])
             if cmp.is_match and cmp.score >= min_score:
-                ri, rj = find(i), find(j)
-                lo, hi = (ri, rj) if ri < rj else (rj, ri)
-                if lo != hi:
-                    parent[hi] = lo
-                    reasons[lo].update(reasons[hi])
-                reasons[lo].add(cmp.match_type)
-
-    groups: dict[int, list[int]] = {}
-    for idx in range(n):
-        groups.setdefault(find(idx), []).append(idx)
+                dsu.union(i, j, cmp.match_type)
 
     clusters: list[PersonCluster] = []
-    for cluster_num, (root_idx, member_indices) in enumerate(groups.items(), start=1):
+    for cluster_num, (root_idx, member_indices) in enumerate(dsu.groups().items(), start=1):
         members = tuple(parsed[i] for i in member_indices)
         golden = max(members, key=_person_survivorship_rank)
-        match_types = tuple(sorted(reasons[root_idx] or {"SINGLETON"}))
+        match_types = tuple(sorted(dsu.reasons[root_idx] or {"SINGLETON"}))
         clusters.append(
             PersonCluster(
                 cluster_id=f"PERSON-CLUSTER-{cluster_num:04d}",

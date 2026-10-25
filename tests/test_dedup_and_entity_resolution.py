@@ -6,7 +6,7 @@ import json
 
 from fastapi.testclient import TestClient
 
-from phone_standardizer import (
+from entity_standardizer import (
     are_keypad_adjacent,
     cluster_contact_records,
     compare_phones,
@@ -16,10 +16,10 @@ from phone_standardizer import (
     infer_country_from_postal_code,
     standardize_phone,
 )
-from phone_standardizer.cli import main as cli_main
-from phone_standardizer.dedup import _detect_single_substitution, _detect_single_transposition
-from phone_standardizer.mcp import handle_mcp_request
-from phone_standardizer.server import app
+from entity_standardizer.cli import main as cli_main
+from entity_standardizer.dedup import _detect_single_substitution, _detect_single_transposition
+from entity_standardizer.mcp import handle_mcp_request
+from entity_standardizer.server import app
 
 
 def test_postal_code_country_inference() -> None:

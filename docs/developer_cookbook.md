@@ -113,7 +113,7 @@ from entity_standardizer import (
     standardize_companies_polars,
     standardize_persons_polars,
 )
-from phone_standardizer.arrow import register_duckdb_udfs, standardize_polars
+from entity_standardizer.arrow import register_duckdb_udfs, standardize_polars
 
 # 1. Polars DataFrame Enrichment across Phone, Company, and Person Columns
 df = pl.DataFrame({
@@ -148,8 +148,7 @@ print(rows)
 
 ```python
 from datetime import datetime, timezone
-from entity_standardizer import explain_phone, mask_phone, standardize_phone
-from phone_standardizer import evaluate_calling_window
+from entity_standardizer import evaluate_calling_window, explain_phone, mask_phone, standardize_phone
 
 # 1. Block Premium-Rate IRSF & Fictitious Numbers Before Sending SMS OTP
 phone = standardize_phone("+1 (900) 555-0199")

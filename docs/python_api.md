@@ -5,13 +5,13 @@ the full surface, the CLI, the HTTP service, and the MCP server.
 
 ## Joint Contact Cross-Healing & Comparison
 
-::: phone_standardizer.joint.standardize_contact
+::: entity_standardizer.joint.standardize_contact
 
-::: phone_standardizer.joint.StandardizedContact
+::: entity_standardizer.joint.StandardizedContact
 
-::: phone_standardizer.joint.compare_contacts
+::: entity_standardizer.joint.compare_contacts
 
-::: phone_standardizer.joint.ContactComparisonResult
+::: entity_standardizer.joint.ContactComparisonResult
 
 ## Organization / Company Standardization
 
@@ -51,26 +51,26 @@ the full surface, the CLI, the HTTP service, and the MCP server.
 
 ## Address Standardization
 
-::: address_standardizer.standardize_address
+::: entity_standardizer.address.standardize_address
 
-::: address_standardizer.StandardizedAddress
+::: entity_standardizer.address.StandardizedAddress
 
-::: address_standardizer.generate_normalized_address_key
+::: entity_standardizer.address.generate_normalized_address_key
 
-::: address_standardizer.normalize_country_code
+::: entity_standardizer.address.normalize_country_code
 
-::: address_standardizer.batch_standardize
+::: entity_standardizer.address.batch_standardize
 
-::: address_standardizer.compute_confidence_score
+::: entity_standardizer.address.compute_confidence_score
 
 ## Telephone Standardization & Entity Resolution
 
-::: phone_standardizer.standardizer.standardize_phone
+::: entity_standardizer.standardizer.standardize_phone
 
-::: phone_standardizer.models.StandardizedPhone
+::: entity_standardizer.models.StandardizedPhone
 
-::: phone_standardizer.dedup.compare_phones
+::: entity_standardizer.dedup.compare_phones
 
-::: phone_standardizer.dedup.deduplicate_phones
+::: entity_standardizer.dedup.deduplicate_phones
 
-::: phone_standardizer.dedup.cluster_contact_records
+::: entity_standardizer.dedup.cluster_contact_records

@@ -1,6 +1,6 @@
 # Entity Standardizer
 
-Unified multi-national **Entity, Organization, Person, Web, Address, and Telephone Standardization, Bidirectional Cross-Healing, and Entity Resolution Engine** (`entity_standardizer`, `address_standardizer`, and `phone_standardizer`), as a Python library, CLI, FastAPI HTTP microservice, MCP server, and TypeScript, .NET, and Go SDK suite.
+Unified multi-national **Entity, Organization, Person, Web, Address, and Telephone Standardization, Bidirectional Cross-Healing, and Entity Resolution Engine** (`entity_standardizer`), as a Python library, CLI, FastAPI HTTP microservice, MCP server, and TypeScript, .NET, and Go SDK suite.
 
 The project overview, install instructions, and feature list live in the
 [README](https://github.com/Jacob-white/Entity-Standardizer#readme); this site holds the reference material.

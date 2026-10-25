@@ -75,20 +75,15 @@ docs = [
 ]
 
 [project.scripts]
-entity-standardizer = "phone_standardizer.cli:main"
-entity-standardizer-mcp = "phone_standardizer.mcp.server:main"
-phone-standardizer = "phone_standardizer.cli:main"
-phone-standardizer-mcp = "phone_standardizer.mcp.server:main"
-address-standardizer = "address_standardizer.cli:main"
-address-standardizer-mcp = "address_standardizer.mcp.server:main"
+entity-standardizer = "entity_standardizer.cli:main"
+entity-standardizer-mcp = "entity_standardizer.mcp.server:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["entity_standardizer*", "phone_standardizer*", "address_standardizer*"]
+include = ["entity_standardizer*"]
 
 [tool.setuptools.package-data]
-address_standardizer = [
-    "service/static/*.html",
+"entity_standardizer.address" = [
     "reference/data/*.tsv.gz",
 ]
 
@@ -101,7 +96,8 @@ markers = [
 ]
 
 [tool.coverage.run]
-source = ["phone_standardizer", "entity_standardizer"]
+source = ["entity_standardizer"]
+omit = ["entity_standardizer/address/*"]
 branch = true
 
 [tool.coverage.report]
@@ -121,4 +117,4 @@ ignore = ["E501"]
 
 [tool.maturin]
 features = ["extension-module"]
-python-packages = ["entity_standardizer", "phone_standardizer", "address_standardizer"]
+python-packages = ["entity_standardizer"]

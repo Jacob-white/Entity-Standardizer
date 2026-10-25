@@ -1,6 +1,6 @@
 # Entity Standardizer Go SDK (`phonestandardizer` `v2.1.0`)
 
-Zero-dependency Go client for the **Entity Standardizer** HTTP service (`phone_standardizer.server:app`).
+Zero-dependency Go client for the **Entity Standardizer** HTTP service (`entity_standardizer.server:app`).
 
 ## Quickstart
 
@@ -10,7 +10,7 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/Jacob-white/Phone-Standardizer/sdks/go"
+	"github.com/Jacob-white/Entity-Standardizer/sdks/go"
 )
 
 func main() {

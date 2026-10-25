@@ -6,8 +6,8 @@ import dataclasses
 import re
 from pathlib import Path
 
-from phone_standardizer.models import CountryDialPlan, StandardizedPhone
-from phone_standardizer.server import PhoneBatchRequest, PhoneStandardizeRequest
+from entity_standardizer.models import CountryDialPlan, StandardizedPhone
+from entity_standardizer.server import PhoneBatchRequest, PhoneStandardizeRequest
 
 SDKS_DIR = Path(__file__).resolve().parent.parent / "sdks"
 
@@ -50,7 +50,7 @@ def _dotnet_class_fields(class_name: str) -> set[str]:
 
 
 def test_sdk_models_match_python_contracts() -> None:
-    from address_standardizer import standardize_address
+    from entity_standardizer.address import standardize_address
     from entity_standardizer.company import CompanyComparisonResult, StandardizedCompany
     from entity_standardizer.person import (
         PersonComparisonResult,
@@ -58,10 +58,10 @@ def test_sdk_models_match_python_contracts() -> None:
         StandardizedPerson,
     )
     from entity_standardizer.web import StandardizedEmail, StandardizedSocial, StandardizedUrl
-    from phone_standardizer.audit import explain_phone
-    from phone_standardizer.dedup import PhoneCluster, PhoneComparisonResult
-    from phone_standardizer.joint import ContactComparisonResult, StandardizedContact
-    from phone_standardizer.server import (
+    from entity_standardizer.audit import explain_phone
+    from entity_standardizer.dedup import PhoneCluster, PhoneComparisonResult
+    from entity_standardizer.joint import ContactComparisonResult, StandardizedContact
+    from entity_standardizer.server import (
         AddressStandardizeRequest,
         CompanyCompareRequest,
         CompanyStandardizeRequest,
@@ -321,14 +321,14 @@ def test_version_and_openapi_docs_sync() -> None:
     import json
 
     import entity_standardizer
-    import phone_standardizer
-    from phone_standardizer.mcp.server import handle_mcp_request
-    from phone_standardizer.server import app
+    import entity_standardizer.address as address_standardizer
+    from entity_standardizer.mcp.server import handle_mcp_request
+    from entity_standardizer.server import app
 
     repo_root = Path(__file__).resolve().parent.parent
     version = entity_standardizer.__version__
     assert version == "2.1.0"
-    assert phone_standardizer.__version__ == version
+    assert address_standardizer.__version__ == version
     assert app.version == version
 
     mcp_init = handle_mcp_request({"jsonrpc": "2.0", "id": 1, "method": "initialize"})
@@ -344,7 +344,7 @@ def test_version_and_openapi_docs_sync() -> None:
     ts_pkg = json.loads((SDKS_DIR / "typescript" / "package.json").read_text(encoding="utf-8"))
     assert ts_pkg["version"] == version
 
-    csproj = (SDKS_DIR / "dotnet" / "PhoneStandardizer.Client.csproj").read_text(encoding="utf-8")
+    csproj = (SDKS_DIR / "dotnet" / "EntityStandardizer.Client.csproj").read_text(encoding="utf-8")
     assert f"<Version>{version}</Version>" in csproj
 
     openapi_path = repo_root / "docs" / "openapi.json"
