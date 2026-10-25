@@ -36,10 +36,9 @@ def damerau_levenshtein_distance(s1: str, s2: str) -> int:
 
     Accelerated by native Rust extension if loaded, with pure Python fallback.
     """
-    from entity_standardizer.address._native_dispatch import try_native
+    from entity_standardizer._native_dispatch import damerau_levenshtein_distance_dispatch
 
-    ok, result = try_native("damerau_levenshtein_distance", s1, s2)
-    return result if ok else _pure_damerau_levenshtein_distance(s1, s2)
+    return damerau_levenshtein_distance_dispatch(s1, s2)
 
 
 

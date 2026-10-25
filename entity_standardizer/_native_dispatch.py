@@ -98,6 +98,15 @@ def normalize_company_tokens_dispatch(text: str) -> tuple[list[str], bool, bool]
     return None
 
 
+def compute_soundex_dispatch(token: str) -> str:
+    """Compute American Soundex code using Rust if available."""
+    if _native_mod is not None:
+        return str(_native_mod.compute_soundex(token))
+    from entity_standardizer.address.phonetics import _pure_compute_soundex
+
+    return _pure_compute_soundex(token)
+
+
 def _damerau_levenshtein_distance_py(s1: str, s2: str) -> int:
     """Pure-Python true Damerau-Levenshtein edit distance."""
     if s1 == s2:

@@ -504,7 +504,7 @@ def standardize_company(
     branch_tokens = _normalize_tokens(branch_raw) if branch_raw else []
     branch_unit = " ".join(branch_tokens) if branch_tokens else None
 
-    from entity_standardizer.address.phonetics import compute_soundex
+    from entity_standardizer._native_dispatch import compute_soundex_dispatch
     from entity_standardizer.registry import normalize_country_iso2
 
     explicit_country = normalize_country_iso2(country) if country else None
@@ -512,7 +512,7 @@ def standardize_company(
 
     company_key = f"{base_name}|{legal_suffix}" if legal_suffix else base_name
     brand_key = brand_stem
-    phonetic_parts = [compute_soundex(t) for t in base_tokens]
+    phonetic_parts = [compute_soundex_dispatch(t) for t in base_tokens]
     phonetic_parts = [p for p in phonetic_parts if p]
     phonetic_key = "|".join(phonetic_parts) if phonetic_parts else None
 
@@ -707,11 +707,34 @@ def deduplicate_companies(
     n = len(parsed)
     dsu = DisjointSet(range(n))
 
-    for i in range(n):
-        for j in range(i + 1, n):
-            cmp = compare_companies(parsed[i], parsed[j])
-            if cmp.is_match and cmp.score >= min_score:
-                dsu.union(i, j, cmp.match_type)
+    buckets: dict[str, list[int]] = {}
+    for idx, c in enumerate(parsed):
+        if not c.is_valid:
+            continue
+        keys: set[str] = {
+            f"CK:{c.company_key}",
+            f"BN:{c.base_name}",
+            f"PK:{c.phonetic_key or ''}",
+            f"BS:{c.brand_stem if c.brand_stem and len(c.brand_stem) >= 3 else ''}",
+        }
+        for nm in (c.base_name, c.legal_name, c.brand_stem, c.dba_name, c.fka_name):
+            if nm:
+                keys.add(f"NM:{nm}")
+        keys.discard("PK:")
+        keys.discard("BS:")
+        for k in keys:
+            buckets.setdefault(k, []).append(idx)
+
+    candidate_pairs: set[tuple[int, int]] = set()
+    for indices in buckets.values():
+        for i_pos in range(len(indices)):
+            for j_pos in range(i_pos + 1, len(indices)):
+                candidate_pairs.add((indices[i_pos], indices[j_pos]))
+
+    for i, j in sorted(candidate_pairs):
+        cmp = compare_companies(parsed[i], parsed[j])
+        if cmp.is_match and cmp.score >= min_score:
+            dsu.union(i, j, cmp.match_type)
 
     clusters: list[CompanyCluster] = []
     for cluster_num, (root_idx, member_indices) in enumerate(dsu.groups().items(), start=1):
@@ -731,4 +754,5 @@ def deduplicate_companies(
 
 
 deduplicate_organizations = deduplicate_companies
+
 

@@ -174,7 +174,5 @@ def generate_phonetic_address_key(
     postal_or_zip: str = "",
     city: str = "",
 ) -> Optional[str]:
-    """Generates a fuzzy blocking key with native Rust acceleration."""
-    from entity_standardizer.address._native_dispatch import try_native
-    ok, result = try_native("generate_phonetic_address_key", street1, postal_or_zip=postal_or_zip, city=city)
-    return result if ok else _pure_generate_phonetic_address_key(street1, postal_or_zip=postal_or_zip, city=city)
+    """Generates a fuzzy blocking key with native Rust Soundex acceleration."""
+    return _pure_generate_phonetic_address_key(street1, postal_or_zip=postal_or_zip, city=city)

@@ -109,7 +109,7 @@ entity-standardizer address "100 Wall St" --city "Chicago" --state "NY" --postal
 
 ### REST
 
-Use `POST /v1/address` on `entity_standardizer.server:app` (or pass `reference_provider=GeoNamesPostalProvider(...)` in Python when calling `standardize_address` directly). If `ADDRESS_STANDARDIZER_REFERENCE_DB=/path/to/geonames_postal.db` is configured for `attach_server_reference_validation`, a `reference_validation` object is attached (`status: "not_checked"` with `detail` when the file cannot be opened).
+Use `POST /v1/address` on `entity_standardizer.server:app` (or pass `reference_provider=GeoNamesPostalProvider(...)` in Python when calling `standardize_address` directly).
 
 ## Accuracy limits, honestly
 

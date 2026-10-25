@@ -13,7 +13,6 @@ import json
 import threading
 import uuid
 import sqlite3
-from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional, Union
@@ -226,8 +225,11 @@ class StewardshipAuditLedger:
         self._lock = threading.RLock()
         # A private in-memory ledger would otherwise grow without bound; file-backed ledgers keep everything.
         if max_rows is None and self.db_path == ":memory:":
+            raw_max = os.environ.get("ENTITY_STANDARDIZER_AUDIT_MAX_ROWS") or os.environ.get(
+                "ADDRESS_STANDARDIZER_AUDIT_MAX_ROWS", "100000"
+            )
             try:
-                max_rows = int(os.environ.get("ADDRESS_STANDARDIZER_AUDIT_MAX_ROWS", "100000"))
+                max_rows = int(raw_max)
             except ValueError:
                 max_rows = 100000
         self._max_rows = max_rows if max_rows and max_rows > 0 else None
@@ -597,16 +599,13 @@ class StewardshipAuditLedger:
         )
 
 
-_DEFAULT_AUDIT_LEDGER = StewardshipAuditLedger()
-
-
-# Per-context ledger override (set per request by the HTTP service when tenant isolation is enabled).
-LEDGER_OVERRIDE: ContextVar[Optional[StewardshipAuditLedger]] = ContextVar(
-    "address_standardizer_ledger_override", default=None
-)
+_DEFAULT_AUDIT_LEDGER: Optional[StewardshipAuditLedger] = None
 
 
 def get_audit_ledger() -> StewardshipAuditLedger:
-    """Returns the active ledger: the per-context override if one is set, else the process default singleton."""
-    override = LEDGER_OVERRIDE.get()
-    return override if override is not None else _DEFAULT_AUDIT_LEDGER
+    """Returns the process default singleton audit ledger, initializing it lazily on first access."""
+    global _DEFAULT_AUDIT_LEDGER
+    if _DEFAULT_AUDIT_LEDGER is None:
+        _DEFAULT_AUDIT_LEDGER = StewardshipAuditLedger()
+    return _DEFAULT_AUDIT_LEDGER
+

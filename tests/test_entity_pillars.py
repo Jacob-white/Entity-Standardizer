@@ -942,10 +942,12 @@ def test_v2_1_entity_deduplication_web_comparison_and_endpoints(capsys) -> None:
             "BlackRock, Inc.",
             "BLACKROCK INCORPORATED /DE/",
             "BlackRock LLC",
-            "Vanguard Group, Inc.",
+            "Citi Corp",
+            "Cato Corp",
+            "",
         ]
     )
-    assert len(c_clusters) == 2
+    assert len(c_clusters) == 4
     assert isinstance(c_clusters[0], CompanyCluster)
     assert len(c_clusters[0].members) == 3
     assert c_clusters[0].golden_company.legal_name == "BLACKROCK INC"
@@ -959,14 +961,16 @@ def test_v2_1_entity_deduplication_web_comparison_and_endpoints(capsys) -> None:
             "Dr. Robert J. Smith, M.D.",
             "Bob J. Smith",
             "Robert Smith",
-            "Alice Wonderland",
+            "Richard Smith",
+            "",
         ]
     )
-    assert len(p_clusters) == 2
+    assert len(p_clusters) == 3
     assert isinstance(p_clusters[0], PersonCluster)
     assert len(p_clusters[0].members) == 3
     assert p_clusters[0].golden_person.full_name == "ROBERT J SMITH"
     assert p_clusters[0].to_dict()["cluster_id"] == "PERSON-CLUSTER-0001"
+
 
     # 3. Sentinel domain rejection & email/URL comparison
     e_sent = standardize_email("user@example.com")

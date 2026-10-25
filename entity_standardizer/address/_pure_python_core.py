@@ -9,83 +9,15 @@ Zero-external-C-dependency execution engine providing:
 """
 
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, List, Optional
 
 from entity_standardizer.address.models import StandardizedAddress
-from entity_standardizer.address.phonetics import (
-    _pure_compute_soundex as _base_soundex,
-    _pure_generate_phonetic_address_key as _base_phonetic_key,
-)
 from entity_standardizer.address.standardizer import standardize_address
 
 logger = logging.getLogger(__name__)
 
-ENGINE_NAME: str = "PurePythonCore"
-IS_NATIVE: bool = False
 VERSION: str = "2.1.0"
 __version__: str = VERSION
-
-
-def compute_soundex(token: str) -> str:
-    """Computes American Soundex code for a word token."""
-    return _base_soundex(token)
-
-
-def generate_phonetic_address_key(
-    street1: Optional[str],
-    postal_or_zip: str = "",
-    city: str = "",
-) -> Optional[str]:
-    """Generates collision-free hybrid phonetic blocking key."""
-    return _base_phonetic_key(street1, postal_or_zip=postal_or_zip, city=city)
-
-
-def generate_keys(
-    street1: Optional[str] = None,
-    street2: Optional[str] = None,
-    city: Optional[str] = None,
-    state: Optional[str] = None,
-    postal_code: Optional[str] = None,
-    country: Optional[str] = None,
-    allow_locality: bool = False,
-    **kwargs: Any,
-) -> Tuple[Optional[str], Optional[str], Optional[str]]:
-    """Derives deterministic normalized_address_key, building_key, and phonetic_key."""
-    std = standardize_record(
-        street1=street1,
-        street2=street2,
-        city=city,
-        state=state,
-        postal_code=postal_code,
-        country=country,
-        allow_locality=allow_locality,
-        finalize=False,
-        **kwargs,
-    )
-    return std.normalized_address_key, std.building_key, std.phonetic_key
-
-
-def get_engine_name() -> str:
-    """Returns engine identifier."""
-    return ENGINE_NAME
-
-
-def is_native() -> bool:
-    """Returns False for pure Python core."""
-    return IS_NATIVE
-
-
-def get_capabilities() -> Dict[str, Any]:
-    """Returns engine capability profile."""
-    return {
-        "engine": ENGINE_NAME,
-        "is_native": IS_NATIVE,
-        "version": VERSION,
-        "throughput_tier": "fallback (> 2,000 rec/s)",
-        "simd": False,
-        "zero_copy": False,
-        "pure_python": True,
-    }
 
 
 def standardize_record(

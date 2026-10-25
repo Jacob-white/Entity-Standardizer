@@ -25,6 +25,8 @@ from entity_standardizer.address import (
 )
 from entity_standardizer.arrow import (
     register_duckdb_udfs,
+    standardize_addresses_arrow,
+    standardize_addresses_polars,
     standardize_arrow,
     standardize_companies_arrow,
     standardize_companies_polars,
@@ -281,6 +283,8 @@ __all__ = [
     "resolve_timezones",
     "split_compound_persons",
     "standardize_address",
+    "standardize_addresses_arrow",
+    "standardize_addresses_polars",
     "standardize_arrow",
     "standardize_batch_e164_dispatch",
     "standardize_batch_with_country_dispatch",

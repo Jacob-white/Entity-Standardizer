@@ -64,16 +64,18 @@ def is_privacy_placeholder(*fields: str) -> bool:
     return False
 
 
-CORRECT_STATE_ENV = "ADDRESS_STANDARDIZER_CORRECT_STATE_FROM_ZIP"
+CORRECT_STATE_ENV = "ENTITY_STANDARDIZER_CORRECT_STATE_FROM_ZIP"
+LEGACY_CORRECT_STATE_ENV = "ADDRESS_STANDARDIZER_CORRECT_STATE_FROM_ZIP"
 _US_COUNTRY_NAMES = frozenset({"", "US", "USA", "UNITED STATES", "UNITED STATES OF AMERICA"})
 _RE_ZIP5 = re.compile(r"^\s*(\d{5})(?:[-\s]?\d{4})?\s*$")
 
 
 def correct_state_from_zip_enabled(explicit: Optional[bool]) -> bool:
-    """Per-call setting wins; otherwise the ADDRESS_STANDARDIZER_CORRECT_STATE_FROM_ZIP environment switch."""
+    """Per-call setting wins; otherwise the ENTITY_STANDARDIZER_CORRECT_STATE_FROM_ZIP (or ADDRESS_STANDARDIZER_CORRECT_STATE_FROM_ZIP) environment switch."""
     if explicit is not None:
         return bool(explicit)
-    return os.environ.get(CORRECT_STATE_ENV, "").strip().lower() in ("1", "true", "yes", "on")
+    val = os.environ.get(CORRECT_STATE_ENV) or os.environ.get(LEGACY_CORRECT_STATE_ENV, "")
+    return val.strip().lower() in ("1", "true", "yes", "on")
 
 
 def correct_state_from_zip(

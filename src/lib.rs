@@ -698,38 +698,6 @@ pub fn damerau_levenshtein(s1: &str, s2: &str) -> usize {
     h[len1 + 1][len2 + 1]
 }
 
-#[pyfunction]
-pub fn damerau_levenshtein_distance(s1: &str, s2: &str) -> usize {
-    damerau_levenshtein(s1, s2)
-}
-
-#[pyfunction]
-pub fn normalize_ascii_whitespace_rs(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    let mut last_space = true;
-    for ch in s.chars() {
-        if ch.is_ascii_alphanumeric() {
-            out.push(ch.to_ascii_uppercase());
-            last_space = false;
-        } else if (ch.is_whitespace() || matches!(ch, ',' | '.' | '-' | '#')) && !last_space {
-            out.push(' ');
-            last_space = true;
-        }
-    }
-    if out.ends_with(' ') {
-        out.pop();
-    }
-    out
-}
-
-#[pyfunction]
-pub fn normalize_batch_ascii_rs(inputs: Vec<String>) -> Vec<String> {
-    inputs
-        .into_iter()
-        .map(|s| normalize_ascii_whitespace_rs(&s))
-        .collect()
-}
-
 fn fold_latin_diacritics_to_chars(input: &str) -> Vec<char> {
     let mut out = Vec::with_capacity(input.len() + 8);
     for ch in input.chars() {
@@ -955,16 +923,6 @@ pub fn normalize_batch_company_tokens_rs(
 }
 
 #[pyfunction]
-pub fn get_engine_name() -> &'static str {
-    "Rust_PyO3"
-}
-
-#[pyfunction]
-pub fn is_native() -> bool {
-    true
-}
-
-#[pyfunction]
 pub fn get_capabilities(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
     let dict = PyDict::new(py);
     dict.set_item("engine", "Rust_PyO3")?;
@@ -975,15 +933,12 @@ pub fn get_capabilities(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
         "native_functions",
         vec![
             "compute_soundex",
-            "damerau_levenshtein_distance",
-            "normalize_ascii_whitespace_rs",
-            "normalize_batch_ascii_rs",
+            "damerau_levenshtein_distance_rs",
             "normalize_company_tokens_rs",
             "normalize_batch_company_tokens_rs",
             "fold_vanity_digits_rs",
             "fold_unicode_digits_rs",
             "extract_digits_rs",
-            "damerau_levenshtein_distance_rs",
             "standardize_batch_e164_rs",
             "standardize_batch_with_country_rs",
         ],
@@ -999,13 +954,8 @@ fn register_all_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(standardize_batch_e164_rs, m)?)?;
     m.add_function(wrap_pyfunction!(standardize_batch_with_country_rs, m)?)?;
     m.add_function(wrap_pyfunction!(compute_soundex, m)?)?;
-    m.add_function(wrap_pyfunction!(damerau_levenshtein_distance, m)?)?;
-    m.add_function(wrap_pyfunction!(normalize_ascii_whitespace_rs, m)?)?;
-    m.add_function(wrap_pyfunction!(normalize_batch_ascii_rs, m)?)?;
     m.add_function(wrap_pyfunction!(normalize_company_tokens_rs, m)?)?;
     m.add_function(wrap_pyfunction!(normalize_batch_company_tokens_rs, m)?)?;
-    m.add_function(wrap_pyfunction!(get_engine_name, m)?)?;
-    m.add_function(wrap_pyfunction!(is_native, m)?)?;
     m.add_function(wrap_pyfunction!(get_capabilities, m)?)?;
     Ok(())
 }
@@ -1192,16 +1142,12 @@ mod tests {
     }
 
     #[test]
-    fn test_damerau_levenshtein_edge_cases_and_whitespace() {
+    fn test_damerau_levenshtein_edge_cases() {
         assert_eq!(damerau_levenshtein("", ""), 0);
         assert_eq!(damerau_levenshtein("ABC", ""), 3);
         assert_eq!(damerau_levenshtein("", "ABC"), 3);
         assert_eq!(damerau_levenshtein("CA", "AC"), 1);
         assert_eq!(damerau_levenshtein("ABC", "CA"), 2);
-        assert_eq!(
-            normalize_ascii_whitespace_rs("  123  Main, St. #4B - "),
-            "123 MAIN ST 4B"
-        );
     }
 
     #[test]

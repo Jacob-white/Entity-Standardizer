@@ -1,4 +1,4 @@
-package phonestandardizer
+package entitystandardizer
 
 import (
 	"bytes"
@@ -11,13 +11,19 @@ import (
 	"time"
 )
 
-// Client is a zero-dependency HTTP client for the Phone Standardizer microservice.
+// Client is a zero-dependency HTTP client for the Entity Standardizer microservice.
 type Client struct {
 	BaseURL    string
 	HTTPClient *http.Client
 }
 
-// NewClient constructs a new Phone Standardizer Go client.
+// EntityStandardizerClient is the canonical type name for the Go SDK client.
+type EntityStandardizerClient = Client
+
+// PhoneStandardizerClient is a backward-compatible alias for EntityStandardizerClient.
+type PhoneStandardizerClient = EntityStandardizerClient
+
+// NewClient constructs a new Entity Standardizer Go client.
 func NewClient(baseURL string) *Client {
 	if baseURL == "" {
 		baseURL = "http://127.0.0.1:8000"

@@ -152,13 +152,29 @@ def test_multi_tier_cache_l1_and_l2(tmp_path: Path) -> None:
         disk_cache.set(key1, rec1)
         assert disk_cache.get(key1) == rec1
 
-    # Direct SQLiteCache test with context manager & idempotent close()
+    # Direct SQLiteCache test with context manager, fork-safety (_pid change), & idempotent close()
     with SQLiteCache(":memory:") as sql_c:
+        assert sql_c.get(key1) is None
+        sql_c._pid = -1
         assert sql_c.get(key1) is None
     sql_c.close()
 
+    # Test clear_cache() when address _DEFAULT_CACHE is None vs initialized
+    from entity_standardizer.address import cache as _addr_cache
+
+    _addr_cache.get_default_cache()
+    assert _addr_cache._DEFAULT_CACHE is not None
+    clear_cache()
+    saved_addr_cache = _addr_cache._DEFAULT_CACHE
+    try:
+        _addr_cache._DEFAULT_CACHE = None
+        clear_cache()
+    finally:
+        _addr_cache._DEFAULT_CACHE = saved_addr_cache
+
     # Reset default cache to in-memory so subsequent tests don't use closed temp file
     configure_cache(l1_max_size=4096, sqlite_path=None)
+
 
 
 def test_explain_and_stewardship_ledger() -> None:
@@ -200,4 +216,51 @@ def test_explain_and_stewardship_ledger() -> None:
         }
     )
     assert "Telekom Deutschland" in mcp_exp["result"]["content"][0]["text"]
+
+
+def test_address_subsystem_lazy_audit_and_native_dispatch(monkeypatch) -> None:
+    from entity_standardizer.address import (
+        _native_dispatch as addr_nd,
+        audit as addr_audit,
+        fuzzy as addr_fuzzy,
+        phonetics as addr_phonetics,
+        standardize_address,
+    )
+
+    # 1. Phonetics & Fuzzy delegation
+    pkey = addr_phonetics.generate_phonetic_address_key("350 FIFTH AVE", "10118", "USA")
+    assert pkey == "350|F130|10118"
+    assert addr_fuzzy.damerau_levenshtein_distance("MAIN", "MIAN") == 1
+
+    # 2. Address batch dispatch
+    batch_res = addr_nd.standardize_batch_dispatch(
+        [{"street1": "350 Fifth Ave", "city": "New York", "state": "NY", "postal_code": "10118"}]
+    )
+    assert len(batch_res) == 1 and batch_res[0].street1 == "350 5TH AVE"
+
+    # 3. ENTITY_STANDARDIZER_FORCE_PURE support
+    with monkeypatch.context() as mp:
+        mp.setenv("ENTITY_STANDARDIZER_FORCE_PURE", "1")
+        addr_nd.reset_engine()
+        assert addr_nd.is_using_native() is False
+    addr_nd.reset_engine()
+
+    # 4. Lazy audit ledger gating on low-confidence / unparseable addresses
+    saved_ledger = addr_audit._DEFAULT_AUDIT_LEDGER
+    try:
+        addr_audit._DEFAULT_AUDIT_LEDGER = None
+        monkeypatch.delenv("ENTITY_STANDARDIZER_AUDIT_ENABLED", raising=False)
+        monkeypatch.delenv("ADDRESS_STANDARDIZER_AUDIT_ENABLED", raising=False)
+        clear_cache()
+        unparsed = standardize_address("???")
+        assert unparsed.audit_record is None
+        assert addr_audit._DEFAULT_AUDIT_LEDGER is None
+
+        monkeypatch.setenv("ENTITY_STANDARDIZER_AUDIT_ENABLED", "1")
+        clear_cache()
+        audited = standardize_address("???")
+        assert audited.audit_record is not None
+        assert addr_audit._DEFAULT_AUDIT_LEDGER is not None
+    finally:
+        addr_audit._DEFAULT_AUDIT_LEDGER = saved_ledger
 

@@ -5,14 +5,14 @@ using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
-namespace PhoneStandardizer.Client;
+namespace EntityStandardizer.Client;
 
-public sealed class PhoneStandardizerClient
+public class EntityStandardizerClient
 {
     private readonly HttpClient _http;
     private readonly string _baseUrl;
 
-    public PhoneStandardizerClient(string baseUrl = "http://127.0.0.1:8000", HttpClient? httpClient = null)
+    public EntityStandardizerClient(string baseUrl = "http://127.0.0.1:8000", HttpClient? httpClient = null)
     {
         _baseUrl = baseUrl.TrimEnd('/');
         _http = httpClient ?? new HttpClient();
@@ -172,3 +172,12 @@ public sealed class PhoneStandardizerClient
         return JsonSerializer.Deserialize<TResponse>(body);
     }
 }
+
+public class PhoneStandardizerClient : EntityStandardizerClient
+{
+    public PhoneStandardizerClient(string baseUrl = "http://127.0.0.1:8000", HttpClient? httpClient = null)
+        : base(baseUrl, httpClient)
+    {
+    }
+}
+

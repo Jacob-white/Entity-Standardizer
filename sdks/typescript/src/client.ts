@@ -73,7 +73,7 @@ export function formatAsYouType(raw: string, countryIso2: string = "US"): string
   return hasPlus ? `+${digits}` : digits;
 }
 
-export class PhoneStandardizerClient {
+export class EntityStandardizerClient {
   private readonly baseUrl: string;
   private readonly fetchImpl: typeof fetch;
   private readonly headers: Record<string, string>;
@@ -384,3 +384,6 @@ export class PhoneStandardizerClient {
     return (await res.json()) as ContactComparisonResult;
   }
 }
+
+export { EntityStandardizerClient as PhoneStandardizerClient };
+

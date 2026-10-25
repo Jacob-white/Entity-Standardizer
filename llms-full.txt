@@ -97,6 +97,8 @@ from entity_standardizer import (
     PhoneCluster,
 
     # 7. Columnar Apache Arrow & Polars Helpers
+    standardize_addresses_arrow,
+    standardize_addresses_polars,
     standardize_companies_arrow,
     standardize_companies_polars,
     standardize_persons_arrow,

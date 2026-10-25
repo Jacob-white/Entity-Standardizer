@@ -13,34 +13,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Set, Tuple, Any
 
 from entity_standardizer.address.tables import SECONDARY_UNITS, US_STATES
-from entity_standardizer.address._patterns import RE_SEC_UNIT
-
-
-def damerau_levenshtein_distance(s1: str, s2: str) -> int:
-    """Computes Damerau-Levenshtein edit distance (<= 1 fast path)."""
-    if s1 == s2:
-        return 0
-    len1, len2 = len(s1), len(s2)
-    if abs(len1 - len2) > 1:
-        return abs(len1 - len2)
-    if len1 + 1 == len2:
-        for i in range(len2):
-            if s2[:i] + s2[i + 1:] == s1:
-                return 1
-        return 2
-    if len2 + 1 == len1:
-        for i in range(len1):
-            if s1[:i] + s1[i + 1:] == s2:
-                return 1
-        return 2
-    diff_indices = [i for i in range(len1) if s1[i] != s2[i]]
-    if len(diff_indices) == 1:
-        return 1
-    if len(diff_indices) == 2:
-        i, j = diff_indices
-        if j == i + 1 and s1[i] == s2[j] and s1[j] == s2[i]:
-            return 1
-    return len(diff_indices)
+from entity_standardizer.address._patterns import RE_SEC_UNIT, is_edit_distance_leq1
 
 
 def _finite_or_none(value: Any) -> Optional[float]:
@@ -440,7 +413,7 @@ class AutocompleteEngine:
                 typo_ids = set()
                 for key, ids in self._prefix_index.items():
                     if abs(len(key) - len(tok)) <= 1:
-                        if damerau_levenshtein_distance(tok, key) <= 1:
+                        if is_edit_distance_leq1(tok, key):
                             typo_ids.update(ids)
                 if typo_ids:
                     rec_ids = typo_ids
@@ -469,7 +442,7 @@ class AutocompleteEngine:
                         typo_ids = set()
                         for key, ids in self._prefix_index.items():
                             if abs(len(key) - len(tok)) <= 1:
-                                if damerau_levenshtein_distance(tok, key) <= 1:
+                                if is_edit_distance_leq1(tok, key):
                                     typo_ids.update(ids)
                         if typo_ids:
                             rec_ids = typo_ids

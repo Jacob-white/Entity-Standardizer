@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
 import threading
 from collections import OrderedDict
@@ -84,26 +85,39 @@ class SQLiteCache:
 
     def __init__(self, db_path: str | Path = ":memory:") -> None:
         self.db_path = str(db_path)
-        self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        self._pid = os.getpid()
         self._lock = threading.Lock()
         self._closed = False
         self.hits = 0
         self.misses = 0
-        with self._lock:
-            self._conn.execute("PRAGMA journal_mode=WAL")
-            self._conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS phone_cache (
-                    cache_key TEXT PRIMARY KEY,
-                    payload_json TEXT NOT NULL
-                )
-                """
+        self._conn = self._open_conn()
+
+    def _open_conn(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS phone_cache (
+                cache_key TEXT PRIMARY KEY,
+                payload_json TEXT NOT NULL
             )
-            self._conn.commit()
+            """
+        )
+        conn.commit()
+        return conn
+
+    def _get_conn(self) -> sqlite3.Connection:
+        current_pid = os.getpid()
+        if current_pid != self._pid:
+            self._pid = current_pid
+            self._conn = self._open_conn()
+            self._closed = False
+        return self._conn
 
     def get(self, key: str) -> StandardizedPhone | None:
         with self._lock:
-            row = self._conn.execute(
+            conn = self._get_conn()
+            row = conn.execute(
                 "SELECT payload_json FROM phone_cache WHERE cache_key = ?",
                 (key,),
             ).fetchone()
@@ -119,16 +133,18 @@ class SQLiteCache:
     def set(self, key: str, value: StandardizedPhone) -> None:
         payload = json.dumps(value.to_dict())
         with self._lock:
-            self._conn.execute(
+            conn = self._get_conn()
+            conn.execute(
                 "INSERT OR REPLACE INTO phone_cache (cache_key, payload_json) VALUES (?, ?)",
                 (key, payload),
             )
-            self._conn.commit()
+            conn.commit()
 
     def clear(self) -> None:
         with self._lock:
-            self._conn.execute("DELETE FROM phone_cache")
-            self._conn.commit()
+            conn = self._get_conn()
+            conn.execute("DELETE FROM phone_cache")
+            conn.commit()
             self.hits = 0
             self.misses = 0
 
@@ -211,11 +227,16 @@ def configure_cache(l1_max_size: int = 4096, sqlite_path: str | Path | None = No
 
 
 def clear_cache() -> None:
-    """Clear all entries from the active global cache."""
+    """Clear all entries from the active global phone and address caches."""
     _DEFAULT_CACHE.clear()
+    from entity_standardizer.address import cache as _addr_cache
+
+    if _addr_cache._DEFAULT_CACHE is not None:
+        _addr_cache._DEFAULT_CACHE.clear()
 
 
 def get_cache_stats() -> dict[str, Any]:
     """Return hit/miss/size metrics from the active global cache."""
     return _DEFAULT_CACHE.stats()
+
 

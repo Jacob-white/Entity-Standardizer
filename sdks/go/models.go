@@ -1,4 +1,4 @@
-package phonestandardizer
+package entitystandardizer
 
 // HealthResponse is the response payload for GET /health.
 type HealthResponse struct {

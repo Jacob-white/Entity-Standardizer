@@ -4,7 +4,7 @@ Official client SDKs (`v2.1.0`) and OpenAPI 3.1 contracts for integrating the **
 
 - **[TypeScript / React (`sdks/typescript`)](typescript/README.md)** — Typed client (`@entity-standardizer/client`), offline `formatAsYouType` formatter, and headless `PhoneInputController` / `usePhoneInput()` React hook.
 - **[.NET 8 / C# (`sdks/dotnet`)](dotnet/README.md)** — `EntityStandardizer.Client` (`EntityStandardizer.Client.csproj`) targeting `net8.0` and `netstandard2.0`.
-- **[Go (`sdks/go`)](go/README.md)** — Zero-dependency `phonestandardizer` client package (`github.com/Jacob-white/Entity-Standardizer/sdks/go`).
+- **[Go (`sdks/go`)](go/README.md)** — Zero-dependency `entitystandardizer` client package (`github.com/Jacob-white/Entity-Standardizer/sdks/go`).
 
 ---
 
@@ -12,7 +12,7 @@ Official client SDKs (`v2.1.0`) and OpenAPI 3.1 contracts for integrating the **
 
 Every SDK is continuously contract-tested against the Python dataclasses via [`tests/test_sdk_contract.py`](../tests/test_sdk_contract.py) and supports all **19 HTTP operations** (`GET /health` + 18 `/v1/*` endpoints):
 
-| HTTP Endpoint | TypeScript (`@entity-standardizer/client`) | Go (`phonestandardizer`) | .NET (`EntityStandardizer.Client`) |
+| HTTP Endpoint | TypeScript (`@entity-standardizer/client`) | Go (`entitystandardizer`) | .NET (`EntityStandardizer.Client`) |
 | :--- | :--- | :--- | :--- |
 | `GET /health` | `health()` | `Health(ctx)` | `HealthAsync(ct)` |
 | `POST /v1/contact` | `standardizeContact(req)` | `StandardizeContact(ctx, req)` | `StandardizeContactAsync(req, ct)` |

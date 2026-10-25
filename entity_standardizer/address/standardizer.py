@@ -191,10 +191,18 @@ def _finalize_standardized_address(
         or std.is_registered_agent_hub
         or std.address_status == "parse_failed"
     ):
-        audit_rec = get_audit_ledger().record_standardized_address(
-            std, conf, raw_input=raw_input
-        )
-        std.audit_record = audit_rec
+        import os
+        from entity_standardizer.address import audit as _addr_audit
+
+        if (
+            _addr_audit._DEFAULT_AUDIT_LEDGER is not None
+            or os.environ.get("ENTITY_STANDARDIZER_AUDIT_ENABLED", "").strip().lower()
+            in ("1", "true", "yes", "on")
+        ):
+            audit_rec = get_audit_ledger().record_standardized_address(
+                std, conf, raw_input=raw_input
+            )
+            std.audit_record = audit_rec
 
     # 4. Pure Offline Spatial & Rooftop Coordinate Resolution (Zero External APIs)
     if enable_geocoding:
@@ -344,6 +352,7 @@ def standardize_address(
         kwargs.get("allow_locality_only")
         or kwargs.get("allow_city_level")
         or kwargs.get("allow_locality")
+        or os.environ.get("ENTITY_STANDARDIZER_ALLOW_LOCALITY") == "1"
         or os.environ.get("ADDRESS_STANDARDIZER_ALLOW_LOCALITY") == "1"
     )
     raw_dict = {

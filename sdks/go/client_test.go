@@ -1,4 +1,4 @@
-package phonestandardizer
+package entitystandardizer
 
 import (
 	"context"

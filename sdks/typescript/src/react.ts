@@ -2,7 +2,7 @@
  * Headless React <PhoneInput /> Controller & Hook for Phone Standardizer.
  */
 
-import { formatAsYouType, PhoneStandardizerClient } from "./client.js";
+import { EntityStandardizerClient, formatAsYouType } from "./client.js";
 import { StandardizedPhone } from "./types.js";
 
 export interface ReactLike {
@@ -13,7 +13,7 @@ export interface ReactLike {
 }
 
 export interface UsePhoneInputOptions {
-  client?: PhoneStandardizerClient;
+  client?: EntityStandardizerClient;
   defaultCountry?: string;
   initialValue?: string;
   onStandardized?: (record: StandardizedPhone) => void;
@@ -41,14 +41,14 @@ export class PhoneInputController {
   public isValidating: boolean = false;
   public error: Error | null = null;
 
-  private readonly client: PhoneStandardizerClient;
+  private readonly client: EntityStandardizerClient;
   private readonly onStandardized?: (record: StandardizedPhone) => void;
   private readonly listeners: Set<() => void> = new Set();
   private requestId: number = 0;
   private abortController: AbortController | null = null;
 
   constructor(options: UsePhoneInputOptions = {}) {
-    this.client = options.client ?? new PhoneStandardizerClient();
+    this.client = options.client ?? new EntityStandardizerClient();
     this.country = options.defaultCountry ?? "US";
     this.rawValue = options.initialValue ?? "";
     this.formattedValue = formatAsYouType(this.rawValue, this.country);

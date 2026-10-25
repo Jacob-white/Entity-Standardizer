@@ -706,10 +706,10 @@ def standardize_person(raw_input: str | None) -> StandardizedPerson:
     )
     person_root_key = f"{last_name or ''}|{root_first_name or ''}"
 
-    from entity_standardizer.address.phonetics import compute_soundex
+    from entity_standardizer._native_dispatch import compute_soundex_dispatch
 
-    last_snd = compute_soundex(last_name.split()[-1]) if last_name else ""
-    first_snd = compute_soundex(root_first_name or first_name or "")
+    last_snd = compute_soundex_dispatch(last_name.split()[-1]) if last_name else ""
+    first_snd = compute_soundex_dispatch(root_first_name or first_name or "")
     phonetic_key = f"{last_snd}|{first_snd}".strip("|") or None
 
     confidence = 0.98 if (first_name and last_name) else 0.78
@@ -1151,11 +1151,31 @@ def deduplicate_persons(
     n = len(parsed)
     dsu = DisjointSet(range(n))
 
-    for i in range(n):
-        for j in range(i + 1, n):
-            cmp = compare_persons(parsed[i], parsed[j])
-            if cmp.is_match and cmp.score >= min_score:
-                dsu.union(i, j, cmp.match_type)
+    buckets: dict[str, list[int]] = {}
+    for idx, p in enumerate(parsed):
+        if not p.is_valid:
+            continue
+        keys: set[str] = {
+            f"PK:{p.person_key}",
+            f"PRK:{p.person_root_key}",
+            f"PH:{p.phonetic_key or ''}",
+            f"LNFI:{p.last_name}:{p.first_name[:1]}" if (p.last_name and p.first_name) else "",
+        }
+        keys.discard("")
+        keys.discard("PH:")
+        for k in keys:
+            buckets.setdefault(k, []).append(idx)
+
+    candidate_pairs: set[tuple[int, int]] = set()
+    for indices in buckets.values():
+        for i_pos in range(len(indices)):
+            for j_pos in range(i_pos + 1, len(indices)):
+                candidate_pairs.add((indices[i_pos], indices[j_pos]))
+
+    for i, j in sorted(candidate_pairs):
+        cmp = compare_persons(parsed[i], parsed[j])
+        if cmp.is_match and cmp.score >= min_score:
+            dsu.union(i, j, cmp.match_type)
 
     clusters: list[PersonCluster] = []
     for cluster_num, (root_idx, member_indices) in enumerate(dsu.groups().items(), start=1):
@@ -1172,6 +1192,7 @@ def deduplicate_persons(
             )
         )
     return clusters
+
 
 
 _COUPLE_PREFIX_RE = re.compile(

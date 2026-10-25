@@ -19,13 +19,15 @@ logger = logging.getLogger(__name__)
 _NATIVE_MODULE: Optional[Any] = None
 _NATIVE_AVAILABLE: bool = False
 _FORCE_PURE_PYTHON: bool = False
-_FORCE_PURE_ENV = "ADDRESS_STANDARDIZER_FORCE_PURE"
+_FORCE_PURE_ENV = "ENTITY_STANDARDIZER_FORCE_PURE"
+_LEGACY_FORCE_PURE_ENV = "ADDRESS_STANDARDIZER_FORCE_PURE"
 _LOGGED_FAILURES: set = set()
 
 
 def _env_forces_pure() -> bool:
-    """Operator kill switch: ADDRESS_STANDARDIZER_FORCE_PURE=1 disables the native extension."""
-    return os.environ.get(_FORCE_PURE_ENV, "").strip().lower() in ("1", "true", "yes", "on")
+    """Operator kill switch: ENTITY_STANDARDIZER_FORCE_PURE=1 (or ADDRESS_STANDARDIZER_FORCE_PURE=1) disables the native extension."""
+    val = os.environ.get(_FORCE_PURE_ENV) or os.environ.get(_LEGACY_FORCE_PURE_ENV, "")
+    return val.strip().lower() in ("1", "true", "yes", "on")
 
 
 def _is_fatal(exc: BaseException) -> bool:
@@ -62,30 +64,11 @@ def try_native(name: str, *args: Any, **kwargs: Any) -> Tuple[bool, Any]:
 
 
 def _load_fallback_native() -> Optional[Any]:
-    import importlib.machinery
-    import importlib.util
     from pathlib import Path
+    from entity_standardizer._native_dispatch import _load_native_module
 
     release_dir = Path(__file__).resolve().parents[2] / "target" / "release"
-    for filename in (
-        "lib_entity_standardizer_rs.so",
-        "lib_entity_standardizer_rs.dylib",
-        "_entity_standardizer_rs.pyd",
-    ):
-        candidate = release_dir / filename
-        if candidate.is_file():
-            try:
-                loader = importlib.machinery.ExtensionFileLoader(
-                    "_entity_standardizer_rs", str(candidate)
-                )
-                spec = importlib.util.spec_from_loader("_entity_standardizer_rs", loader)
-                if spec is not None:
-                    mod = importlib.util.module_from_spec(spec)
-                    loader.exec_module(mod)
-                    return mod
-            except Exception:
-                continue
-    return None
+    return _load_native_module(release_dir=release_dir)
 
 
 def _init_native():
@@ -201,36 +184,11 @@ def reset_engine() -> None:
     _init_native()
 
 
-def standardize_record_dispatch(
-    street1: Optional[str] = None,
-    street2: Optional[str] = None,
-    city: Optional[str] = None,
-    state: Optional[str] = None,
-    postal_code: Optional[str] = None,
-    country: Optional[str] = None,
-    **kwargs: Any,
-) -> StandardizedAddress:
-    """Dispatches single record standardization to the native engine, falling back to pure Python."""
-    ok, result = try_native(
-        "standardize_record",
-        street1=street1, street2=street2, city=city, state=state,
-        postal_code=postal_code, country=country, **kwargs,
-    )
-    if ok:
-        return result
-    return _pure_python_core.standardize_record(
-        street1=street1, street2=street2, city=city, state=state,
-        postal_code=postal_code, country=country, **kwargs,
-    )
-
-
 def standardize_batch_dispatch(
     records: List[Any],
     chunk_size: int = 5000,
     **kwargs: Any,
 ) -> List[StandardizedAddress]:
-    """Dispatches batch standardization to the native engine, falling back to pure Python."""
-    ok, result = try_native("standardize_batch", records, chunk_size=chunk_size, **kwargs)
-    if ok:
-        return result
+    """Dispatches batch standardization to _pure_python_core.standardize_batch."""
     return _pure_python_core.standardize_batch(records, chunk_size=chunk_size, **kwargs)
+

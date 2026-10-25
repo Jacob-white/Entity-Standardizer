@@ -16,9 +16,6 @@ nav:
   - Performance & Benchmarks: performance.md
   - Evaluation & Golden Suites: evaluation.md
   - Reference Data & Dial Plans: reference_data.md
-  - Architecture & Standards:
-      - Global Telephony Architecture: GLOBAL_TELEPHONY_ARCHITECTURE_PLAN.md
-      - Global Spatial & Enterprise Blueprint: GLOBAL_SPATIAL_ENTERPRISE_BLUEPRINT.md
   - Governance & Releases:
       - Versioning Policy: VERSIONING.md
       - Releasing Guide: RELEASING.md

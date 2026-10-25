@@ -41,9 +41,6 @@ server = [
 redis = [
     "redis>=5.0",
 ]
-otel = [
-    "opentelemetry-api>=1.20",
-]
 mcp = [
     "mcp>=1.0.0",
 ]
@@ -56,9 +53,6 @@ arrow = [
 ml = [
     "usaddress>=0.5.16",
 ]
-benchmark = [
-    "psutil>=5.9.0",
-]
 translit = [
     "anyascii>=0.3",
 ]
@@ -67,6 +61,7 @@ dev = [
     "pytest-cov>=4.0.0",
     "ruff>=0.1.0",
     "hypothesis>=6.100.0",
+    "tzdata>=2024.1",
 ]
 docs = [
     "mkdocs>=1.6,<2",

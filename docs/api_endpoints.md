@@ -13,10 +13,15 @@ Start the unified multi-pillar microservice:
 uvicorn entity_standardizer.server:app --host 0.0.0.0 --port 8000
 ```
 
-### 1.1 Health & Country Metadata Endpoints
+### 1.1 Health, Readiness & Country Metadata Endpoints
+
+> **Optional API-Key Authentication**: When `ENTITY_STANDARDIZER_API_KEYS` is set to a comma-separated list of keys, all `/v1/*` routes require `X-API-Key: <key>` or `Authorization: Bearer <key>` (returning `401 Unauthorized` otherwise). `GET /health` and `GET /ready` remain open for orchestrator probes.
 
 #### `GET /health`
-Returns service health and active package version (`{"status": "ok", "version": "2.1.0"}`).
+Returns service liveness and active package version (`{"status": "ok", "version": "2.1.0"}`).
+
+#### `GET /ready`
+Returns service readiness, active package version, and whether the native Rust PyO3 extension is loaded (`{"status": "ready", "version": "2.1.0", "native_available": true}`).
 
 #### `GET /v1/countries`
 Returns `{"count": 249, "countries": list[CountryDialPlan]}` containing all **249 ITU-T E.164 country dial plans** sorted by ISO-3166-1 alpha-2 code (`iso2`, `iso3`, `calling_code`, `name`, `region`, `national_trunk_prefix`, `idd_prefix`, `nsn_lengths`, `mobile_prefixes`, `toll_free_prefixes`, `premium_prefixes`, `voip_prefixes`, `shared_cost_prefixes`).
