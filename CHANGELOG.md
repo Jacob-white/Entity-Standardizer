@@ -2,6 +2,31 @@
 
 All notable changes to **Entity Standardizer** (`entity_standardizer`, `phone_standardizer`, and `address_standardizer`) will be documented in this file.
 
+## [2.1.0] - 2026-10-24
+
+### Added & Fixed
+- **Corporate Latin Diacritics & Ligatures, Offshore/International ISO 20275 Legal Forms & SEC/Trust Hygiene (`entity_standardizer/company.py`, `src/lib.rs`)**:
+  - Added Unicode NFKD + Nordic/Polish/German/Icelandic stroke and ligature folding (`_fold_latin_diacritics` in Python and `fold_latin_diacritics_to_chars` in Rust `src/lib.rs`) so dotted and accented legal forms (`S.à r.l.`, `Société à responsabilité limitée`, `OÜ`, `Weiß`, `Ørsted`) collapse cleanly to ASCII (`SARL`, `SOCIETE`, `OU`, `WEISS`, `ORSTED`).
+  - Expanded `_MULTI_TOKEN_LEGAL_SUFFIXES` and `_SINGLE_TOKEN_LEGAL_SUFFIXES` with offshore fund and international ISO 20275 legal forms and country inference: `SCSP` (`LU` Special Limited Partnership / `S.C.Sp.`), `SPC` (`KY` Segregated Portfolio Company), `DST` (`US` Delaware Statutory Trust), `REIT` (`Real Estate Investment Trust`), `SP Z OO` (`PL`), `KGAA` (`DE`), `PTE LTD` (`SG`), `PVT LTD` (`IN`), `SDN BHD` & `BHD` (`MY`), `SE` (`Societas Europaea`), `KFT` (`HU`), `SRO` (`CZ`), `DOO`, and `OU` (`EE`).
+  - Added SEC EDGAR / Form ADV trailing state-of-incorporation suffix stripping (`/DE/`, `/NY/`, `/MD/`, `/XX/`) with `SEC_STATE_SUFFIX_STRIPPED`, trust agreement date guard (`U/A/D`, `U/A`, `D/T/D`, `F/B/O`) preventing `T/A` ("Trust Agreement") from mis-splitting as "Trading As" (`DBA`), parenthesized acronym alias extraction (`Pacific Investment Management Company (PIMCO)` $\to$ `dba_name="PIMCO"`), parenthesized institutional role qualifier extraction (`(Program Manager)`, `(General Partner)`, `(Investment Manager)` $\to$ `branch_unit`), and Series LLC / Segregated Portfolio branch extraction (`Series A`, `Segregated Portfolio 1`, `Tranche`, `Sub-Fund`).
+- **Person Diacritics Folding, Organization-in-Person Guard, Placeholder Stripping, Couple Splitting & Executive Job Titles (`entity_standardizer/person.py`, `phone_standardizer/joint.py`)**:
+  - Folded Latin diacritics and ligatures (`é`, `á`, `ñ`, `ç`, `ü`, `ö`, `ø`, `ł`, `ß`, `æ`, `œ`, `ð`, `þ`) before token cleaning in `standardize_person()` (`"José María Núñez"` $\to$ `"JOSE MARIA NUNEZ"`, `"DIACRITICS_FOLDED"`).
+  - Added `is_organization_name()` and `StandardizedPerson.is_organization` (`ORGANIZATION_DETECTED_IN_PERSON_FIELD`), plus automatic rescue into `StandardizedContact.organization` via `CrossHealingAction.ORGANIZATION_RESCUED_FROM_PERSON_FIELD` when `standardize_contact()` receives a corporate entity in `person_name`.
+  - Added placeholder rejection and leading placeholder token stripping (`N/A`, `NONE`, `NULL`, `UNKNOWN`, `TBD`, `[NONE]`, `---`, `- Enis Hulli` $\to$ `ENIS HULLI` with `PLACEHOLDER_STRIPPED`).
+  - Added `split_compound_persons()` to split joint/couple person strings (`"Mr. and Mrs. Robert J. Smith"`, `"John & Jane Smith"`, `"Smith, John & Jane"`, `"John Smith & Jane Doe"`) into individual `StandardizedPerson` records with `COMPOUND_PERSON_SPLIT`.
+  - Unpacked JSON-serialized role arrays (`'["Executive Officer", "Director"]'` $\to$ `JSON_ARRAY_UNPACKED`), added financial/regulatory title expansions (`CCO`, `CIO`, `CAO`, `CSO`, `FINOP`, `IAR`), and added `StandardizedJobTitle.is_executive`.
+- **Sentinel Domain Guard & Batch Web Standardization (`entity_standardizer/web.py`)**:
+  - Added `_SENTINEL_DOMAINS` (`example.com`, `test.com`, `none.com`, `noemail.com`, `na.com`, `unknown.com`, `localhost.localdomain`, `invalid.com`) rejecting placeholder emails and URLs with `SENTINEL_DOMAIN_REJECTED`.
+  - Added `batch_standardize_emails`, `batch_standardize_urls` (`batch_standardize_websites`), and `batch_standardize_socials`.
+- **Multi-Pillar Entity Comparison & Deduplication (`entity_standardizer/company.py`, `entity_standardizer/person.py`, `entity_standardizer/web.py`, `phone_standardizer/joint.py`, `phone_standardizer/dedup.py`)**:
+  - Added `CompanyComparisonResult` & `compare_companies` (`compare_organizations`), `CompanyCluster` & `deduplicate_companies` (`deduplicate_organizations`).
+  - Added `PersonComparisonResult` & `compare_persons`, `PersonCluster` & `deduplicate_persons`.
+  - Added `EmailComparisonResult` & `compare_emails` and `UrlComparisonResult` & `compare_urls` (`compare_websites`).
+  - Added `ContactComparisonResult` & `compare_contacts` (`compare_entities`) comparing across `organization`, `person`, `phone`, `email`, `website`, and `address`, and upgraded `cluster_contact_records()` to link across all 5 pillars (`SHARED_COMPANY_KEY`, `SHARED_PERSON_KEY`, `SHARED_EMAIL_KEY`, `SHARED_DOMAIN_KEY`).
+- **Columnar Arrow/Polars Helpers, DuckDB SQL UDFs, CLI, FastAPI, MCP & SDK Sync (`phone_standardizer/arrow.py`, `cli.py`, `server.py`, `mcp/server.py`, `sdks/`)**:
+  - Added `standardize_companies_arrow`, `standardize_companies_polars`, `standardize_persons_arrow`, `standardize_persons_polars`, and 6 DuckDB SQL scalar UDFs (`standardize_company_name`, `company_entity_key`, `standardize_person_name`, `person_entity_key`, `standardize_email_udf`, `standardize_url_domain`).
+  - Added FastAPI endpoints `POST /v1/job-title`, `POST /v1/company/compare`, `POST /v1/person/compare`, and `POST /v1/contact/compare`, MCP tools `standardize_job_title`, `compare_companies`, `compare_persons`, and `compare_contacts`, CLI subcommands `compare-companies` and `compare-persons`, and synchronized `is_organization` / `is_executive` fields across TypeScript, Go, and .NET SDKs.
+
 ## [2.0.0] - 2026-10-23
 
 ### Added & Fixed
