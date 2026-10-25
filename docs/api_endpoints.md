@@ -34,7 +34,7 @@ Looks up a single `CountryDialPlan` by ISO-2 (`"US"`), ISO-3 (`"USA"`), calling 
 ### 1.2 Joint 6-Pillar Contact Endpoints
 
 #### `POST /v1/contact`
-Jointly standardizes and cross-heals a contact record across all 6 entity pillars (**Organization**, **Person & Job Title**, **Email**, **Website & Social**, **Physical Address**, and **Telephone & Fax**).
+Jointly standardizes and cross-heals a contact record across all 6 entity pillars (**Organization**, **Person & Job Title**, **Email**, **Website & Social**, **Physical Address**, and **Telephone & Fax**), including automatic compound person splitting (`additional_persons`).
 - **Request body**: `ContactStandardizeRequest`
   - `street1: string | null`, `street2: string | null`, `city: string | null`, `state: string | null`, `postal_code: string | null`, `country: string | null`
   - `phone: string | null`, `fax: string | null`
@@ -45,12 +45,22 @@ Jointly standardizes and cross-heals a contact record across all 6 entity pillar
   - `website: string | null`
   - `social: string | null`
   - `default_country: string` (default `"US"`)
-- **Response (`200 OK`)**: `StandardizedContact` (`address`, `phone`, `fax`, `organization`, `person`, `job_title`, `email`, `website`, `social`, `entity_key`, `cross_healing_actions`, `overall_confidence`).
+- **Response (`200 OK`)**: `StandardizedContact` (`address`, `phone`, `fax`, `organization`, `person`, `additional_persons`, `job_title`, `email`, `website`, `social`, `entity_key`, `cross_healing_actions`, `overall_confidence`).
 
 #### `POST /v1/contact/compare`
 Compares two multi-pillar contact records (`contact_a` and `contact_b`) across organization, person, phone, email, website, and physical address pillars, enforcing generational suffix conflict protection (`JR` vs `SR`).
 - **Request body**: `ContactCompareRequest` (`contact_a: dict`, `contact_b: dict`, `default_country: string = "US"`)
 - **Response (`200 OK`)**: `ContactComparisonResult` (`is_match`, `score`, `match_type`, `matched_pillars`, `pillar_scores`, `contact_a`, `contact_b`).
+
+#### `POST /v1/contact/cluster`
+Clusters multi-pillar contact records into Golden Entity Clusters with survivorship selection across phone, address, email, and organization+person keys.
+- **Request body**: `ContactClusterRequest` (`records: list[dict]`, `default_country: string = "US"`)
+- **Response (`200 OK`)**: `{"cluster_count": int, "clusters": list[ContactCluster]}`.
+
+#### `POST /v1/contact/batch`
+Batch-standardizes up to 1,000 multi-pillar contact records in a single request.
+- **Request body**: `ContactBatchRequest` (`contacts: list[dict]`, `default_country: string = "US"`)
+- **Response (`200 OK`)**: `{"count": int, "results": list[StandardizedContact]}`.
 
 ---
 
@@ -66,6 +76,11 @@ Compares two company/organization names across exact `company_key`, `base_name`,
 - **Request body**: `CompanyCompareRequest` (`company_a: string`, `company_b: string`)
 - **Response (`200 OK`)**: `CompanyComparisonResult` (`is_match`, `score`, `match_type`, `company_a`, `company_b`).
 
+#### `POST /v1/company/deduplicate`
+Clusters and deduplicates a list of company names into Golden Company Records.
+- **Request body**: `CompanyDeduplicateRequest` (`companies: list[string]`, `country: string | null = None`, `fuzzy_threshold: float = 0.85`)
+- **Response (`200 OK`)**: `{"cluster_count": int, "clusters": list[CompanyCluster]}`.
+
 ---
 
 ### 1.4 Person & Job Title Endpoints
@@ -79,6 +94,11 @@ Standardizes a person's full name, uninverting `LAST, FIRST`, extracting salutat
 Compares two person names across exact `person_key`, `person_root_key` (diminutive equivalence), initial + surname matching, and Soundex phonetic similarity, with strict generational conflict rejection (`JR` vs `SR`).
 - **Request body**: `PersonCompareRequest` (`person_a: string`, `person_b: string`)
 - **Response (`200 OK`)**: `PersonComparisonResult` (`is_match`, `score`, `match_type`, `person_a`, `person_b`).
+
+#### `POST /v1/person/deduplicate`
+Clusters and deduplicates a list of person names into Golden Person Records.
+- **Request body**: `PersonDeduplicateRequest` (`persons: list[string]`, `fuzzy_threshold: float = 0.85`)
+- **Response (`200 OK`)**: `{"cluster_count": int, "clusters": list[PersonCluster]}`.
 
 #### `POST /v1/job-title`
 Standardizes a job title, expanding 60+ executive and functional abbreviations (`CCO` -> `CHIEF COMPLIANCE OFFICER`) and classifying `seniority_level`, `department`, and `is_executive`.
@@ -94,10 +114,20 @@ Standardizes an email address (RFC 5322 display name extraction, `mailto:` strip
 - **Request body**: `EmailStandardizeRequest` (`email: string`)
 - **Response (`200 OK`)**: `StandardizedEmail` (`raw_input`, `email`, `local_part`, `raw_local_part`, `subaddress`, `domain`, `display_name`, `email_type`, `is_free_provider`, `is_role_account`, `is_disposable`, `inferred_country_iso2`, `email_key`, `is_valid`, `confidence`, `healing_actions`).
 
+#### `POST /v1/email/compare`
+Compares two email addresses across canonical `email_key`, subaddress/Gmail-dot equivalence, and corporate registrable domain + local-part matching.
+- **Request body**: `EmailCompareRequest` (`email_a: string`, `email_b: string`)
+- **Response (`200 OK`)**: `EmailComparisonResult` (`is_match`, `score`, `match_type`, `email_a`, `email_b`).
+
 #### `POST /v1/url`
 Standardizes a website URL (HTTPS upgrade, `www.` stripping, `utm_*`/`gclid`/`fbclid`/`msclkid` tracking parameter removal, multi-part eTLD+1 registrable domain extraction, and `brand_stem` extraction).
 - **Request body**: `UrlStandardizeRequest` (`url: string`)
 - **Response (`200 OK`)**: `StandardizedUrl` (`raw_input`, `url`, `scheme`, `host`, `domain`, `subdomain`, `public_suffix`, `brand_stem`, `path`, `inferred_country_iso2`, `url_key`, `is_valid`, `confidence`, `healing_actions`).
+
+#### `POST /v1/url/compare`
+Compares two website URLs across canonical `url_key`, registrable `domain`, and `brand_stem`.
+- **Request body**: `UrlCompareRequest` (`url_a: string`, `url_b: string`)
+- **Response (`200 OK`)**: `UrlComparisonResult` (`is_match`, `score`, `match_type`, `url_a`, `url_b`).
 
 #### `POST /v1/social`
 Standardizes a LinkedIn, X/Twitter, GitHub, Instagram, Facebook, or YouTube URL or `@handle`.
@@ -106,12 +136,27 @@ Standardizes a LinkedIn, X/Twitter, GitHub, Instagram, Facebook, or YouTube URL 
 
 ---
 
-### 1.6 Physical Address Endpoint
+### 1.6 Physical Address Endpoints
 
 #### `POST /v1/address`
-Standardizes a US or international physical address to USPS Pub 28 / UPU S42 format with `normalized_address_key`, `building_key`, `phonetic_key`, registered-agent hub detection, and `c/o` Care-Of extraction.
-- **Request body**: `AddressStandardizeRequest` (`street1: string = ""`, `street2: string | null = None`, `city: string | null = None`, `state: string | null = None`, `postal_code: string | null = None`, `country: string | null = None`)
+Standardizes a US or international physical address to USPS Pub 28 / UPU S42 format with `normalized_address_key`, `building_key`, `phonetic_key`, registered-agent hub detection, `c/o` Care-Of extraction, optional offline geocoding (`enable_geocoding`), and optional field-level confidence & explanation (`explain`).
+- **Request body**: `AddressStandardizeRequest` (`street1: string | null = None`, `street2: string | null = None`, `city: string | null = None`, `state: string | null = None`, `postal_code: string | null = None`, `country: string = "US"`, `enable_geocoding: bool = False`, `explain: bool = False`)
 - **Response (`200 OK`)**: `StandardizedAddress` dictionary.
+
+#### `POST /v1/address/compare`
+Compares two physical/mailing addresses across exact `normalized_address_key`, `building_key`, phonetic address key, and fuzzy street similarity.
+- **Request body**: `AddressCompareRequest` (`address_a: string | dict`, `address_b: string | dict`, `country: string = "US"`, `fuzzy_threshold: float = 0.85`)
+- **Response (`200 OK`)**: `AddressComparisonResult` (`is_match`, `score`, `match_type`, `address_a`, `address_b`).
+
+#### `POST /v1/address/deduplicate`
+Clusters and deduplicates a list of physical addresses into Golden Address Records.
+- **Request body**: `AddressDeduplicateRequest` (`addresses: list[string | dict]`, `country: string = "US"`, `fuzzy_threshold: float = 0.85`)
+- **Response (`200 OK`)**: `{"cluster_count": int, "clusters": list[AddressCluster]}`.
+
+#### `POST /v1/address/autocomplete`
+Suggests canonical address completions for a partial street address prefix.
+- **Request body**: `AddressAutocompleteRequest` (`prefix: string`, `city: string | null = None`, `state: string | null = None`, `postal_code: string | null = None`, `max_results: int = 5`)
+- **Response (`200 OK`)**: `{"count": int, "suggestions": list[AutocompleteSuggestion]}`.
 
 ---
 
@@ -129,7 +174,7 @@ Returns a comprehensive diagnostic report for a phone number (`record: Standardi
 
 #### `POST /v1/compare`
 Compares two phone numbers (`phone_a`, `phone_b`) using E.164 equivalence, extension-variant detection, Damerau-Levenshtein transposition analysis, and ITU E.161 keypad-adjacency similarity.
-- **Request body**: `PhoneCompareRequest` (`phone_a: string`, `phone_b: string`, `country: string | null = None`, `fuzzy_threshold: float = 0.85`)
+- **Request body**: `PhoneCompareRequest` (`phone_a: string`, `phone_b: string`, `country: string | null = None`, `fuzzy_threshold: float = 0.88`)
 - **Response (`200 OK`)**: `PhoneComparisonResult` (`phone_a`, `phone_b`, `is_exact_match`, `is_extension_variant`, `is_fuzzy_match`, `similarity_score`, `match_type`, `edit_distance`, `transposition_detected`, `keypad_adjacent_typo`, `explanation`).
 
 #### `POST /v1/deduplicate`

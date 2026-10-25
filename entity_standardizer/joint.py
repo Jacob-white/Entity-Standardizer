@@ -21,6 +21,7 @@ from entity_standardizer.person import (
     StandardizedJobTitle,
     StandardizedPerson,
     compare_persons,
+    split_compound_persons,
     standardize_job_title,
     standardize_person,
 )
@@ -105,6 +106,7 @@ class CrossHealingAction(StrEnum):
     EMAIL_WEBSITE_DOMAIN_MISMATCH = "EMAIL_WEBSITE_DOMAIN_MISMATCH"
     COUNTRY_INFERRED_FROM_ENTITY_PILLARS = "COUNTRY_INFERRED_FROM_ENTITY_PILLARS"
     ORGANIZATION_RESCUED_FROM_PERSON_FIELD = "ORGANIZATION_RESCUED_FROM_PERSON_FIELD"
+    COMPOUND_PERSON_SPLIT = "COMPOUND_PERSON_SPLIT"
 
 
 @dataclass(slots=True)
@@ -116,6 +118,7 @@ class StandardizedContact:
     fax: StandardizedPhone | None = None
     organization: StandardizedCompany | None = None
     person: StandardizedPerson | None = None
+    additional_persons: tuple[StandardizedPerson, ...] = ()
     job_title: StandardizedJobTitle | None = None
     email: StandardizedEmail | None = None
     website: StandardizedUrl | None = None
@@ -137,6 +140,7 @@ class StandardizedContact:
             "fax": self.fax.to_dict() if self.fax is not None else None,
             "organization": self.organization.to_dict() if self.organization is not None else None,
             "person": self.person.to_dict() if self.person is not None else None,
+            "additional_persons": [p.to_dict() for p in self.additional_persons],
             "job_title": self.job_title.to_dict() if self.job_title is not None else None,
             "email": self.email.to_dict() if self.email is not None else None,
             "website": self.website.to_dict() if self.website is not None else None,
@@ -343,15 +347,22 @@ def standardize_contact(
             org_res = cand_org
 
     person_res: StandardizedPerson | None = None
+    additional_persons: tuple[StandardizedPerson, ...] = ()
     if eff_person is not None and str(eff_person).strip():
-        cand_per = standardize_person(eff_person)
-        if cand_per.is_valid:
-            person_res = cand_per
-        elif cand_per.is_organization and org_res is None:
-            org_res = standardize_company(eff_person, country=country)
-            cross_actions.append(
-                CrossHealingAction.ORGANIZATION_RESCUED_FROM_PERSON_FIELD.value
-            )
+        split_pers = split_compound_persons(eff_person)
+        if len(split_pers) > 1 and split_pers[0].is_valid:
+            person_res = split_pers[0]
+            additional_persons = tuple(split_pers[1:])
+            cross_actions.append(CrossHealingAction.COMPOUND_PERSON_SPLIT.value)
+        else:
+            cand_per = split_pers[0]
+            if cand_per.is_valid:
+                person_res = cand_per
+            elif cand_per.is_organization and org_res is None:
+                org_res = standardize_company(eff_person, country=country)
+                cross_actions.append(
+                    CrossHealingAction.ORGANIZATION_RESCUED_FROM_PERSON_FIELD.value
+                )
 
     title_res: StandardizedJobTitle | None = None
     if eff_title is not None and str(eff_title).strip():
@@ -792,6 +803,7 @@ def standardize_contact(
         fax=fax_res,
         organization=org_res,
         person=person_res,
+        additional_persons=additional_persons,
         job_title=title_res,
         email=email_res,
         website=website_res,
@@ -900,17 +912,15 @@ def compare_contacts(
         if org_cmp.is_match:
             matched_pillars.append("organization")
 
-    if (
-        ca.person is not None
-        and cb.person is not None
-        and ca.person.is_valid
-        and cb.person.is_valid
-    ):
-        per_cmp = compare_persons(ca.person, cb.person)
+    persons_a = [p for p in (ca.person, *ca.additional_persons) if p is not None and p.is_valid]
+    persons_b = [p for p in (cb.person, *cb.additional_persons) if p is not None and p.is_valid]
+    if persons_a and persons_b:
+        per_cmps = [compare_persons(pa, pb) for pa in persons_a for pb in persons_b]
+        per_cmp = max(per_cmps, key=lambda c: (1 if c.is_match else 0, c.score))
         pillar_scores["person"] = per_cmp.score
         if per_cmp.is_match:
             matched_pillars.append("person")
-        elif per_cmp.match_type == "GENERATIONAL_SUFFIX_CONFLICT":
+        elif any(c.match_type == "GENERATIONAL_SUFFIX_CONFLICT" for c in per_cmps):
             person_conflict = True
 
     if ca.phone.is_valid and cb.phone.is_valid:

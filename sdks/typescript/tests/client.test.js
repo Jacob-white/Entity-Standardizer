@@ -387,6 +387,124 @@ test("PhoneStandardizerClient and PhoneInputController interact with API", async
         }),
       };
     }
+    if (u.endsWith("/ready")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ status: "ready", version: "2.1.0", native_available: true }),
+      };
+    }
+    if (u.endsWith("/v1/address/compare")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          is_match: true,
+          score: 1.0,
+          match_type: "EXACT_ADDRESS_KEY",
+        }),
+      };
+    }
+    if (u.endsWith("/v1/address/deduplicate")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          cluster_count: 1,
+          clusters: [{ cluster_id: 1, confidence: 0.99 }],
+        }),
+      };
+    }
+    if (u.endsWith("/v1/address/autocomplete")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          count: 1,
+          suggestions: [
+            {
+              text: "1600 PENNSYLVANIA AVE NW, WASHINGTON, DC 20500",
+              street1: "1600 PENNSYLVANIA AVE NW",
+              street2: "",
+              city: "WASHINGTON",
+              state: "DC",
+              postal_code: "20500",
+              country: "USA",
+              secondary_prompt_required: false,
+              suggested_secondary_units: [],
+              highlight_ranges: [],
+              score: 0.99,
+              prompt_message: null,
+              latitude: null,
+              longitude: null,
+              distance_meters: null,
+            },
+          ],
+        }),
+      };
+    }
+    if (u.endsWith("/v1/company/deduplicate")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          cluster_count: 1,
+          clusters: [{ cluster_id: "COMPANY-CLUSTER-0001" }],
+        }),
+      };
+    }
+    if (u.endsWith("/v1/person/deduplicate")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          cluster_count: 1,
+          clusters: [{ cluster_id: "PERSON-CLUSTER-0001" }],
+        }),
+      };
+    }
+    if (u.endsWith("/v1/email/compare")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          is_match: true,
+          score: 1.0,
+          match_type: "EXACT_EMAIL_KEY",
+        }),
+      };
+    }
+    if (u.endsWith("/v1/url/compare")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          is_match: true,
+          score: 1.0,
+          match_type: "EXACT_URL_KEY",
+        }),
+      };
+    }
+    if (u.endsWith("/v1/contact/cluster")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          cluster_count: 1,
+          clusters: [{ cluster_id: "CONTACT-CLUSTER-0001" }],
+        }),
+      };
+    }
+    if (u.endsWith("/v1/contact/batch")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          count: 1,
+          results: [{ overall_confidence: 0.97, additional_persons: [] }],
+        }),
+      };
+    }
     if (u.endsWith("/v1/contact/compare")) {
       return {
         ok: true,
@@ -412,6 +530,10 @@ test("PhoneStandardizerClient and PhoneInputController interact with API", async
   const health = await client.health();
   assert.equal(health.status, "ok");
   assert.equal(health.version, "2.1.0");
+
+  const ready = await client.ready();
+  assert.equal(ready.status, "ready");
+  assert.equal(ready.native_available, true);
 
   const country = await client.getCountry("US");
   assert.equal(country.calling_code, "1");
@@ -448,6 +570,22 @@ test("PhoneStandardizerClient and PhoneInputController interact with API", async
   assert.equal(addr.street1, "350 5TH AVE");
   assert.equal(addr.is_us, true);
 
+  const addrCmp = await client.compareAddresses({
+    address_a: "350 Fifth Ave, New York, NY 10118",
+    address_b: "350 5th Ave, New York, NY 10118",
+  });
+  assert.equal(addrCmp.is_match, true);
+  assert.equal(addrCmp.match_type, "EXACT_ADDRESS_KEY");
+
+  const addrDedup = await client.deduplicateAddresses({
+    addresses: ["350 Fifth Ave, New York, NY 10118", "350 5th Ave, New York, NY 10118"],
+  });
+  assert.equal(addrDedup.cluster_count, 1);
+
+  const autoRes = await client.autocompleteAddress({ prefix: "1600 Penn" });
+  assert.equal(autoRes.count, 1);
+  assert.equal(autoRes.suggestions[0].street1, "1600 PENNSYLVANIA AVE NW");
+
   const comp = await client.standardizeCompany({ name: "Acme Holdings, Inc." });
   assert.equal(comp.legal_suffix, "INC");
   assert.equal(comp.brand_stem, "ACME");
@@ -459,6 +597,11 @@ test("PhoneStandardizerClient and PhoneInputController interact with API", async
   assert.equal(compCmp.is_match, true);
   assert.equal(compCmp.match_type, "EXACT_COMPANY_KEY");
 
+  const compDedup = await client.deduplicateCompanies({
+    companies: ["Acme Holdings, Inc.", "ACME HOLDINGS INC"],
+  });
+  assert.equal(compDedup.cluster_count, 1);
+
   const person = await client.standardizePerson({ name: "Dr. Bob Smith, PhD" });
   assert.equal(person.root_first_name, "ROBERT");
 
@@ -469,6 +612,11 @@ test("PhoneStandardizerClient and PhoneInputController interact with API", async
   assert.equal(personCmp.is_match, true);
   assert.equal(personCmp.match_type, "ROOT_NAME_MATCH");
 
+  const personDedup = await client.deduplicatePersons({
+    persons: ["Dr. Bob Smith", "Robert Smith"],
+  });
+  assert.equal(personDedup.cluster_count, 1);
+
   const titleRes = await client.standardizeJobTitle({ title: "CCO" });
   assert.equal(titleRes.normalized_title, "CHIEF COMPLIANCE OFFICER");
   assert.equal(titleRes.is_executive, true);
@@ -476,8 +624,20 @@ test("PhoneStandardizerClient and PhoneInputController interact with API", async
   const email = await client.standardizeEmail({ email: "jane.doe+work@gmail.com" });
   assert.equal(email.email, "janedoe@gmail.com");
 
+  const emailCmp = await client.compareEmails({
+    email_a: "jane.doe+work@gmail.com",
+    email_b: "janedoe@gmail.com",
+  });
+  assert.equal(emailCmp.is_match, true);
+
   const urlRes = await client.standardizeUrl({ url: "http://www.acme.co.uk/?utm_source=x" });
   assert.equal(urlRes.domain, "acme.co.uk");
+
+  const urlCmp = await client.compareUrls({
+    url_a: "http://www.acme.co.uk/?utm_source=x",
+    url_b: "https://acme.co.uk",
+  });
+  assert.equal(urlCmp.is_match, true);
 
   const socRes = await client.standardizeSocial({ profile: "https://twitter.com/openai" });
   assert.equal(socRes.platform, "X");
@@ -502,12 +662,38 @@ test("PhoneStandardizerClient and PhoneInputController interact with API", async
   assert.equal(contactCmp.is_match, true);
   assert.equal(contactCmp.match_type, "MULTI_PILLAR_MATCH");
 
+  const contactClust = await client.clusterContacts({
+    records: [{ phone: "+12125552368" }, { phone: "212-555-2368" }],
+  });
+  assert.equal(contactClust.cluster_count, 1);
+
+  const contactBatch = await client.batchStandardizeContacts({
+    contacts: [{ street1: "350 Fifth Ave", postal_code: "10118", phone: "555-2368" }],
+  });
+  assert.equal(contactBatch.count, 1);
+
   const failingClient = new PhoneStandardizerClient({
     fetchImpl: async () => ({ ok: false, status: 500, json: async () => ({}) }),
   });
   await assert.rejects(
+    () => failingClient.ready(),
+    /Ready check failed with status 500/
+  );
+  await assert.rejects(
     () => failingClient.standardizeAddress({ street1: "350 Fifth Ave" }),
     /Standardize address failed with status 500/
+  );
+  await assert.rejects(
+    () => failingClient.compareAddresses({ address_a: "a", address_b: "b" }),
+    /Compare addresses failed with status 500/
+  );
+  await assert.rejects(
+    () => failingClient.deduplicateAddresses({ addresses: ["a"] }),
+    /Deduplicate addresses failed with status 500/
+  );
+  await assert.rejects(
+    () => failingClient.autocompleteAddress({ prefix: "1600" }),
+    /Autocomplete address failed with status 500/
   );
   await assert.rejects(
     () => failingClient.standardizeCompany({ name: "Acme" }),
@@ -518,12 +704,20 @@ test("PhoneStandardizerClient and PhoneInputController interact with API", async
     /Compare companies failed with status 500/
   );
   await assert.rejects(
+    () => failingClient.deduplicateCompanies({ companies: ["Acme"] }),
+    /Deduplicate companies failed with status 500/
+  );
+  await assert.rejects(
     () => failingClient.standardizePerson({ name: "Jane Doe" }),
     /Standardize person failed with status 500/
   );
   await assert.rejects(
     () => failingClient.comparePersons({ person_a: "Jane Doe", person_b: "John Doe" }),
     /Compare persons failed with status 500/
+  );
+  await assert.rejects(
+    () => failingClient.deduplicatePersons({ persons: ["Jane Doe"] }),
+    /Deduplicate persons failed with status 500/
   );
   await assert.rejects(
     () => failingClient.standardizeJobTitle({ title: "CCO" }),
@@ -534,8 +728,16 @@ test("PhoneStandardizerClient and PhoneInputController interact with API", async
     /Standardize email failed with status 500/
   );
   await assert.rejects(
+    () => failingClient.compareEmails({ email_a: "a@b.com", email_b: "c@d.com" }),
+    /Compare emails failed with status 500/
+  );
+  await assert.rejects(
     () => failingClient.standardizeUrl({ url: "https://acme.com" }),
     /Standardize url failed with status 500/
+  );
+  await assert.rejects(
+    () => failingClient.compareUrls({ url_a: "https://a.com", url_b: "https://b.com" }),
+    /Compare urls failed with status 500/
   );
   await assert.rejects(
     () => failingClient.standardizeSocial({ profile: "@acme" }),
@@ -548,6 +750,14 @@ test("PhoneStandardizerClient and PhoneInputController interact with API", async
   await assert.rejects(
     () => failingClient.compareContacts({ contact_a: {}, contact_b: {} }),
     /Compare contacts failed with status 500/
+  );
+  await assert.rejects(
+    () => failingClient.clusterContacts({ records: [] }),
+    /Cluster contacts failed with status 500/
+  );
+  await assert.rejects(
+    () => failingClient.batchStandardizeContacts({ contacts: [] }),
+    /Batch standardize contacts failed with status 500/
   );
 
   let callbackRecord = null;

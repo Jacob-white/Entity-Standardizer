@@ -27,6 +27,15 @@ public class EntityStandardizerClient
         return JsonSerializer.Deserialize<HealthResponse>(body);
     }
 
+    public async Task<ReadyResponse?> ReadyAsync(
+        CancellationToken cancellationToken = default)
+    {
+        using var resp = await _http.GetAsync($"{_baseUrl}/ready", cancellationToken).ConfigureAwait(false);
+        resp.EnsureSuccessStatusCode();
+        var body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+        return JsonSerializer.Deserialize<ReadyResponse>(body);
+    }
+
     public async Task<StandardizedPhone?> StandardizeAsync(
         PhoneStandardizeRequest request,
         CancellationToken cancellationToken = default)
@@ -89,6 +98,27 @@ public class EntityStandardizerClient
         return await PostJsonAsync<AddressStandardizeRequest, StandardizedAddress>("/v1/address", request, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<AddressComparisonResult?> CompareAddressesAsync(
+        AddressCompareRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        return await PostJsonAsync<AddressCompareRequest, AddressComparisonResult>("/v1/address/compare", request, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<AddressDeduplicateResponse?> DeduplicateAddressesAsync(
+        AddressDeduplicateRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        return await PostJsonAsync<AddressDeduplicateRequest, AddressDeduplicateResponse>("/v1/address/deduplicate", request, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<AddressAutocompleteResponse?> AutocompleteAddressAsync(
+        AddressAutocompleteRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        return await PostJsonAsync<AddressAutocompleteRequest, AddressAutocompleteResponse>("/v1/address/autocomplete", request, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<StandardizedCompany?> StandardizeCompanyAsync(
         CompanyStandardizeRequest request,
         CancellationToken cancellationToken = default)
@@ -101,6 +131,13 @@ public class EntityStandardizerClient
         CancellationToken cancellationToken = default)
     {
         return await PostJsonAsync<CompanyCompareRequest, CompanyComparisonResult>("/v1/company/compare", request, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<CompanyDeduplicateResponse?> DeduplicateCompaniesAsync(
+        CompanyDeduplicateRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        return await PostJsonAsync<CompanyDeduplicateRequest, CompanyDeduplicateResponse>("/v1/company/deduplicate", request, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<StandardizedPerson?> StandardizePersonAsync(
@@ -117,6 +154,13 @@ public class EntityStandardizerClient
         return await PostJsonAsync<PersonCompareRequest, PersonComparisonResult>("/v1/person/compare", request, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<PersonDeduplicateResponse?> DeduplicatePersonsAsync(
+        PersonDeduplicateRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        return await PostJsonAsync<PersonDeduplicateRequest, PersonDeduplicateResponse>("/v1/person/deduplicate", request, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<StandardizedJobTitle?> StandardizeJobTitleAsync(
         JobTitleStandardizeRequest request,
         CancellationToken cancellationToken = default)
@@ -131,11 +175,25 @@ public class EntityStandardizerClient
         return await PostJsonAsync<EmailStandardizeRequest, StandardizedEmail>("/v1/email", request, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<EmailComparisonResult?> CompareEmailsAsync(
+        EmailCompareRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        return await PostJsonAsync<EmailCompareRequest, EmailComparisonResult>("/v1/email/compare", request, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<StandardizedUrl?> StandardizeUrlAsync(
         UrlStandardizeRequest request,
         CancellationToken cancellationToken = default)
     {
         return await PostJsonAsync<UrlStandardizeRequest, StandardizedUrl>("/v1/url", request, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<UrlComparisonResult?> CompareUrlsAsync(
+        UrlCompareRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        return await PostJsonAsync<UrlCompareRequest, UrlComparisonResult>("/v1/url/compare", request, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<StandardizedSocial?> StandardizeSocialAsync(
@@ -157,6 +215,20 @@ public class EntityStandardizerClient
         CancellationToken cancellationToken = default)
     {
         return await PostJsonAsync<ContactCompareRequest, ContactComparisonResult>("/v1/contact/compare", request, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<ContactClusterResponse?> ClusterContactsAsync(
+        ContactClusterRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        return await PostJsonAsync<ContactClusterRequest, ContactClusterResponse>("/v1/contact/cluster", request, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<ContactBatchResponse?> BatchStandardizeContactsAsync(
+        ContactBatchRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        return await PostJsonAsync<ContactBatchRequest, ContactBatchResponse>("/v1/contact/batch", request, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<TResponse?> PostJsonAsync<TRequest, TResponse>(

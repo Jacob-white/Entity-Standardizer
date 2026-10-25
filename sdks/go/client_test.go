@@ -19,6 +19,9 @@ func TestClientStandardizeAndBatch(t *testing.T) {
 		case "/health":
 			_ = json.NewEncoder(w).Encode(HealthResponse{Status: "ok", Version: "2.1.0"})
 			return
+		case "/ready":
+			_ = json.NewEncoder(w).Encode(ReadyResponse{Status: "ready", Version: "2.1.0", NativeAvailable: true})
+			return
 		case "/v1/standardize":
 			_ = json.NewEncoder(w).Encode(StandardizedPhone{
 				RawInput:    "(415) 555-2671",
@@ -99,6 +102,25 @@ func TestClientStandardizeAndBatch(t *testing.T) {
 				IsUS:                 true,
 			})
 			return
+		case "/v1/address/compare":
+			_ = json.NewEncoder(w).Encode(AddressComparisonResult{
+				IsMatch:   true,
+				Score:     1.0,
+				MatchType: "EXACT_ADDRESS_KEY",
+			})
+			return
+		case "/v1/address/deduplicate":
+			_ = json.NewEncoder(w).Encode(AddressDeduplicateResponse{
+				ClusterCount: 1,
+				Clusters:     []AddressCluster{{ClusterID: 1, Confidence: 0.99}},
+			})
+			return
+		case "/v1/address/autocomplete":
+			_ = json.NewEncoder(w).Encode(AddressAutocompleteResponse{
+				Count:       1,
+				Suggestions: []AutocompleteSuggestion{{Street1: "1600 PENNSYLVANIA AVE NW", Score: 0.99}},
+			})
+			return
 		case "/v1/company":
 			_ = json.NewEncoder(w).Encode(StandardizedCompany{
 				RawInput:    "Acme Holdings, Inc.",
@@ -117,6 +139,12 @@ func TestClientStandardizeAndBatch(t *testing.T) {
 				MatchType: "EXACT_COMPANY_KEY",
 				CompanyA:  StandardizedCompany{LegalName: strPtr("ACME HOLDINGS INC"), IsValid: true},
 				CompanyB:  StandardizedCompany{LegalName: strPtr("ACME HOLDINGS INC"), IsValid: true},
+			})
+			return
+		case "/v1/company/deduplicate":
+			_ = json.NewEncoder(w).Encode(CompanyDeduplicateResponse{
+				ClusterCount: 1,
+				Clusters:     []CompanyCluster{{ClusterID: "COMPANY-CLUSTER-0001"}},
 			})
 			return
 		case "/v1/person":
@@ -139,6 +167,12 @@ func TestClientStandardizeAndBatch(t *testing.T) {
 				PersonB:   StandardizedPerson{RootFirstName: strPtr("ROBERT"), LastName: strPtr("SMITH"), IsValid: true},
 			})
 			return
+		case "/v1/person/deduplicate":
+			_ = json.NewEncoder(w).Encode(PersonDeduplicateResponse{
+				ClusterCount: 1,
+				Clusters:     []PersonCluster{{ClusterID: "PERSON-CLUSTER-0001"}},
+			})
+			return
 		case "/v1/job-title":
 			_ = json.NewEncoder(w).Encode(StandardizedJobTitle{
 				RawInput:        "CCO",
@@ -159,6 +193,13 @@ func TestClientStandardizeAndBatch(t *testing.T) {
 				IsValid:   true,
 			})
 			return
+		case "/v1/email/compare":
+			_ = json.NewEncoder(w).Encode(EmailComparisonResult{
+				IsMatch:   true,
+				Score:     1.0,
+				MatchType: "EXACT_EMAIL_KEY",
+			})
+			return
 		case "/v1/url":
 			_ = json.NewEncoder(w).Encode(StandardizedUrl{
 				RawInput:  "https://www.acme.com",
@@ -166,6 +207,13 @@ func TestClientStandardizeAndBatch(t *testing.T) {
 				Domain:    strPtr("acme.com"),
 				BrandStem: strPtr("ACME"),
 				IsValid:   true,
+			})
+			return
+		case "/v1/url/compare":
+			_ = json.NewEncoder(w).Encode(UrlComparisonResult{
+				IsMatch:   true,
+				Score:     1.0,
+				MatchType: "EXACT_URL_KEY",
 			})
 			return
 		case "/v1/social":
@@ -207,6 +255,18 @@ func TestClientStandardizeAndBatch(t *testing.T) {
 				PillarScores:   map[string]float64{"organization": 1.0, "phone": 1.0},
 			})
 			return
+		case "/v1/contact/cluster":
+			_ = json.NewEncoder(w).Encode(ContactClusterResponse{
+				ClusterCount: 1,
+				Clusters:     []ContactCluster{{ClusterID: "CONTACT-CLUSTER-0001"}},
+			})
+			return
+		case "/v1/contact/batch":
+			_ = json.NewEncoder(w).Encode(ContactBatchResponse{
+				Count:   1,
+				Results: []StandardizedContact{{OverallConfidence: 0.97}},
+			})
+			return
 		}
 		w.WriteHeader(http.StatusNotFound)
 	}))
@@ -216,6 +276,10 @@ func TestClientStandardizeAndBatch(t *testing.T) {
 	health, err := client.Health(context.Background())
 	if err != nil || health.Status != "ok" || health.Version != "2.1.0" {
 		t.Fatalf("unexpected health response: %+v, err=%v", health, err)
+	}
+	ready, err := client.Ready(context.Background())
+	if err != nil || ready.Status != "ready" || !ready.NativeAvailable {
+		t.Fatalf("unexpected ready response: %+v, err=%v", ready, err)
 	}
 	res, err := client.Standardize(context.Background(), PhoneStandardizeRequest{
 		Phone: "(415) 555-2671",
@@ -277,6 +341,28 @@ func TestClientStandardizeAndBatch(t *testing.T) {
 		t.Fatalf("unexpected address result: %+v, err=%v", addrRes, err)
 	}
 
+	addrCmpRes, err := client.CompareAddresses(context.Background(), AddressCompareRequest{
+		AddressA: "350 Fifth Ave, New York, NY 10118",
+		AddressB: "350 5th Ave, New York, NY 10118",
+	})
+	if err != nil || !addrCmpRes.IsMatch || addrCmpRes.MatchType != "EXACT_ADDRESS_KEY" {
+		t.Fatalf("unexpected compare addresses result: %+v, err=%v", addrCmpRes, err)
+	}
+
+	addrDedupRes, err := client.DeduplicateAddresses(context.Background(), AddressDeduplicateRequest{
+		Addresses: []any{"350 Fifth Ave, New York, NY 10118"},
+	})
+	if err != nil || addrDedupRes.ClusterCount != 1 {
+		t.Fatalf("unexpected deduplicate addresses result: %+v, err=%v", addrDedupRes, err)
+	}
+
+	autoRes, err := client.AutocompleteAddress(context.Background(), AddressAutocompleteRequest{
+		Prefix: "1600 Penn",
+	})
+	if err != nil || autoRes.Count != 1 {
+		t.Fatalf("unexpected autocomplete address result: %+v, err=%v", autoRes, err)
+	}
+
 	compRes, err := client.StandardizeCompany(context.Background(), CompanyStandardizeRequest{
 		Name: "Acme Holdings, Inc.",
 	})
@@ -290,6 +376,13 @@ func TestClientStandardizeAndBatch(t *testing.T) {
 	})
 	if err != nil || !compCmpRes.IsMatch || compCmpRes.MatchType != "EXACT_COMPANY_KEY" {
 		t.Fatalf("unexpected compare companies result: %+v, err=%v", compCmpRes, err)
+	}
+
+	compDedupRes, err := client.DeduplicateCompanies(context.Background(), CompanyDeduplicateRequest{
+		Companies: []string{"Acme Holdings, Inc."},
+	})
+	if err != nil || compDedupRes.ClusterCount != 1 {
+		t.Fatalf("unexpected deduplicate companies result: %+v, err=%v", compDedupRes, err)
 	}
 
 	perRes, err := client.StandardizePerson(context.Background(), PersonStandardizeRequest{
@@ -307,6 +400,13 @@ func TestClientStandardizeAndBatch(t *testing.T) {
 		t.Fatalf("unexpected compare persons result: %+v, err=%v", perCmpRes, err)
 	}
 
+	perDedupRes, err := client.DeduplicatePersons(context.Background(), PersonDeduplicateRequest{
+		Persons: []string{"Dr. Bob Smith"},
+	})
+	if err != nil || perDedupRes.ClusterCount != 1 {
+		t.Fatalf("unexpected deduplicate persons result: %+v, err=%v", perDedupRes, err)
+	}
+
 	titleRes, err := client.StandardizeJobTitle(context.Background(), JobTitleStandardizeRequest{
 		Title: "CCO",
 	})
@@ -321,11 +421,27 @@ func TestClientStandardizeAndBatch(t *testing.T) {
 		t.Fatalf("unexpected email result: %+v, err=%v", emailRes, err)
 	}
 
+	emailCmpRes, err := client.CompareEmails(context.Background(), EmailCompareRequest{
+		EmailA: "jane.doe+work@gmail.com",
+		EmailB: "janedoe@gmail.com",
+	})
+	if err != nil || !emailCmpRes.IsMatch {
+		t.Fatalf("unexpected compare emails result: %+v, err=%v", emailCmpRes, err)
+	}
+
 	urlRes, err := client.StandardizeUrl(context.Background(), UrlStandardizeRequest{
 		URL: "https://www.acme.com",
 	})
 	if err != nil || urlRes.Domain == nil || *urlRes.Domain != "acme.com" {
 		t.Fatalf("unexpected url result: %+v, err=%v", urlRes, err)
+	}
+
+	urlCmpRes, err := client.CompareUrls(context.Background(), UrlCompareRequest{
+		URLA: "https://www.acme.com",
+		URLB: "https://acme.com",
+	})
+	if err != nil || !urlCmpRes.IsMatch {
+		t.Fatalf("unexpected compare urls result: %+v, err=%v", urlCmpRes, err)
 	}
 
 	socRes, err := client.StandardizeSocial(context.Background(), SocialStandardizeRequest{
@@ -351,5 +467,19 @@ func TestClientStandardizeAndBatch(t *testing.T) {
 	})
 	if err != nil || !contactCmpRes.IsMatch || contactCmpRes.MatchType != "MULTI_PILLAR_MATCH" {
 		t.Fatalf("unexpected compare contacts result: %+v, err=%v", contactCmpRes, err)
+	}
+
+	contactClusterRes, err := client.ClusterContacts(context.Background(), ContactClusterRequest{
+		Records: []map[string]any{{"phone": "+12125552368"}},
+	})
+	if err != nil || contactClusterRes.ClusterCount != 1 {
+		t.Fatalf("unexpected cluster contacts result: %+v, err=%v", contactClusterRes, err)
+	}
+
+	contactBatchRes, err := client.BatchStandardizeContacts(context.Background(), ContactBatchRequest{
+		Contacts: []map[string]any{{"street1": "350 Fifth Ave", "postal_code": "10118", "phone": "555-2368"}},
+	})
+	if err != nil || contactBatchRes.Count != 1 {
+		t.Fatalf("unexpected batch standardize contacts result: %+v, err=%v", contactBatchRes, err)
 	}
 }

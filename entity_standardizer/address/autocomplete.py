@@ -87,6 +87,9 @@ class AutocompleteSuggestion:
             "distance_meters": self.distance_meters,
         }
 
+    def to_dict(self) -> Dict[str, Any]:
+        return self.as_dict()
+
 
 # Seed records of prominent multi-unit and commercial buildings for typeahead
 SEED_AUTOCOMPLETE_RECORDS: List[Dict[str, Any]] = [
@@ -573,7 +576,7 @@ _DEFAULT_AUTOCOMPLETE_ENGINE = AutocompleteEngine(seed=True)
 
 
 def autocomplete_address(
-    query: str,
+    query: Optional[str] = None,
     max_results: int = 5,
     state_filter: Optional[str] = None,
     client_lat: Optional[float] = None,
@@ -584,16 +587,27 @@ def autocomplete_address(
     radius_miles: Optional[float] = None,
     typo_tolerance: bool = True,
     engine: Optional[AutocompleteEngine] = None,
+    *,
+    prefix: Optional[str] = None,
+    city: Optional[str] = None,
+    state: Optional[str] = None,
+    postal_code: Optional[str] = None,
 ) -> List[AutocompleteSuggestion]:
     """
     Public functional interface for address typeahead autocomplete with
     typo tolerance, geographic radius biasing, and secondary unit prompting.
     """
     active_engine = engine or _DEFAULT_AUTOCOMPLETE_ENGINE
+    eff_query = query if query is not None else (prefix or "")
+    if eff_query.strip():
+        extra_parts = [p.strip() for p in (city, postal_code) if p and p.strip()]
+        if extra_parts:
+            eff_query = f"{eff_query} {' '.join(extra_parts)}"
+    eff_state = state_filter if state_filter is not None else state
     return active_engine.search(
-        query=query,
+        query=eff_query,
         max_results=max_results,
-        state_filter=state_filter,
+        state_filter=eff_state,
         client_lat=client_lat,
         client_lon=client_lon,
         radius_km=radius_km,

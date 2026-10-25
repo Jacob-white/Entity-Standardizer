@@ -9,18 +9,40 @@ from fastapi import Depends, FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from entity_standardizer._native_dispatch import is_native_available
+from entity_standardizer.address.autocomplete import autocomplete_address
 from entity_standardizer.address.standardizer import standardize_address
-from entity_standardizer.company import compare_companies, standardize_company
+from entity_standardizer.company import (
+    compare_companies,
+    deduplicate_companies,
+    standardize_company,
+)
 from entity_standardizer.person import (
     compare_persons,
+    deduplicate_persons,
     standardize_job_title,
     standardize_person,
 )
-from entity_standardizer.web import standardize_email, standardize_social, standardize_url
+from entity_standardizer.web import (
+    compare_emails,
+    compare_urls,
+    standardize_email,
+    standardize_social,
+    standardize_url,
+)
 from entity_standardizer.audit import explain_phone
 from entity_standardizer.batch import batch_standardize_phones
-from entity_standardizer.dedup import compare_phones, deduplicate_phones
-from entity_standardizer.joint import compare_contacts, standardize_contact
+from entity_standardizer.dedup import (
+    cluster_contact_records,
+    compare_addresses,
+    compare_phones,
+    deduplicate_addresses,
+    deduplicate_phones,
+)
+from entity_standardizer.joint import (
+    batch_standardize_contacts,
+    compare_contacts,
+    standardize_contact,
+)
 from entity_standardizer.registry import CountryDialRegistry, get_dial_plan
 from entity_standardizer.standardizer import standardize_phone
 
@@ -66,6 +88,37 @@ class AddressStandardizeRequest(BaseModel):
     state: str | None = Field(default=None, description="State, province, or region.")
     postal_code: str | None = Field(default=None, description="ZIP or postal code.")
     country: str = Field(default="US", description="ISO country code or name.")
+    enable_geocoding: bool = Field(default=False, description="Enable offline spatial coordinate resolution.")
+    explain: bool = Field(default=False, description="Include standardization explanation and field confidence.")
+
+
+class AddressCompareRequest(BaseModel):
+    """Request payload for /v1/address/compare."""
+
+    address_a: str | dict[str, Any] = Field(..., description="First address string or dictionary.")
+    address_b: str | dict[str, Any] = Field(..., description="Second address string or dictionary.")
+    country: str = Field(default="US", description="ISO country code or name.")
+    fuzzy_threshold: float = Field(default=0.85, description="Fuzzy similarity threshold (0.0-1.0).")
+
+
+class AddressDeduplicateRequest(BaseModel):
+    """Request payload for /v1/address/deduplicate."""
+
+    addresses: list[str | dict[str, Any]] = Field(
+        ..., max_length=1000, description="List of raw address strings or dictionaries to cluster."
+    )
+    country: str = Field(default="US", description="ISO country code or name.")
+    fuzzy_threshold: float = Field(default=0.85, description="Fuzzy similarity threshold (0.0-1.0).")
+
+
+class AddressAutocompleteRequest(BaseModel):
+    """Request payload for /v1/address/autocomplete."""
+
+    prefix: str = Field(..., description="Partial street or address prefix string.")
+    city: str | None = Field(default=None, description="Optional city filter.")
+    state: str | None = Field(default=None, description="Optional state filter.")
+    postal_code: str | None = Field(default=None, description="Optional postal code filter.")
+    max_results: int = Field(default=5, ge=1, le=50, description="Maximum number of suggestions to return.")
 
 
 class CompanyStandardizeRequest(BaseModel):
@@ -94,11 +147,26 @@ class CompanyCompareRequest(BaseModel):
     company_b: str = Field(..., description="Second organization or company name.")
 
 
+class CompanyDeduplicateRequest(BaseModel):
+    """Request payload for /v1/company/deduplicate."""
+
+    companies: list[str] = Field(..., max_length=1000, description="List of raw company names to cluster.")
+    country: str | None = Field(default=None, description="Optional ISO country hint.")
+    fuzzy_threshold: float = Field(default=0.85, description="Fuzzy similarity threshold (0.0-1.0).")
+
+
 class PersonCompareRequest(BaseModel):
     """Request payload for /v1/person/compare."""
 
     person_a: str = Field(..., description="First person full name.")
     person_b: str = Field(..., description="Second person full name.")
+
+
+class PersonDeduplicateRequest(BaseModel):
+    """Request payload for /v1/person/deduplicate."""
+
+    persons: list[str] = Field(..., max_length=1000, description="List of raw person names to cluster.")
+    fuzzy_threshold: float = Field(default=0.85, description="Fuzzy similarity threshold (0.0-1.0).")
 
 
 class EmailStandardizeRequest(BaseModel):
@@ -107,10 +175,24 @@ class EmailStandardizeRequest(BaseModel):
     email: str = Field(..., description="Raw email address string.")
 
 
+class EmailCompareRequest(BaseModel):
+    """Request payload for /v1/email/compare."""
+
+    email_a: str = Field(..., description="First email address string.")
+    email_b: str = Field(..., description="Second email address string.")
+
+
 class UrlStandardizeRequest(BaseModel):
     """Request payload for /v1/url."""
 
     url: str = Field(..., description="Raw website URL string.")
+
+
+class UrlCompareRequest(BaseModel):
+    """Request payload for /v1/url/compare."""
+
+    url_a: str = Field(..., description="First website URL string.")
+    url_b: str = Field(..., description="Second website URL string.")
 
 
 class SocialStandardizeRequest(BaseModel):
@@ -147,6 +229,19 @@ class ContactCompareRequest(BaseModel):
     contact_b: dict[str, Any] = Field(..., description="Second raw contact/entity dictionary.")
     default_country: str = Field(default="US", description="Fallback ISO country code.")
 
+
+class ContactClusterRequest(BaseModel):
+    """Request payload for /v1/contact/cluster."""
+
+    records: list[dict[str, Any]] = Field(..., max_length=1000, description="List of raw contact dictionaries to cluster.")
+    default_country: str = Field(default="US", description="Fallback ISO country code.")
+
+
+class ContactBatchRequest(BaseModel):
+    """Request payload for /v1/contact/batch."""
+
+    contacts: list[dict[str, Any]] = Field(..., max_length=1000, description="List of raw contact dictionaries to standardize.")
+    default_country: str = Field(default="US", description="Fallback ISO country code.")
 
 
 def _verify_api_key(request: Request) -> None:
@@ -257,8 +352,45 @@ def create_app() -> FastAPI:
             postal_code=req.postal_code,
             country=req.country,
             allow_locality=True,
+            enable_geocoding=req.enable_geocoding,
+            explain=req.explain,
         )
         return res.to_dict()
+
+    @app.post("/v1/address/compare")
+    def address_compare_endpoint(req: AddressCompareRequest) -> dict[str, Any]:
+        return compare_addresses(
+            req.address_a,
+            req.address_b,
+            country=req.country,
+            fuzzy_threshold=req.fuzzy_threshold,
+        ).to_dict()
+
+    @app.post("/v1/address/deduplicate")
+    def address_deduplicate_endpoint(req: AddressDeduplicateRequest) -> dict[str, Any]:
+        clusters = deduplicate_addresses(
+            req.addresses,
+            country=req.country,
+            fuzzy_threshold=req.fuzzy_threshold,
+        )
+        return {
+            "cluster_count": len(clusters),
+            "clusters": [c.to_dict() for c in clusters],
+        }
+
+    @app.post("/v1/address/autocomplete")
+    def address_autocomplete_endpoint(req: AddressAutocompleteRequest) -> dict[str, Any]:
+        suggestions = autocomplete_address(
+            prefix=req.prefix,
+            city=req.city,
+            state=req.state,
+            postal_code=req.postal_code,
+            max_results=req.max_results,
+        )
+        return {
+            "count": len(suggestions),
+            "suggestions": [s.to_dict() for s in suggestions],
+        }
 
     @app.post("/v1/company")
     def company_endpoint(req: CompanyStandardizeRequest) -> dict[str, Any]:
@@ -268,6 +400,18 @@ def create_app() -> FastAPI:
     def company_compare_endpoint(req: CompanyCompareRequest) -> dict[str, Any]:
         return compare_companies(req.company_a, req.company_b).to_dict()
 
+    @app.post("/v1/company/deduplicate")
+    def company_deduplicate_endpoint(req: CompanyDeduplicateRequest) -> dict[str, Any]:
+        clusters = deduplicate_companies(
+            req.companies,
+            country=req.country,
+            fuzzy_threshold=req.fuzzy_threshold,
+        )
+        return {
+            "cluster_count": len(clusters),
+            "clusters": [c.to_dict() for c in clusters],
+        }
+
     @app.post("/v1/person")
     def person_endpoint(req: PersonStandardizeRequest) -> dict[str, Any]:
         return standardize_person(req.name).to_dict()
@@ -275,6 +419,17 @@ def create_app() -> FastAPI:
     @app.post("/v1/person/compare")
     def person_compare_endpoint(req: PersonCompareRequest) -> dict[str, Any]:
         return compare_persons(req.person_a, req.person_b).to_dict()
+
+    @app.post("/v1/person/deduplicate")
+    def person_deduplicate_endpoint(req: PersonDeduplicateRequest) -> dict[str, Any]:
+        clusters = deduplicate_persons(
+            req.persons,
+            fuzzy_threshold=req.fuzzy_threshold,
+        )
+        return {
+            "cluster_count": len(clusters),
+            "clusters": [c.to_dict() for c in clusters],
+        }
 
     @app.post("/v1/job-title")
     def job_title_endpoint(req: JobTitleStandardizeRequest) -> dict[str, Any]:
@@ -284,9 +439,17 @@ def create_app() -> FastAPI:
     def email_endpoint(req: EmailStandardizeRequest) -> dict[str, Any]:
         return standardize_email(req.email).to_dict()
 
+    @app.post("/v1/email/compare")
+    def email_compare_endpoint(req: EmailCompareRequest) -> dict[str, Any]:
+        return compare_emails(req.email_a, req.email_b).to_dict()
+
     @app.post("/v1/url")
     def url_endpoint(req: UrlStandardizeRequest) -> dict[str, Any]:
         return standardize_url(req.url).to_dict()
+
+    @app.post("/v1/url/compare")
+    def url_compare_endpoint(req: UrlCompareRequest) -> dict[str, Any]:
+        return compare_urls(req.url_a, req.url_b).to_dict()
 
     @app.post("/v1/social")
     def social_endpoint(req: SocialStandardizeRequest) -> dict[str, Any]:
@@ -320,6 +483,28 @@ def create_app() -> FastAPI:
             req.contact_b,
             default_country=req.default_country,
         ).to_dict()
+
+    @app.post("/v1/contact/cluster")
+    def contact_cluster_endpoint(req: ContactClusterRequest) -> dict[str, Any]:
+        clusters = cluster_contact_records(
+            req.records,
+            default_country=req.default_country,
+        )
+        return {
+            "cluster_count": len(clusters),
+            "clusters": [c.to_dict() for c in clusters],
+        }
+
+    @app.post("/v1/contact/batch")
+    def contact_batch_endpoint(req: ContactBatchRequest) -> dict[str, Any]:
+        results = batch_standardize_contacts(
+            req.contacts,
+            default_country=req.default_country,
+        )
+        return {
+            "count": len(results),
+            "results": [r.to_dict() for r in results],
+        }
 
     return app
 

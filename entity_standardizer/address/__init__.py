@@ -131,6 +131,12 @@ from entity_standardizer.address.standardizer import (
     standardize_address,
     validate_address,
 )
+from entity_standardizer.dedup import (
+    AddressCluster,
+    AddressComparisonResult,
+    compare_addresses,
+    deduplicate_addresses,
+)
 
 __all__ = [
     "AUDIT_LEDGER_DDL",
@@ -138,6 +144,8 @@ __all__ = [
     "PROTECTED_STREET_WORDS",
     "RDI",
     "ActionType",
+    "AddressCluster",
+    "AddressComparisonResult",
     "AddressValidationResult",
     "AutocompleteEngine",
     "AutocompleteSuggestion",
@@ -181,10 +189,12 @@ __all__ = [
     "chunk_generator",
     "clean_rooftop_address",
     "clear_cache",
+    "compare_addresses",
     "compute_confidence_score",
     "compute_soundex",
     "configure_cache",
     "damerau_levenshtein_distance",
+    "deduplicate_addresses",
     "evaluate_corporate_risk",
     "evaluate_delivery_intelligence",
     "extract_postal_code",

@@ -75,7 +75,14 @@ jobs:
         with:
           go-version: "1.21"
           cache: false
+      - name: Check pre-installed .NET 8 SDK
+        id: check-dotnet
+        run: |
+          if command -v dotnet >/dev/null 2>&1 && dotnet --list-sdks | grep -q "^8\.0\."; then
+            echo "installed=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        if: steps.check-dotnet.outputs.installed != 'true'
         with:
           dotnet-version: 8.0.x
       - name: TypeScript SDK

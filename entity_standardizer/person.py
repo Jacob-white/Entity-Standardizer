@@ -1137,10 +1137,12 @@ def deduplicate_persons(
     persons: Sequence[str | StandardizedPerson | None],
     *,
     min_score: float = 0.85,
+    fuzzy_threshold: float | None = None,
 ) -> list[PersonCluster]:
     """Cluster and deduplicate a collection of person names into Golden Person Records."""
     if not persons:
         return []
+    threshold = fuzzy_threshold if fuzzy_threshold is not None else min_score
 
     parsed: list[StandardizedPerson] = [
         p if isinstance(p, StandardizedPerson) else standardize_person(p)
@@ -1174,7 +1176,7 @@ def deduplicate_persons(
 
     for i, j in sorted(candidate_pairs):
         cmp = compare_persons(parsed[i], parsed[j])
-        if cmp.is_match and cmp.score >= min_score:
+        if cmp.is_match and cmp.score >= threshold:
             dsu.union(i, j, cmp.match_type)
 
     clusters: list[PersonCluster] = []

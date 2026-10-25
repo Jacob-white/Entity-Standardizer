@@ -53,6 +53,62 @@ def _ensure_polars() -> Any:
     return pl
 
 
+def _unwrap_arrow_input(table_or_batch: Any) -> tuple[Any, bool]:
+    _ensure_pyarrow()
+    is_batch = isinstance(table_or_batch, pa.RecordBatch)
+    if is_batch:
+        return pa.Table.from_batches([table_or_batch]), True
+    if isinstance(table_or_batch, pa.Table):
+        return table_or_batch, False
+    raise TypeError(f"Expected pyarrow.Table or pyarrow.RecordBatch, got {type(table_or_batch)}")
+
+
+def _finalize_arrow_output(
+    table: Any,
+    is_batch: bool,
+    output_prefix: str,
+    arrays_map: list[tuple[str, Any]],
+    as_struct: bool,
+) -> Any:
+    if as_struct:
+        struct_arr = pa.StructArray.from_arrays(
+            [arr for _, arr in arrays_map],
+            names=[name for name, _ in arrays_map],
+        )
+        result_table = table.append_column(f"{output_prefix}standardized", struct_arr)
+    else:
+        result_table = table
+        for name, arr in arrays_map:
+            col_label = f"{output_prefix}{name}"
+            if col_label in result_table.column_names:
+                idx = result_table.column_names.index(col_label)
+                result_table = result_table.set_column(idx, col_label, arr)
+            else:
+                result_table = result_table.append_column(col_label, arr)
+
+    if is_batch:
+        batches = result_table.to_batches()
+        return (
+            batches[0]
+            if batches
+            else pa.RecordBatch.from_pydict(
+                {field.name: [] for field in result_table.schema},
+                schema=result_table.schema,
+            )
+        )
+    return result_table
+
+
+def _unwrap_polars_input(df_or_lazy: Any) -> tuple[Any, bool]:
+    _ensure_polars()
+    is_lazy = isinstance(df_or_lazy, pl.LazyFrame)
+    if is_lazy:
+        return df_or_lazy.collect(), True
+    if isinstance(df_or_lazy, pl.DataFrame):
+        return df_or_lazy, False
+    raise TypeError(f"Expected polars.DataFrame or polars.LazyFrame, got {type(df_or_lazy)}")
+
+
 def standardize_arrow(
     table_or_batch: Any,
     phone_col: str = "phone",
@@ -62,15 +118,7 @@ def standardize_arrow(
     as_struct: bool = False,
 ) -> Any:
     """Standardize phone numbers in an Apache Arrow Table or RecordBatch."""
-    _ensure_pyarrow()
-
-    is_batch = isinstance(table_or_batch, pa.RecordBatch)
-    if is_batch:
-        table = pa.Table.from_batches([table_or_batch])
-    elif isinstance(table_or_batch, pa.Table):
-        table = table_or_batch
-    else:
-        raise TypeError(f"Expected pyarrow.Table or pyarrow.RecordBatch, got {type(table_or_batch)}")
+    table, is_batch = _unwrap_arrow_input(table_or_batch)
 
     col_names = table.column_names
     if phone_col not in col_names:
@@ -123,29 +171,7 @@ def standardize_arrow(
         ("routing_tier", pa.array(out_tier, type=pa.string())),
     ]
 
-    if as_struct:
-        struct_arr = pa.StructArray.from_arrays(
-            [arr for _, arr in arrays_map],
-            names=[name for name, _ in arrays_map],
-        )
-        result_table = table.append_column(f"{output_prefix}standardized", struct_arr)
-    else:
-        result_table = table
-        for name, arr in arrays_map:
-            col_label = f"{output_prefix}{name}"
-            if col_label in result_table.column_names:
-                idx = result_table.column_names.index(col_label)
-                result_table = result_table.set_column(idx, col_label, arr)
-            else:
-                result_table = result_table.append_column(col_label, arr)
-
-    if is_batch:
-        batches = result_table.to_batches()
-        return batches[0] if batches else pa.RecordBatch.from_pydict(
-            {field.name: [] for field in result_table.schema},
-            schema=result_table.schema,
-        )
-    return result_table
+    return _finalize_arrow_output(table, is_batch, output_prefix, arrays_map, as_struct)
 
 
 def standardize_polars(
@@ -156,19 +182,9 @@ def standardize_polars(
     output_prefix: str = "phone_",
 ) -> Any:
     """Standardize phone numbers in a Polars DataFrame or LazyFrame."""
-    _ensure_polars()
-
-    is_lazy = isinstance(df_or_lazy, pl.LazyFrame)
-    if is_lazy:
-        df = df_or_lazy.collect()
-    elif isinstance(df_or_lazy, pl.DataFrame):
-        df = df_or_lazy
-    else:
-        raise TypeError(f"Expected polars.DataFrame or polars.LazyFrame, got {type(df_or_lazy)}")
-
-    arrow_tbl = df.to_arrow()
+    df, is_lazy = _unwrap_polars_input(df_or_lazy)
     std_tbl = standardize_arrow(
-        arrow_tbl,
+        df.to_arrow(),
         phone_col=phone_col,
         country_col=country_col,
         default_country=default_country,
@@ -266,14 +282,15 @@ def register_duckdb_udfs(con: Any, default_country: str = "US") -> None:
 
 
 def standardize_addresses_arrow(
-    table: Any,
+    table_or_batch: Any,
     column: str = "address",
     country_column: str | None = None,
     default_country: str = "US",
     output_prefix: str = "address_",
+    as_struct: bool = False,
 ) -> Any:
-    """Standardize physical/mailing addresses in an Apache Arrow Table."""
-    _ensure_pyarrow()
+    """Standardize physical/mailing addresses in an Apache Arrow Table or RecordBatch."""
+    table, is_batch = _unwrap_arrow_input(table_or_batch)
     from entity_standardizer.address.standardizer import standardize_address
     from entity_standardizer.registry import normalize_country_iso2
 
@@ -306,21 +323,18 @@ def standardize_addresses_arrow(
         ("is_valid", pa.array([r.address_status == "standardized" for r in records], type=pa.bool_())),
     ]
 
-    result_table = table
-    for name, arr in arrays_map:
-        result_table = result_table.append_column(f"{output_prefix}{name}", arr)
-    return result_table
+    return _finalize_arrow_output(table, is_batch, output_prefix, arrays_map, as_struct)
 
 
 def standardize_addresses_polars(
-    df: Any,
+    df_or_lazy: Any,
     column: str = "address",
     country_column: str | None = None,
     default_country: str = "US",
     output_prefix: str = "address_",
 ) -> Any:
-    """Standardize physical/mailing addresses in a Polars DataFrame."""
-    _ensure_polars()
+    """Standardize physical/mailing addresses in a Polars DataFrame or LazyFrame."""
+    df, is_lazy = _unwrap_polars_input(df_or_lazy)
     std_tbl = standardize_addresses_arrow(
         df.to_arrow(),
         column=column,
@@ -328,17 +342,19 @@ def standardize_addresses_polars(
         default_country=default_country,
         output_prefix=output_prefix,
     )
-    return pl.from_arrow(std_tbl)
+    out_df = pl.from_arrow(std_tbl)
+    return out_df.lazy() if is_lazy else out_df  # type: ignore[union-attr]
 
 
 def standardize_companies_arrow(
-    table: Any,
+    table_or_batch: Any,
     company_col: str = "company",
     country_col: str | None = None,
     output_prefix: str = "company_",
+    as_struct: bool = False,
 ) -> Any:
-    """Standardize company/organization names in an Apache Arrow Table."""
-    _ensure_pyarrow()
+    """Standardize company/organization names in an Apache Arrow Table or RecordBatch."""
+    table, is_batch = _unwrap_arrow_input(table_or_batch)
     from entity_standardizer.company import standardize_company
 
     col_names = table.column_names
@@ -365,36 +381,35 @@ def standardize_companies_arrow(
         ("confidence", pa.array([r.confidence for r in records], type=pa.float64())),
     ]
 
-    result_table = table
-    for name, arr in arrays_map:
-        result_table = result_table.append_column(f"{output_prefix}{name}", arr)
-    return result_table
+    return _finalize_arrow_output(table, is_batch, output_prefix, arrays_map, as_struct)
 
 
 def standardize_companies_polars(
-    df: Any,
+    df_or_lazy: Any,
     company_col: str = "company",
     country_col: str | None = None,
     output_prefix: str = "company_",
 ) -> Any:
-    """Standardize company/organization names in a Polars DataFrame."""
-    _ensure_polars()
+    """Standardize company/organization names in a Polars DataFrame or LazyFrame."""
+    df, is_lazy = _unwrap_polars_input(df_or_lazy)
     std_tbl = standardize_companies_arrow(
         df.to_arrow(),
         company_col=company_col,
         country_col=country_col,
         output_prefix=output_prefix,
     )
-    return pl.from_arrow(std_tbl)
+    out_df = pl.from_arrow(std_tbl)
+    return out_df.lazy() if is_lazy else out_df  # type: ignore[union-attr]
 
 
 def standardize_persons_arrow(
-    table: Any,
+    table_or_batch: Any,
     person_col: str = "person",
     output_prefix: str = "person_",
+    as_struct: bool = False,
 ) -> Any:
-    """Standardize person full names in an Apache Arrow Table."""
-    _ensure_pyarrow()
+    """Standardize person full names in an Apache Arrow Table or RecordBatch."""
+    table, is_batch = _unwrap_arrow_input(table_or_batch)
     from entity_standardizer.person import standardize_person
 
     col_names = table.column_names
@@ -414,22 +429,233 @@ def standardize_persons_arrow(
         ("confidence", pa.array([r.confidence for r in records], type=pa.float64())),
     ]
 
-    result_table = table
-    for name, arr in arrays_map:
-        result_table = result_table.append_column(f"{output_prefix}{name}", arr)
-    return result_table
+    return _finalize_arrow_output(table, is_batch, output_prefix, arrays_map, as_struct)
 
 
 def standardize_persons_polars(
-    df: Any,
+    df_or_lazy: Any,
     person_col: str = "person",
     output_prefix: str = "person_",
 ) -> Any:
-    """Standardize person full names in a Polars DataFrame."""
-    _ensure_polars()
+    """Standardize person full names in a Polars DataFrame or LazyFrame."""
+    df, is_lazy = _unwrap_polars_input(df_or_lazy)
     std_tbl = standardize_persons_arrow(
         df.to_arrow(),
         person_col=person_col,
         output_prefix=output_prefix,
     )
-    return pl.from_arrow(std_tbl)
+    out_df = pl.from_arrow(std_tbl)
+    return out_df.lazy() if is_lazy else out_df  # type: ignore[union-attr]
+
+
+def standardize_emails_arrow(
+    table_or_batch: Any,
+    email_col: str = "email",
+    output_prefix: str = "email_",
+    as_struct: bool = False,
+) -> Any:
+    """Standardize email addresses in an Apache Arrow Table or RecordBatch."""
+    table, is_batch = _unwrap_arrow_input(table_or_batch)
+    from entity_standardizer.web import standardize_email
+
+    col_names = table.column_names
+    if email_col not in col_names:
+        raise ValueError(f"email_col {email_col!r} is not a column of the input (columns: {col_names})")
+
+    emails = [str(v) if v is not None else None for v in table.column(email_col).to_pylist()]
+    records = [standardize_email(e) for e in emails]
+    arrays_map: list[tuple[str, Any]] = [
+        ("email", pa.array([r.email for r in records], type=pa.string())),
+        ("canonical_email", pa.array([r.email for r in records], type=pa.string())),
+        ("local_part", pa.array([r.local_part for r in records], type=pa.string())),
+        ("domain", pa.array([r.domain for r in records], type=pa.string())),
+        ("is_free_provider", pa.array([r.is_free_provider for r in records], type=pa.bool_())),
+        ("is_role_account", pa.array([r.is_role_account for r in records], type=pa.bool_())),
+        ("is_valid", pa.array([r.is_valid for r in records], type=pa.bool_())),
+        ("confidence", pa.array([r.confidence for r in records], type=pa.float64())),
+    ]
+
+    return _finalize_arrow_output(table, is_batch, output_prefix, arrays_map, as_struct)
+
+
+def standardize_emails_polars(
+    df_or_lazy: Any,
+    email_col: str = "email",
+    output_prefix: str = "email_",
+) -> Any:
+    """Standardize email addresses in a Polars DataFrame or LazyFrame."""
+    df, is_lazy = _unwrap_polars_input(df_or_lazy)
+    std_tbl = standardize_emails_arrow(
+        df.to_arrow(),
+        email_col=email_col,
+        output_prefix=output_prefix,
+    )
+    out_df = pl.from_arrow(std_tbl)
+    return out_df.lazy() if is_lazy else out_df  # type: ignore[union-attr]
+
+
+def standardize_urls_arrow(
+    table_or_batch: Any,
+    url_col: str = "url",
+    output_prefix: str = "url_",
+    as_struct: bool = False,
+) -> Any:
+    """Standardize website URLs in an Apache Arrow Table or RecordBatch."""
+    table, is_batch = _unwrap_arrow_input(table_or_batch)
+    from entity_standardizer.web import standardize_url
+
+    col_names = table.column_names
+    if url_col not in col_names:
+        raise ValueError(f"url_col {url_col!r} is not a column of the input (columns: {col_names})")
+
+    urls = [str(v) if v is not None else None for v in table.column(url_col).to_pylist()]
+    records = [standardize_url(u) for u in urls]
+    arrays_map: list[tuple[str, Any]] = [
+        ("url", pa.array([r.url for r in records], type=pa.string())),
+        ("hostname", pa.array([r.host for r in records], type=pa.string())),
+        ("domain", pa.array([r.domain for r in records], type=pa.string())),
+        ("path", pa.array([r.path for r in records], type=pa.string())),
+        ("is_valid", pa.array([r.is_valid for r in records], type=pa.bool_())),
+        ("confidence", pa.array([r.confidence for r in records], type=pa.float64())),
+    ]
+
+    return _finalize_arrow_output(table, is_batch, output_prefix, arrays_map, as_struct)
+
+
+def standardize_urls_polars(
+    df_or_lazy: Any,
+    url_col: str = "url",
+    output_prefix: str = "url_",
+) -> Any:
+    """Standardize website URLs in a Polars DataFrame or LazyFrame."""
+    df, is_lazy = _unwrap_polars_input(df_or_lazy)
+    std_tbl = standardize_urls_arrow(
+        df.to_arrow(),
+        url_col=url_col,
+        output_prefix=output_prefix,
+    )
+    out_df = pl.from_arrow(std_tbl)
+    return out_df.lazy() if is_lazy else out_df  # type: ignore[union-attr]
+
+
+def standardize_contacts_arrow(
+    table_or_batch: Any,
+    street1_col: str = "street1",
+    city_col: str = "city",
+    state_col: str = "state",
+    postal_code_col: str = "postal_code",
+    country_col: str = "country",
+    phone_col: str = "phone",
+    organization_col: str = "organization",
+    person_col: str = "person_name",
+    email_col: str = "email",
+    website_col: str = "website",
+    default_country: str = "US",
+    output_prefix: str = "contact_",
+    as_struct: bool = False,
+) -> Any:
+    """Jointly standardize multi-pillar contact records in an Apache Arrow Table or RecordBatch."""
+    table, is_batch = _unwrap_arrow_input(table_or_batch)
+    from entity_standardizer.joint import standardize_contact
+
+    col_names = set(table.column_names)
+    num_rows = table.num_rows
+
+    def _col_vals(col_name: str) -> list[str | None]:
+        if col_name in col_names:
+            return [str(v) if v is not None else None for v in table.column(col_name).to_pylist()]
+        return [None] * num_rows
+
+    s1_vals = _col_vals(street1_col)
+    city_vals = _col_vals(city_col)
+    state_vals = _col_vals(state_col)
+    zip_vals = _col_vals(postal_code_col)
+    country_vals = _col_vals(country_col)
+    phone_vals = _col_vals(phone_col)
+    org_vals = _col_vals(organization_col)
+    person_vals = _col_vals(person_col)
+    email_vals = _col_vals(email_col)
+    web_vals = _col_vals(website_col)
+
+    records = [
+        standardize_contact(
+            street1=s1_vals[i],
+            city=city_vals[i],
+            state=state_vals[i],
+            postal_code=zip_vals[i],
+            country=country_vals[i],
+            phone=phone_vals[i],
+            organization=org_vals[i],
+            person_name=person_vals[i],
+            email=email_vals[i],
+            website=web_vals[i],
+            default_country=default_country,
+        )
+        for i in range(num_rows)
+    ]
+    arrays_map: list[tuple[str, Any]] = [
+        ("entity_key", pa.array([r.entity_key for r in records], type=pa.string())),
+        ("phone_e164", pa.array([r.phone.e164 for r in records], type=pa.string())),
+        ("address_key", pa.array([r.address.normalized_address_key for r in records], type=pa.string())),
+        (
+            "company_key",
+            pa.array([r.organization.company_key if r.organization else None for r in records], type=pa.string()),
+        ),
+        (
+            "person_key",
+            pa.array([r.person.person_key if r.person else None for r in records], type=pa.string()),
+        ),
+        (
+            "email",
+            pa.array([r.email.email if r.email else None for r in records], type=pa.string()),
+        ),
+        (
+            "domain",
+            pa.array(
+                [
+                    (r.website.domain if r.website else None) or (r.email.domain if r.email else None)
+                    for r in records
+                ],
+                type=pa.string(),
+            ),
+        ),
+        ("overall_confidence", pa.array([r.overall_confidence for r in records], type=pa.float64())),
+    ]
+
+    return _finalize_arrow_output(table, is_batch, output_prefix, arrays_map, as_struct)
+
+
+def standardize_contacts_polars(
+    df_or_lazy: Any,
+    street1_col: str = "street1",
+    city_col: str = "city",
+    state_col: str = "state",
+    postal_code_col: str = "postal_code",
+    country_col: str = "country",
+    phone_col: str = "phone",
+    organization_col: str = "organization",
+    person_col: str = "person_name",
+    email_col: str = "email",
+    website_col: str = "website",
+    default_country: str = "US",
+    output_prefix: str = "contact_",
+) -> Any:
+    """Jointly standardize multi-pillar contact records in a Polars DataFrame or LazyFrame."""
+    df, is_lazy = _unwrap_polars_input(df_or_lazy)
+    std_tbl = standardize_contacts_arrow(
+        df.to_arrow(),
+        street1_col=street1_col,
+        city_col=city_col,
+        state_col=state_col,
+        postal_code_col=postal_code_col,
+        country_col=country_col,
+        phone_col=phone_col,
+        organization_col=organization_col,
+        person_col=person_col,
+        email_col=email_col,
+        website_col=website_col,
+        default_country=default_country,
+        output_prefix=output_prefix,
+    )
+    out_df = pl.from_arrow(std_tbl)
+    return out_df.lazy() if is_lazy else out_df  # type: ignore[union-attr]
