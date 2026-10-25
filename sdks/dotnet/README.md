@@ -8,10 +8,10 @@ Typed async HTTP client for the **Entity Standardizer** microservice (`entity_st
 using System;
 using System.Collections.Generic;
 using System.Net.Http;
-using PhoneStandardizer.Client;
+using EntityStandardizer.Client;
 
 using var http = new HttpClient();
-var client = new PhoneStandardizerClient("http://127.0.0.1:8000", http);
+var client = new EntityStandardizerClient("http://127.0.0.1:8000", http);
 
 // 1. Joint Multi-Pillar Contact Standardization & Comparison
 var contact = await client.StandardizeContactAsync(new ContactStandardizeRequest

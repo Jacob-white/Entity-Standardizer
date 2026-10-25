@@ -191,10 +191,22 @@ def _finalize_standardized_address(
         or std.is_registered_agent_hub
         or std.address_status == "parse_failed"
     ):
-        audit_rec = get_audit_ledger().record_standardized_address(
-            std, conf, raw_input=raw_input
+        import os
+        from entity_standardizer.address import audit as _addr_audit
+
+        _audit_env = (
+            os.environ.get("ENTITY_STANDARDIZER_AUDIT_ENABLED")
+            or os.environ.get("ADDRESS_STANDARDIZER_AUDIT_ENABLED")
+            or ""
         )
-        std.audit_record = audit_rec
+        if (
+            _addr_audit._DEFAULT_AUDIT_LEDGER is not None
+            or _audit_env.strip().lower() in ("1", "true", "yes", "on")
+        ):
+            audit_rec = get_audit_ledger().record_standardized_address(
+                std, conf, raw_input=raw_input
+            )
+            std.audit_record = audit_rec
 
     # 4. Pure Offline Spatial & Rooftop Coordinate Resolution (Zero External APIs)
     if enable_geocoding:
@@ -281,7 +293,8 @@ def standardize_address(
 
     A ZIP that belongs to a different state never changes how the address is standardized: the supplied state is
     kept, ``ERR_ZIP_STATE_MISMATCH`` is reported and deliverability is UNDELIVERABLE (DPV footnote A1). Set
-    ``correct_state_from_zip=True`` (or ``ADDRESS_STANDARDIZER_CORRECT_STATE_FROM_ZIP=1``) to replace the state with
+    ``correct_state_from_zip=True`` (or ``ENTITY_STANDARDIZER_CORRECT_STATE_FROM_ZIP=1``, fallback
+    ``ADDRESS_STANDARDIZER_CORRECT_STATE_FROM_ZIP=1``) to replace the state with
     the ZIP's state instead; the change is reported as ``WARN_STATE_CORRECTED_FROM_ZIP``. Off by default.
 
     ``reference_provider`` (an ``entity_standardizer.address.reference.ReferenceProvider``) additionally validates the result
@@ -294,8 +307,9 @@ def standardize_address(
     """
     if reference_provider is None and enable_reference_validation:
         from entity_standardizer.address.reference.us_zip5 import get_default_us_zip5_provider
+        from entity_standardizer.address.reference.validation import get_env_reference_provider
 
-        reference_provider = get_default_us_zip5_provider()
+        reference_provider = get_env_reference_provider() or get_default_us_zip5_provider()
 
     if explain or alternatives:
         from entity_standardizer.address.explain import standardize_explained
@@ -340,11 +354,16 @@ def standardize_address(
                     state_corrected_from = was
     if _xr is not None and state_corrected_from is not None:
         _xr.add("state", state or "", "state_corrected_from_zip", {"from": state_corrected_from, "postal_code": postal_code})
+    _allow_loc_env = (
+        os.environ.get("ENTITY_STANDARDIZER_ALLOW_LOCALITY")
+        or os.environ.get("ADDRESS_STANDARDIZER_ALLOW_LOCALITY")
+        or ""
+    )
     allow_locality = allow_locality or bool(
         kwargs.get("allow_locality_only")
         or kwargs.get("allow_city_level")
         or kwargs.get("allow_locality")
-        or os.environ.get("ADDRESS_STANDARDIZER_ALLOW_LOCALITY") == "1"
+        or _allow_loc_env.strip().lower() in ("1", "true", "yes", "on")
     )
     raw_dict = {
         "street1": str(street1) if street1 is not None else "",

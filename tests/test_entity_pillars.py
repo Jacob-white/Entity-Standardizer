@@ -664,7 +664,17 @@ def test_rust_company_tokens_pure_fallback_and_batch_helpers(
                 return (["ABC", "AND", "CO"], True, True)
             return (["ACME", "CORP"], False, False)
 
+        @staticmethod
+        def normalize_batch_company_tokens_rs(
+            texts: list[str],
+        ) -> list[tuple[list[str], bool, bool]]:
+            return [(_DummyNative.normalize_company_tokens_rs(t)) for t in texts]
+
     monkeypatch.setattr(native_dispatch, "_native_mod", _DummyNative())
+    assert native_dispatch.normalize_batch_company_tokens_dispatch(["A.B.C. & Co.", "Acme Corp"]) == [
+        (["ABC", "AND", "CO"], True, True),
+        (["ACME", "CORP"], False, False),
+    ]
     nat_actions: list[str] = []
     assert _normalize_tokens("A.B.C. & Co.", nat_actions) == ["ABC", "AND", "CO"]
     assert "AMPERSAND_NORMALIZED" in nat_actions
@@ -676,6 +686,7 @@ def test_rust_company_tokens_pure_fallback_and_batch_helpers(
 
     # Fallback path when _native_mod is None
     monkeypatch.setattr(native_dispatch, "_native_mod", None)
+    assert native_dispatch.normalize_batch_company_tokens_dispatch(["Acme Corp"]) is None
     fb_actions: list[str] = []
     assert _normalize_tokens("A B C & Partners", fb_actions) == [
         "ABC",
@@ -942,10 +953,12 @@ def test_v2_1_entity_deduplication_web_comparison_and_endpoints(capsys) -> None:
             "BlackRock, Inc.",
             "BLACKROCK INCORPORATED /DE/",
             "BlackRock LLC",
-            "Vanguard Group, Inc.",
+            "Citi Corp",
+            "Cato Corp",
+            "",
         ]
     )
-    assert len(c_clusters) == 2
+    assert len(c_clusters) == 4
     assert isinstance(c_clusters[0], CompanyCluster)
     assert len(c_clusters[0].members) == 3
     assert c_clusters[0].golden_company.legal_name == "BLACKROCK INC"
@@ -959,14 +972,16 @@ def test_v2_1_entity_deduplication_web_comparison_and_endpoints(capsys) -> None:
             "Dr. Robert J. Smith, M.D.",
             "Bob J. Smith",
             "Robert Smith",
-            "Alice Wonderland",
+            "Richard Smith",
+            "",
         ]
     )
-    assert len(p_clusters) == 2
+    assert len(p_clusters) == 3
     assert isinstance(p_clusters[0], PersonCluster)
     assert len(p_clusters[0].members) == 3
     assert p_clusters[0].golden_person.full_name == "ROBERT J SMITH"
     assert p_clusters[0].to_dict()["cluster_id"] == "PERSON-CLUSTER-0001"
+
 
     # 3. Sentinel domain rejection & email/URL comparison
     e_sent = standardize_email("user@example.com")

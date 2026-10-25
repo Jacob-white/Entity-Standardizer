@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from entity_standardizer._native_dispatch import is_native_available
 from entity_standardizer.address.standardizer import standardize_address
 from entity_standardizer.company import compare_companies, standardize_company
 from entity_standardizer.person import (
@@ -147,17 +149,41 @@ class ContactCompareRequest(BaseModel):
 
 
 
+def _verify_api_key(request: Request) -> None:
+    """Enforce optional API key authentication on /v1/* endpoints when ENTITY_STANDARDIZER_API_KEYS is set."""
+    raw_keys = os.environ.get("ENTITY_STANDARDIZER_API_KEYS", "").strip()
+    if not raw_keys or not request.url.path.startswith("/v1/"):
+        return
+    valid_keys = {k.strip() for k in raw_keys.split(",") if k.strip()}
+    api_key = request.headers.get("X-API-Key", "").strip()
+    if not api_key:
+        auth = request.headers.get("Authorization", "").strip()
+        if auth.lower().startswith("bearer "):
+            api_key = auth[7:].strip()
+    if api_key not in valid_keys:
+        raise HTTPException(status_code=401, detail="Invalid or missing API key.")
+
+
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application instance."""
     app = FastAPI(
         title="Entity Standardizer API",
         version="2.1.0",
         description="Universal multi-national entity, address, phone, company, person, and web standardization service.",
+        dependencies=[Depends(_verify_api_key)],
     )
 
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok", "version": "2.1.0"}
+
+    @app.get("/ready")
+    def ready() -> dict[str, Any]:
+        return {
+            "status": "ready",
+            "version": "2.1.0",
+            "native_available": is_native_available(),
+        }
 
     @app.post("/v1/standardize")
     def standardize_endpoint(req: PhoneStandardizeRequest) -> dict[str, Any]:

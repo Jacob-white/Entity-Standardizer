@@ -105,11 +105,39 @@ def test_standardize_polars_df_and_lazy() -> None:
 
 def test_standardize_companies_and_persons_arrow_and_polars(monkeypatch) -> None:
     from entity_standardizer import (
+        standardize_addresses_arrow,
+        standardize_addresses_polars,
         standardize_companies_arrow,
         standardize_companies_polars,
         standardize_persons_arrow,
         standardize_persons_polars,
     )
+
+    addr_tbl = pa.table(
+        {
+            "address": ["350 Fifth Avenue, Suite 4200, New York, NY 10118"],
+            "country": ["US"],
+        }
+    )
+    with pytest.raises(ValueError, match="column"):
+        standardize_addresses_arrow(addr_tbl, column="missing")
+
+    monkeypatch.setattr(arrow_mod, "pa", arrow_mod._UNSET)
+    out_addr_tbl = standardize_addresses_arrow(addr_tbl, column="address", country_column="country")
+    assert out_addr_tbl.column("address_line_1").to_pylist() == ["350 5TH AVE"]
+    assert out_addr_tbl.column("address_city").to_pylist() == ["NEW YORK"]
+    assert out_addr_tbl.column("address_state").to_pylist() == ["NY"]
+    assert out_addr_tbl.column("address_postal_code").to_pylist() == ["10118"]
+    assert out_addr_tbl.column("address_country_iso2").to_pylist() == ["US"]
+    assert out_addr_tbl.column("address_is_valid").to_pylist() == [True]
+    assert out_addr_tbl.column("address_key").to_pylist()[0] is not None
+
+    addr_df = pl.DataFrame({"address": ["1600 Amphitheatre Parkway, Mountain View, CA 94043"]})
+    monkeypatch.setattr(arrow_mod, "pa", arrow_mod._UNSET)
+    monkeypatch.setattr(arrow_mod, "pl", arrow_mod._UNSET)
+    out_addr_df = standardize_addresses_polars(addr_df, column="address")
+    assert out_addr_df["address_line_1"].to_list() == ["1600 AMPHITHEATRE PKWY"]
+    assert out_addr_df["address_state"].to_list() == ["CA"]
 
     comp_tbl = pa.table(
         {
@@ -151,7 +179,6 @@ def test_standardize_companies_and_persons_arrow_and_polars(monkeypatch) -> None
     assert out_per_df["person_root_first_name"].to_list() == ["ROBERT"]
 
 
-
 def test_register_duckdb_udfs() -> None:
     con = duckdb.connect(":memory:")
     register_duckdb_udfs(con, default_country="US")
@@ -170,7 +197,11 @@ def test_register_duckdb_udfs() -> None:
             standardize_person_name('Smith, Dr. Robert J., Jr.'),
             person_entity_key('Bob J. Smith'),
             standardize_email_udf('Jane.Doe+tag@gmial.com'),
-            standardize_url_domain('https://www.blackrock.com/us/individual?utm_source=x')
+            standardize_url_domain('https://www.blackrock.com/us/individual?utm_source=x'),
+            es_standardize_address('350 Fifth Avenue, New York, NY 10118', 'US'),
+            es_standardize_address('350 Fifth Avenue, New York, NY 10118', NULL),
+            es_standardize_address(NULL, 'US'),
+            es_standardize_address('', 'US')
         """
     ).fetchone()
     assert row[:5] == (
@@ -189,6 +220,10 @@ def test_register_duckdb_udfs() -> None:
         "SMITH|ROBERT",
         "janedoe@gmail.com",
         "blackrock.com",
+        "350 5TH AVE, NEW YORK, NY 10118",
+        "350 5TH AVE, NEW YORK, NY 10118",
+        None,
+        None,
     )
 
 

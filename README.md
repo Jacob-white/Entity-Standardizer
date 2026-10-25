@@ -14,14 +14,13 @@ A unified, high-performance multi-national **Entity, Organization, Person, Web, 
 ## 📚 Documentation & Quickstarts
 
 - **[5-Minute Quickstart Guide](docs/quickstart.md)** — Step-by-step onboarding for joint contact cross-healing, company/person/web standardization, address & phone parsing, multi-pillar comparison & deduplication, Arrow/Polars/DuckDB SQL UDFs, CLI, and HTTP service.
-- **[Complete API Reference](docs/api_reference.md)** — Full reference for all Python dataclasses, functions, cross-healing enums, CLI commands, 19 HTTP routes (18 `/v1/*` endpoints + `GET /health`), 17 MCP tools, and columnar/SQL UDFs.
+- **[Complete API Reference](docs/api_reference.md)** — Full reference for all Python dataclasses, functions, cross-healing enums, CLI commands, 20 HTTP routes (18 `/v1/*` endpoints + `GET /health` + `GET /ready`), 17 MCP tools, and columnar/SQL UDFs.
+- **[HTTP Endpoints & OpenAPI 3.1 Spec](docs/api_endpoints.md)** — Detailed HTTP endpoint reference and [`docs/openapi.json`](docs/openapi.json).
 - **[AI Agent & MCP Integration Guide](docs/ai_agent_guide.md)** & **[`llms.txt`](llms.txt)** — Model Context Protocol (MCP) setup, 17-tool catalog, autonomous agent decision tree, and token-efficient LLM context index.
 - **[Developer Cookbook & Production Recipes](docs/developer_cookbook.md)** — Copy-pasteable recipes for SEC/Form ADV hygiene, couple splitting, multi-pillar deduplication, Polars/Arrow/DuckDB ETL, and TCPA/IRSF anti-fraud guardrails.
-- **[Global Telephony Enterprise Blueprint](docs/GLOBAL_TELEPHONY_ARCHITECTURE_PLAN.md)** — Master architectural specification and global dial-plan roadmap.
-- **[Global Spatial & Address Enterprise Blueprint](docs/GLOBAL_SPATIAL_ENTERPRISE_BLUEPRINT.md)** — Master architectural specification for USPS Pub 28 / UPU S42 address standardization and offline geocoding.
+- **[Operations & Deployment Guide](docs/operations.md)** — Production deployment, `ENTITY_STANDARDIZER_API_KEYS` authentication, health/readiness probes, and cache/audit configuration.
 - **[Multi-Platform Client SDKs](sdks/README.md)** — Client library specifications and examples for TypeScript/React, .NET, and Go.
 - **[Security Policy & Anti-Fraud Guide](SECURITY.md)** — Threat model, ReDoS prevention, International Revenue Share Fraud (IRSF) guardrails, sentinel domain rejection, and vulnerability disclosure procedures.
-- **[Architectural Specifications Index](docs/README.md)** — Index of all developer guides, engineering blueprints, and operational manuals.
 
 ---
 
@@ -42,7 +41,7 @@ A unified, high-performance multi-national **Entity, Organization, Person, Web, 
 5. **Universal 249 ISO-3166-1 Country & ITU-T Dial-Plan Registry**:
    - Deterministic dial-plan metadata (`CountryDialPlan`) for every ISO-3166-1 jurisdiction, producing **ITU-T E.164**, **ITU-T E.123 National**, **ITU-T E.123 International**, and **IETF RFC 3966 URI** formats alongside NANP 25-country / 50-state attribution.
 6. **Multi-Pillar Entity Resolution & Modern Data Stack**:
-   - Compares and clusters multi-pillar records (`compare_contacts`, `cluster_contact_records`, `deduplicate_companies`, `deduplicate_persons`, `deduplicate_phones`), provides `mask_phone()` privacy redaction, lazy-loaded Apache Arrow / Polars (`standardize_arrow`, `standardize_companies_arrow`, `standardize_persons_arrow`) & DuckDB SQL scalar UDFs (`register_duckdb_udfs`), and parity-tested TypeScript/React, Go, and .NET SDKs.
+   - Compares and clusters multi-pillar records (`compare_contacts`, `cluster_contact_records`, `deduplicate_companies`, `deduplicate_persons`, `deduplicate_phones`), provides `mask_phone()` privacy redaction, lazy-loaded Apache Arrow / Polars (`standardize_arrow`, `standardize_addresses_arrow`, `standardize_companies_arrow`, `standardize_persons_arrow`) & DuckDB SQL scalar UDFs (`register_duckdb_udfs`), and parity-tested TypeScript/React, Go, and .NET SDKs.
 
 ---
 
@@ -143,7 +142,7 @@ entity-standardizer parse "+44 (0) 20 7946 0912 ext 42"
 entity-standardizer country JP
 entity-standardizer batch input.csv output.csv --phone-col phone --country-col country
 
-# Run the FastAPI HTTP service (19 HTTP routes across phone, address, company, person, job-title, email, url, social, contact)
+# Run the FastAPI HTTP service (20 HTTP routes across phone, address, company, person, job-title, email, url, social, contact)
 uvicorn entity_standardizer.server:app --host 0.0.0.0 --port 8000
 
 # Run the Model Context Protocol (MCP) server (17 tools across all entity standardization and comparison pillars)

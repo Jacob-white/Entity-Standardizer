@@ -452,13 +452,21 @@ def test_native_dispatch_and_fallback(monkeypatch) -> None:
     info = get_engine_info()
     assert info["engine"] in ("pure_python", "rust_pyo3")
     assert fold_vanity_digits_dispatch("FLOWERS") == "3569377"
+    assert native_dispatch.compute_soundex_dispatch("Robert") == "R163"
 
     # Simulate native Rust module present
     mock_rs = MagicMock()
     mock_rs.fold_vanity_digits_rs.return_value = "3569377"
+    mock_rs.compute_soundex.return_value = "R163"
     monkeypatch.setattr(native_dispatch, "_native_mod", mock_rs)
     assert native_dispatch.is_native_available() is True
     assert native_dispatch.fold_vanity_digits_dispatch("FLOWERS") == "3569377"
+    assert native_dispatch.compute_soundex_dispatch("Robert") == "R163"
+
+    # Simulate pure-Python fallback
+    monkeypatch.setattr(native_dispatch, "_native_mod", None)
+    assert native_dispatch.compute_soundex_dispatch("Robert") == "R163"
+
 
 
 def test_batch_csv_and_jsonl_streaming(tmp_path: Path) -> None:
@@ -547,16 +555,68 @@ def test_cli_commands(tmp_path: Path, capsys) -> None:
 
 
 
-def test_fastapi_server_endpoints() -> None:
+def test_fastapi_server_endpoints(monkeypatch) -> None:
     client = TestClient(app)
 
     r_health = client.get("/health")
     assert r_health.status_code == 200
     assert r_health.json()["status"] == "ok"
 
+    r_ready = client.get("/ready")
+    assert r_ready.status_code == 200
+    assert r_ready.json()["status"] == "ready"
+    assert isinstance(r_ready.json()["native_available"], bool)
+
     r_std = client.post("/v1/standardize", json={"phone": "(415) 555-2671", "country": "US"})
     assert r_std.status_code == 200
     assert r_std.json()["e164"] == "+14155552671"
+
+    # Optional API key enforcement via ENTITY_STANDARDIZER_API_KEYS
+    monkeypatch.setenv("ENTITY_STANDARDIZER_API_KEYS", "key-alpha, key-beta")
+    assert client.get("/health").status_code == 200
+    assert client.get("/ready").status_code == 200
+    assert client.post("/v1/standardize", json={"phone": "(415) 555-2671"}).status_code == 401
+    assert (
+        client.post(
+            "/v1/standardize",
+            json={"phone": "(415) 555-2671"},
+            headers={"X-API-Key": "wrong-key"},
+        ).status_code
+        == 401
+    )
+    assert (
+        client.post(
+            "/v1/standardize",
+            json={"phone": "(415) 555-2671"},
+            headers={"X-API-Key": "key-alpha"},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            "/v1/standardize",
+            json={"phone": "(415) 555-2671"},
+            headers={"Authorization": "   Bearer   key-beta  "},
+        ).status_code
+        == 200
+    )
+    assert (
+        client.post(
+            "/v1/standardize",
+            json={"phone": "(415) 555-2671"},
+            headers={"Authorization": "Basic dXNlcjpwYXNz"},
+        ).status_code
+        == 401
+    )
+    assert (
+        client.post(
+            "/v1/standardize",
+            json={"phone": "(415) 555-2671"},
+            headers={"X-API-Key": "   "},
+        ).status_code
+        == 401
+    )
+    monkeypatch.delenv("ENTITY_STANDARDIZER_API_KEYS")
 
     r_batch = client.post("/v1/batch", json={"phones": ["(415) 555-2671", "+44 20 7946 0912"]})
     assert r_batch.status_code == 200

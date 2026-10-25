@@ -13,7 +13,6 @@ from entity_standardizer.address._native_dispatch import (
     is_native_available,
     is_using_native,
     standardize_batch_dispatch,
-    standardize_record_dispatch,
 )
 from entity_standardizer.address._patterns import clean_rooftop_address
 from entity_standardizer.address.audit import (
@@ -229,7 +228,6 @@ __all__ = [
     "resolve_verification_cascade",
     "standardize_address",
     "standardize_batch_dispatch",
-    "standardize_record_dispatch",
     "stream_standardize_csv",
     "stream_standardize_json",
     "stream_standardize_jsonl",

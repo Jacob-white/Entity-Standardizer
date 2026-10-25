@@ -15,7 +15,6 @@ import sqlite3
 import threading
 import time
 from collections import OrderedDict
-from contextvars import ContextVar
 from typing import Dict, Any, Optional, Union
 
 from entity_standardizer.address.cache_backends import (
@@ -26,11 +25,6 @@ from entity_standardizer.address.cache_backends import (
 )
 
 logger = logging.getLogger(__name__)
-
-# Tenant namespace for cache keys (set per request by the HTTP service when tenant isolation is enabled).
-# Names never contain "|", and the prefix is always the first "|"-delimited segment of the key, so a tenant
-# cannot forge another tenant's keys through address text (address fields have "|" escaped).
-CACHE_NAMESPACE: ContextVar[str] = ContextVar("address_standardizer_cache_namespace", default="")
 
 
 def make_cache_key(
@@ -72,9 +66,6 @@ def make_cache_key(
         parts.append("GEOCODE")
     if allow_locality:
         parts.append("ALLOW_LOCALITY")
-    namespace = CACHE_NAMESPACE.get()
-    if namespace:
-        parts.insert(0, "@" + namespace)
     return "|".join(parts)
 
 
@@ -361,12 +352,13 @@ class MultiTierCache:
         return self.get_stats()
 
 
-CACHE_URL_ENV = "ADDRESS_STANDARDIZER_CACHE_URL"
+CACHE_URL_ENV = "ENTITY_STANDARDIZER_CACHE_URL"
+LEGACY_CACHE_URL_ENV = "ADDRESS_STANDARDIZER_CACHE_URL"
 
 
 def _backend_from_env() -> Optional[CacheBackend]:
-    """The L2 backend named by ``ADDRESS_STANDARDIZER_CACHE_URL``, or None (unset, or invalid: logged, default kept)."""
-    url = os.environ.get(CACHE_URL_ENV, "").strip()
+    """The L2 backend named by ``ENTITY_STANDARDIZER_CACHE_URL`` (or ``ADDRESS_STANDARDIZER_CACHE_URL``), or None."""
+    url = (os.environ.get(CACHE_URL_ENV) or os.environ.get(LEGACY_CACHE_URL_ENV) or "").strip()
     if not url:
         return None
     try:
@@ -376,11 +368,14 @@ def _backend_from_env() -> Optional[CacheBackend]:
         return None
 
 
-_DEFAULT_CACHE = MultiTierCache(l2=_backend_from_env())
+_DEFAULT_CACHE: Optional[MultiTierCache] = None
 
 
 def get_default_cache() -> MultiTierCache:
-    """Returns the default MultiTierCache instance."""
+    """Returns the default MultiTierCache instance, initializing it lazily on first access."""
+    global _DEFAULT_CACHE
+    if _DEFAULT_CACHE is None:
+        _DEFAULT_CACHE = MultiTierCache(l2=_backend_from_env())
     return _DEFAULT_CACHE
 
 
@@ -395,7 +390,7 @@ def configure_cache(
 
     ``backend`` replaces the L2 tier: a ``CacheBackend`` instance, or a ``redis://`` / ``rediss://`` / ``unix://`` URL
     (needs ``pip install "entity-standardizer[redis]"``; a Redis outage never breaks standardization). When omitted,
-    ``ADDRESS_STANDARDIZER_CACHE_URL`` is honoured, else the embedded SQLite L2 is used (``l2_db_path``).
+    ``ENTITY_STANDARDIZER_CACHE_URL`` is honoured, else the embedded SQLite L2 is used (``l2_db_path``).
     """
     global _DEFAULT_CACHE
     if isinstance(backend, str):
@@ -414,9 +409,11 @@ def configure_cache(
 
 def clear_cache():
     """Clears L1 and L2 caches."""
-    _DEFAULT_CACHE.clear()
+    if _DEFAULT_CACHE is not None:
+        _DEFAULT_CACHE.clear()
 
 
 def get_cache_stats() -> Dict[str, Any]:
     """Returns statistics for L1 and L2 caches."""
-    return _DEFAULT_CACHE.get_stats()
+    return get_default_cache().get_stats()
+

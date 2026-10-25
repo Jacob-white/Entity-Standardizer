@@ -288,7 +288,7 @@ def test_sdk_models_match_python_contracts() -> None:
         assert f'"{endpoint}"' in go_client
         assert f'"{endpoint}"' in go_test and f"client.{method}(" in go_test
 
-    dotnet_client = (SDKS_DIR / "dotnet" / "PhoneStandardizerClient.cs").read_text(encoding="utf-8")
+    dotnet_client = (SDKS_DIR / "dotnet" / "EntityStandardizerClient.cs").read_text(encoding="utf-8")
     assert "Task<HealthResponse?> HealthAsync(" in dotnet_client
     for extra_cs_method in ("GetCountryAsync", "ListCountriesAsync"):
         assert f" {extra_cs_method}(" in dotnet_client

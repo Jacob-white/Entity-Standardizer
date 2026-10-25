@@ -7,10 +7,11 @@
 - [Full Single-File LLM Context (`llms-full.txt`)](llms-full.txt): Complete self-contained context pack with all schemas, healing action codes, endpoints, MCP tools, DuckDB UDFs, and SDK methods.
 - [README](README.md): Overview, highlights, quickstart, CLI, FastAPI, and MCP server usage.
 - [5-Minute Quickstart](docs/quickstart.md): Copy-pasteable examples for all 6 standardization and comparison pillars.
-- [Complete API Reference](docs/api_reference.md): Dataclasses, functions, `CrossHealingAction` enums, 19 FastAPI routes, 17 MCP tools, and 12 DuckDB SQL UDFs.
-- [HTTP Endpoints & OpenAPI 3.1 Spec](docs/api_endpoints.md): Detailed HTTP endpoint reference and [`docs/openapi.json`](docs/openapi.json).
+- [Complete API Reference](docs/api_reference.md): Dataclasses, functions, `CrossHealingAction` enums, 20 FastAPI routes, 17 MCP tools, and 13 DuckDB SQL UDFs.
+- [HTTP Endpoints & OpenAPI 3.1 Spec](docs/api_endpoints.md): Detailed HTTP endpoint reference (`GET /health`, `GET /ready`, `/v1/*`) and [`docs/openapi.json`](docs/openapi.json).
 - [AI Agent & MCP Guide](docs/ai_agent_guide.md): MCP server setup, tool selection decision tree, and autonomous agent workflows.
 - [Developer Cookbook](docs/developer_cookbook.md): Production ETL, CRM hygiene, entity resolution, Arrow/Polars/DuckDB, and anti-fraud recipes.
+- [Operations & Deployment Guide](docs/operations.md): Production deployment, `ENTITY_STANDARDIZER_API_KEYS` authentication, and cache/audit configuration.
 - [Multi-Platform SDKs](sdks/README.md): TypeScript/React, Go, and .NET client libraries (`v2.1.0`).
 - [Security Policy](SECURITY.md): ReDoS immunity, IRSF toll-fraud detection, sentinel domain rejection, and PII masking.
 
@@ -93,6 +94,8 @@ from entity_standardizer import (
     PhoneCluster,
 
     # 7. Columnar Apache Arrow & Polars Helpers
+    standardize_addresses_arrow,
+    standardize_addresses_polars,
     standardize_companies_arrow,
     standardize_companies_polars,
     standardize_persons_arrow,

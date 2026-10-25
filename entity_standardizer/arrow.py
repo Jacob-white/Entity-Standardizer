@@ -212,12 +212,14 @@ def register_duckdb_udfs(con: Any, default_country: str = "US") -> None:
             return []
         return list(generate_phone_blocking_keys(phone, country=default_country))
 
-    con.create_function("standardize_phone_e164", _e164_udf, ["VARCHAR"], "VARCHAR")
-    con.create_function("standardize_phone_national", _national_udf, ["VARCHAR"], "VARCHAR")
-    con.create_function("standardize_phone_international", _intl_udf, ["VARCHAR"], "VARCHAR")
-    con.create_function("validate_phone_udf", _valid_udf, ["VARCHAR"], "BOOLEAN")
-    con.create_function("mask_phone_udf", _mask_udf, ["VARCHAR"], "VARCHAR")
-    con.create_function("phone_blocking_keys", _blocking_keys_udf, ["VARCHAR"], "VARCHAR[]")
+    con.create_function("standardize_phone_e164", _e164_udf, ["VARCHAR"], "VARCHAR", null_handling="special")
+    con.create_function("standardize_phone_national", _national_udf, ["VARCHAR"], "VARCHAR", null_handling="special")
+    con.create_function(
+        "standardize_phone_international", _intl_udf, ["VARCHAR"], "VARCHAR", null_handling="special"
+    )
+    con.create_function("validate_phone_udf", _valid_udf, ["VARCHAR"], "BOOLEAN", null_handling="special")
+    con.create_function("mask_phone_udf", _mask_udf, ["VARCHAR"], "VARCHAR", null_handling="special")
+    con.create_function("phone_blocking_keys", _blocking_keys_udf, ["VARCHAR"], "VARCHAR[]", null_handling="special")
 
     from entity_standardizer.company import standardize_company
     from entity_standardizer.person import standardize_person
@@ -241,12 +243,92 @@ def register_duckdb_udfs(con: Any, default_country: str = "US") -> None:
     def _url_domain_udf(url: str | None) -> str | None:
         return standardize_url(url).domain
 
-    con.create_function("standardize_company_name", _company_name_udf, ["VARCHAR"], "VARCHAR")
-    con.create_function("company_entity_key", _company_key_udf, ["VARCHAR"], "VARCHAR")
-    con.create_function("standardize_person_name", _person_name_udf, ["VARCHAR"], "VARCHAR")
-    con.create_function("person_entity_key", _person_key_udf, ["VARCHAR"], "VARCHAR")
-    con.create_function("standardize_email_udf", _email_udf, ["VARCHAR"], "VARCHAR")
-    con.create_function("standardize_url_domain", _url_domain_udf, ["VARCHAR"], "VARCHAR")
+    con.create_function(
+        "standardize_company_name", _company_name_udf, ["VARCHAR"], "VARCHAR", null_handling="special"
+    )
+    con.create_function("company_entity_key", _company_key_udf, ["VARCHAR"], "VARCHAR", null_handling="special")
+    con.create_function(
+        "standardize_person_name", _person_name_udf, ["VARCHAR"], "VARCHAR", null_handling="special"
+    )
+    con.create_function("person_entity_key", _person_key_udf, ["VARCHAR"], "VARCHAR", null_handling="special")
+    con.create_function("standardize_email_udf", _email_udf, ["VARCHAR"], "VARCHAR", null_handling="special")
+    con.create_function("standardize_url_domain", _url_domain_udf, ["VARCHAR"], "VARCHAR", null_handling="special")
+
+    from entity_standardizer.address.standardizer import standardize_address
+
+    def _address_udf(addr: str | None, country: str | None) -> str | None:
+        res = standardize_address(addr, country=country or default_country)
+        return res.full_rooftop_address or res.street1 or None
+
+    con.create_function(
+        "es_standardize_address", _address_udf, ["VARCHAR", "VARCHAR"], "VARCHAR", null_handling="special"
+    )
+
+
+def standardize_addresses_arrow(
+    table: Any,
+    column: str = "address",
+    country_column: str | None = None,
+    default_country: str = "US",
+    output_prefix: str = "address_",
+) -> Any:
+    """Standardize physical/mailing addresses in an Apache Arrow Table."""
+    _ensure_pyarrow()
+    from entity_standardizer.address.standardizer import standardize_address
+    from entity_standardizer.registry import normalize_country_iso2
+
+    col_names = table.column_names
+    if column not in col_names:
+        raise ValueError(f"column {column!r} is not a column of the input (columns: {col_names})")
+
+    num_rows = table.num_rows
+    addrs = [str(v) if v is not None else None for v in table.column(column).to_pylist()]
+    countries = (
+        [str(v) if v is not None else None for v in table.column(country_column).to_pylist()]
+        if country_column and country_column in col_names
+        else [None] * num_rows
+    )
+
+    records = [
+        standardize_address(addrs[i], country=countries[i] or default_country)
+        for i in range(num_rows)
+    ]
+    arrays_map: list[tuple[str, Any]] = [
+        ("line_1", pa.array([r.street1 or None for r in records], type=pa.string())),
+        ("city", pa.array([r.city or None for r in records], type=pa.string())),
+        ("state", pa.array([r.state or None for r in records], type=pa.string())),
+        ("postal_code", pa.array([r.postal_code or None for r in records], type=pa.string())),
+        (
+            "country_iso2",
+            pa.array([normalize_country_iso2(r.country) for r in records], type=pa.string()),
+        ),
+        ("key", pa.array([r.normalized_address_key for r in records], type=pa.string())),
+        ("is_valid", pa.array([r.address_status == "standardized" for r in records], type=pa.bool_())),
+    ]
+
+    result_table = table
+    for name, arr in arrays_map:
+        result_table = result_table.append_column(f"{output_prefix}{name}", arr)
+    return result_table
+
+
+def standardize_addresses_polars(
+    df: Any,
+    column: str = "address",
+    country_column: str | None = None,
+    default_country: str = "US",
+    output_prefix: str = "address_",
+) -> Any:
+    """Standardize physical/mailing addresses in a Polars DataFrame."""
+    _ensure_polars()
+    std_tbl = standardize_addresses_arrow(
+        df.to_arrow(),
+        column=column,
+        country_column=country_column,
+        default_country=default_country,
+        output_prefix=output_prefix,
+    )
+    return pl.from_arrow(std_tbl)
 
 
 def standardize_companies_arrow(
@@ -351,6 +433,3 @@ def standardize_persons_polars(
         output_prefix=output_prefix,
     )
     return pl.from_arrow(std_tbl)
-
-
-

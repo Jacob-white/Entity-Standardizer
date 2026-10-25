@@ -10,7 +10,6 @@ from __future__ import annotations
 import logging
 import math
 import os
-import threading
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -25,17 +24,19 @@ __all__ = [
     "ERR_POSTAL_STATE_MISMATCH",
     "WARN_POSTAL_PLACE_MISMATCH",
     "REFERENCE_DB_ENV",
+    "LEGACY_REFERENCE_DB_ENV",
     "ReferenceValidation",
     "validate_against_reference",
     "apply_reference_validation",
-    "attach_server_reference_validation",
+    "get_env_reference_provider",
 ]
 
 ERR_POSTAL_UNKNOWN = "ERR_POSTAL_UNKNOWN"
 ERR_POSTAL_STATE_MISMATCH = "ERR_POSTAL_STATE_MISMATCH"
 WARN_POSTAL_PLACE_MISMATCH = "WARN_POSTAL_PLACE_MISMATCH"
 
-REFERENCE_DB_ENV = "ADDRESS_STANDARDIZER_REFERENCE_DB"
+REFERENCE_DB_ENV = "ENTITY_STANDARDIZER_REFERENCE_DB"
+LEGACY_REFERENCE_DB_ENV = "ADDRESS_STANDARDIZER_REFERENCE_DB"
 _STATE_COUNTRIES = ("US", "CA")
 _MAX_CANDIDATES = 10
 _EARTH_RADIUS_KM = 6371.0088
@@ -190,59 +191,17 @@ def apply_reference_validation(std_address: Any, provider: ReferenceProvider) ->
     return std_address
 
 
-_server_lock = threading.Lock()
-_server_providers: Dict[str, Any] = {}
-
-
-def close_server_providers() -> None:
-    """Close and forget the providers cached for the REST server (used by tests and on shutdown)."""
-    with _server_lock:
-        for provider in _server_providers.values():
-            provider.close()
-        _server_providers.clear()
-
-
-def server_reference_provider() -> Optional[Any]:
-    """The provider the REST server validates against, or None when ``ADDRESS_STANDARDIZER_REFERENCE_DB`` is unset or
-    the database cannot be opened (``attach_server_reference_validation`` reports that case in its response)."""
-    path = os.environ.get(REFERENCE_DB_ENV)
-    if not path:
-        return None
-    from entity_standardizer.address.reference.geonames import GeoNamesPostalProvider
-
-    try:
-        with _server_lock:
-            provider = _server_providers.get(path)
-            if provider is None:
-                provider = _server_providers[path] = GeoNamesPostalProvider(path)
-    except (OSError, ValueError):
-        return None
-    return provider
-
-
-def attach_server_reference_validation(std_address: Any, response: Dict[str, Any]) -> Dict[str, Any]:
-    """Add a ``reference_validation`` object to a REST response, only when ``ADDRESS_STANDARDIZER_REFERENCE_DB`` is set.
-
-    With the variable unset the response is returned untouched. If the database cannot be opened the object is still
-    added, with status ``not_checked`` and the reason in ``detail``, so a misconfiguration is visible, not silent (the cause is logged, not returned).
+def get_env_reference_provider() -> Optional[ReferenceProvider]:
+    """Return a ``GeoNamesPostalProvider`` configured via ``ENTITY_STANDARDIZER_REFERENCE_DB`` (or legacy
+    ``ADDRESS_STANDARDIZER_REFERENCE_DB``), or ``None`` when unset or unavailable.
     """
-    path = os.environ.get(REFERENCE_DB_ENV)
+    path = os.environ.get(REFERENCE_DB_ENV) or os.environ.get(LEGACY_REFERENCE_DB_ENV)
     if not path:
-        return response
+        return None
     from entity_standardizer.address.reference.geonames import GeoNamesPostalProvider
 
     try:
-        with _server_lock:
-            provider = _server_providers.get(path)
-            if provider is None:
-                provider = _server_providers[path] = GeoNamesPostalProvider(path)
+        return GeoNamesPostalProvider(path)
     except (OSError, ValueError):
-        # The exception text can carry a server filesystem path, so it goes to the log, not the response.
-        logger.exception("Reference database %s could not be opened", REFERENCE_DB_ENV)
-        response["reference_validation"] = {
-            "status": "not_checked", "reason_codes": [],
-            "detail": "reference database unavailable (see the server log)",
-        }
-        return response
-    response["reference_validation"] = validate_against_reference(std_address, provider).as_dict()
-    return response
+        return None
+

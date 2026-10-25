@@ -92,14 +92,12 @@ configure_cache(backend=RedisCacheBackend("rediss://cache:6380/1",  # explicit f
                                           prefix="addr:prod:", ttl_seconds=3600))
 ```
 
-or set `ADDRESS_STANDARDIZER_CACHE_URL=redis://cache.internal:6379/0` before the process starts (the HTTP service picks
-it up too). An explicit `backend=` wins over the variable; an unsupported URL is logged and the SQLite L2 is kept.
+or set `ENTITY_STANDARDIZER_CACHE_URL=redis://cache.internal:6379/0` (or legacy `ADDRESS_STANDARDIZER_CACHE_URL`) before the process starts. An explicit `backend=` wins over the variable; an unsupported URL is logged and the SQLite L2 is kept.
 
 Redis backend behaviour:
 
 * **TTL**: every entry expires after `ttl_seconds` (default 86,400; `None`/0 stores without expiry).
-* **Namespace**: keys are stored as `prefix + key` (default prefix `address_standardizer:v1:`); tenant isolation
-  prefixes the key itself with `@<tenant>|`, so tenants stay separate in Redis as well. `clear()` deletes only keys under
+* **Namespace**: keys are stored as `prefix + key` (configurable via `prefix=`, e.g. `entity_standardizer:v1:`). `clear()` deletes only keys under
   the prefix (never `FLUSHDB`). Change the prefix when you change the library version in a way that alters results, or
   when several environments share one Redis.
 * **Failure isolation**: a Redis error (down, timeout, auth, missing `redis` package, corrupt payload) is logged once,

@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
-namespace PhoneStandardizer.Client;
+namespace EntityStandardizer.Client;
 
 public sealed class HealthResponse
 {
