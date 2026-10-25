@@ -97,7 +97,7 @@ or set `ENTITY_STANDARDIZER_CACHE_URL=redis://cache.internal:6379/0` (or legacy 
 Redis backend behaviour:
 
 * **TTL**: every entry expires after `ttl_seconds` (default 86,400; `None`/0 stores without expiry).
-* **Namespace**: keys are stored as `prefix + key` (default prefix `address_standardizer:v1:`). `clear()` deletes only keys under
+* **Namespace**: keys are stored as `prefix + key` (configurable via `prefix=`, e.g. `entity_standardizer:v1:`). `clear()` deletes only keys under
   the prefix (never `FLUSHDB`). Change the prefix when you change the library version in a way that alters results, or
   when several environments share one Redis.
 * **Failure isolation**: a Redis error (down, timeout, auth, missing `redis` package, corrupt payload) is logged once,

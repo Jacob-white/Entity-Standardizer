@@ -198,7 +198,10 @@ def test_register_duckdb_udfs() -> None:
             person_entity_key('Bob J. Smith'),
             standardize_email_udf('Jane.Doe+tag@gmial.com'),
             standardize_url_domain('https://www.blackrock.com/us/individual?utm_source=x'),
-            es_standardize_address('350 Fifth Avenue, New York, NY 10118', 'US')
+            es_standardize_address('350 Fifth Avenue, New York, NY 10118', 'US'),
+            es_standardize_address('350 Fifth Avenue, New York, NY 10118', NULL),
+            es_standardize_address(NULL, 'US'),
+            es_standardize_address('', 'US')
         """
     ).fetchone()
     assert row[:5] == (
@@ -218,6 +221,9 @@ def test_register_duckdb_udfs() -> None:
         "janedoe@gmail.com",
         "blackrock.com",
         "350 5TH AVE, NEW YORK, NY 10118",
+        "350 5TH AVE, NEW YORK, NY 10118",
+        None,
+        None,
     )
 
 

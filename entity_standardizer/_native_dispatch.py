@@ -98,6 +98,18 @@ def normalize_company_tokens_dispatch(text: str) -> tuple[list[str], bool, bool]
     return None
 
 
+def normalize_batch_company_tokens_dispatch(
+    texts: list[str],
+) -> list[tuple[list[str], bool, bool]] | None:
+    """Batch-normalize company tokens using Rust if available, or return None."""
+    if _native_mod is not None and hasattr(_native_mod, "normalize_batch_company_tokens_rs"):
+        return [
+            (list(tokens), bool(amp_norm), bool(init_col))
+            for tokens, amp_norm, init_col in _native_mod.normalize_batch_company_tokens_rs(texts)
+        ]
+    return None
+
+
 def compute_soundex_dispatch(token: str) -> str:
     """Compute American Soundex code using Rust if available."""
     if _native_mod is not None:

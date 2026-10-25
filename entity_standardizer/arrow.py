@@ -212,12 +212,14 @@ def register_duckdb_udfs(con: Any, default_country: str = "US") -> None:
             return []
         return list(generate_phone_blocking_keys(phone, country=default_country))
 
-    con.create_function("standardize_phone_e164", _e164_udf, ["VARCHAR"], "VARCHAR")
-    con.create_function("standardize_phone_national", _national_udf, ["VARCHAR"], "VARCHAR")
-    con.create_function("standardize_phone_international", _intl_udf, ["VARCHAR"], "VARCHAR")
-    con.create_function("validate_phone_udf", _valid_udf, ["VARCHAR"], "BOOLEAN")
-    con.create_function("mask_phone_udf", _mask_udf, ["VARCHAR"], "VARCHAR")
-    con.create_function("phone_blocking_keys", _blocking_keys_udf, ["VARCHAR"], "VARCHAR[]")
+    con.create_function("standardize_phone_e164", _e164_udf, ["VARCHAR"], "VARCHAR", null_handling="special")
+    con.create_function("standardize_phone_national", _national_udf, ["VARCHAR"], "VARCHAR", null_handling="special")
+    con.create_function(
+        "standardize_phone_international", _intl_udf, ["VARCHAR"], "VARCHAR", null_handling="special"
+    )
+    con.create_function("validate_phone_udf", _valid_udf, ["VARCHAR"], "BOOLEAN", null_handling="special")
+    con.create_function("mask_phone_udf", _mask_udf, ["VARCHAR"], "VARCHAR", null_handling="special")
+    con.create_function("phone_blocking_keys", _blocking_keys_udf, ["VARCHAR"], "VARCHAR[]", null_handling="special")
 
     from entity_standardizer.company import standardize_company
     from entity_standardizer.person import standardize_person
@@ -241,12 +243,16 @@ def register_duckdb_udfs(con: Any, default_country: str = "US") -> None:
     def _url_domain_udf(url: str | None) -> str | None:
         return standardize_url(url).domain
 
-    con.create_function("standardize_company_name", _company_name_udf, ["VARCHAR"], "VARCHAR")
-    con.create_function("company_entity_key", _company_key_udf, ["VARCHAR"], "VARCHAR")
-    con.create_function("standardize_person_name", _person_name_udf, ["VARCHAR"], "VARCHAR")
-    con.create_function("person_entity_key", _person_key_udf, ["VARCHAR"], "VARCHAR")
-    con.create_function("standardize_email_udf", _email_udf, ["VARCHAR"], "VARCHAR")
-    con.create_function("standardize_url_domain", _url_domain_udf, ["VARCHAR"], "VARCHAR")
+    con.create_function(
+        "standardize_company_name", _company_name_udf, ["VARCHAR"], "VARCHAR", null_handling="special"
+    )
+    con.create_function("company_entity_key", _company_key_udf, ["VARCHAR"], "VARCHAR", null_handling="special")
+    con.create_function(
+        "standardize_person_name", _person_name_udf, ["VARCHAR"], "VARCHAR", null_handling="special"
+    )
+    con.create_function("person_entity_key", _person_key_udf, ["VARCHAR"], "VARCHAR", null_handling="special")
+    con.create_function("standardize_email_udf", _email_udf, ["VARCHAR"], "VARCHAR", null_handling="special")
+    con.create_function("standardize_url_domain", _url_domain_udf, ["VARCHAR"], "VARCHAR", null_handling="special")
 
     from entity_standardizer.address.standardizer import standardize_address
 
@@ -254,7 +260,9 @@ def register_duckdb_udfs(con: Any, default_country: str = "US") -> None:
         res = standardize_address(addr, country=country or default_country)
         return res.full_rooftop_address or res.street1 or None
 
-    con.create_function("es_standardize_address", _address_udf, ["VARCHAR", "VARCHAR"], "VARCHAR")
+    con.create_function(
+        "es_standardize_address", _address_udf, ["VARCHAR", "VARCHAR"], "VARCHAR", null_handling="special"
+    )
 
 
 def standardize_addresses_arrow(

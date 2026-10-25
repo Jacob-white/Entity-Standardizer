@@ -664,7 +664,17 @@ def test_rust_company_tokens_pure_fallback_and_batch_helpers(
                 return (["ABC", "AND", "CO"], True, True)
             return (["ACME", "CORP"], False, False)
 
+        @staticmethod
+        def normalize_batch_company_tokens_rs(
+            texts: list[str],
+        ) -> list[tuple[list[str], bool, bool]]:
+            return [(_DummyNative.normalize_company_tokens_rs(t)) for t in texts]
+
     monkeypatch.setattr(native_dispatch, "_native_mod", _DummyNative())
+    assert native_dispatch.normalize_batch_company_tokens_dispatch(["A.B.C. & Co.", "Acme Corp"]) == [
+        (["ABC", "AND", "CO"], True, True),
+        (["ACME", "CORP"], False, False),
+    ]
     nat_actions: list[str] = []
     assert _normalize_tokens("A.B.C. & Co.", nat_actions) == ["ABC", "AND", "CO"]
     assert "AMPERSAND_NORMALIZED" in nat_actions
@@ -676,6 +686,7 @@ def test_rust_company_tokens_pure_fallback_and_batch_helpers(
 
     # Fallback path when _native_mod is None
     monkeypatch.setattr(native_dispatch, "_native_mod", None)
+    assert native_dispatch.normalize_batch_company_tokens_dispatch(["Acme Corp"]) is None
     fb_actions: list[str] = []
     assert _normalize_tokens("A B C & Partners", fb_actions) == [
         "ABC",

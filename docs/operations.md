@@ -24,15 +24,13 @@ All operational features are **opt-in** through environment variables. With none
 | Variable | Meaning | Default |
 | :--- | :--- | :--- |
 | `ENTITY_STANDARDIZER_API_KEYS` | Comma-separated list of valid API keys required on `/v1/*` routes via `X-API-Key` or `Authorization: Bearer <key>`. | unset (auth disabled) |
-| `ENTITY_STANDARDIZER_FORCE_PURE` | When set to `1`, `true`, `yes`, or `on`, forces the pure-Python engine even if `_entity_standardizer_rs` is compiled. | unset (auto-detects Rust PyO3) |
-| `ENTITY_STANDARDIZER_CACHE_URL` | Optional Redis connection URL (`redis://host:6379/0` or `rediss://...`) for shared L2 address result caching across workers. | unset (in-process LRU + SQLite L2) |
-| `ENTITY_STANDARDIZER_CACHE_MAX_SIZE` | Maximum entries in the in-process L1 LRU address cache per worker process. | `50000` |
-| `ENTITY_STANDARDIZER_CACHE_DB` | File path for persistent SQLite L2 address cache (or `:memory:`). | `:memory:` |
-| `ENTITY_STANDARDIZER_AUDIT_ENABLED` | Set to `1` to automatically record low-confidence (`MANUAL_REVIEW`) address standardizations into the stewardship ledger. | `0` (off unless ledger initialized) |
-| `ENTITY_STANDARDIZER_AUDIT_DB` | SQLite database path for the address stewardship audit ledger. | `:memory:` |
-| `ENTITY_STANDARDIZER_AUDIT_MAX_ROWS` | Maximum rows retained in an in-memory audit ledger (`0` disables pruning). | `10000` |
-| `ENTITY_STANDARDIZER_ALLOW_LOCALITY` | Set to `1` to accept city/state/postal locality-only inputs globally in `standardize_address`. | `0` (`True` on `POST /v1/address`) |
-| `ENTITY_STANDARDIZER_CORRECT_STATE_FROM_ZIP` | Set to `1` to replace mismatched US state codes with the authoritative state for the 5-digit ZIP code. | `0` (reports mismatch without overwriting) |
+| `ENTITY_STANDARDIZER_FORCE_PURE` | When set to `1`, `true`, `yes`, or `on`, forces the pure-Python engine even if `_entity_standardizer_rs` is compiled (legacy fallback: `ADDRESS_STANDARDIZER_FORCE_PURE`). | unset (auto-detects Rust PyO3) |
+| `ENTITY_STANDARDIZER_CACHE_URL` | Optional Redis connection URL (`redis://host:6379/0`, `rediss://...`, or `unix://...`) for shared L2 address result caching across workers (legacy fallback: `ADDRESS_STANDARDIZER_CACHE_URL`). | unset (in-process LRU + SQLite L2) |
+| `ENTITY_STANDARDIZER_AUDIT_ENABLED` | Set to `1`, `true`, `yes`, or `on` to automatically record low-confidence (`MANUAL_STEWARDSHIP`), registered-agent hub, and `parse_failed` address standardizations into the stewardship ledger (legacy fallback: `ADDRESS_STANDARDIZER_AUDIT_ENABLED`). | `0` (off unless ledger initialized) |
+| `ENTITY_STANDARDIZER_AUDIT_MAX_ROWS` | Maximum rows retained in an in-memory audit ledger (`0` disables pruning; legacy fallback: `ADDRESS_STANDARDIZER_AUDIT_MAX_ROWS`). | `100000` |
+| `ENTITY_STANDARDIZER_ALLOW_LOCALITY` | Set to `1`, `true`, `yes`, or `on` to accept city/state/postal locality-only inputs globally in `standardize_address` (legacy fallback: `ADDRESS_STANDARDIZER_ALLOW_LOCALITY`). | `0` (`True` on `POST /v1/address`) |
+| `ENTITY_STANDARDIZER_CORRECT_STATE_FROM_ZIP` | Set to `1`, `true`, `yes`, or `on` to replace mismatched US state codes with the authoritative state for the 5-digit ZIP code (legacy fallback: `ADDRESS_STANDARDIZER_CORRECT_STATE_FROM_ZIP`). | `0` (reports mismatch without overwriting) |
+| `ENTITY_STANDARDIZER_REFERENCE_DB` | Optional file path to a local GeoNames postal SQLite index used when `enable_reference_validation=True` (legacy fallback: `ADDRESS_STANDARDIZER_REFERENCE_DB`). | unset (uses bundled US ZIP5 provider) |
 
 ---
 
@@ -80,9 +78,9 @@ services:
     ports: ["127.0.0.1:8000:8000"]
     environment:
       ENTITY_STANDARDIZER_API_KEYS: "${ENTITY_STANDARDIZER_API_KEYS:-}"
-      ENTITY_STANDARDIZER_CACHE_MAX_SIZE: "50000"
+      ENTITY_STANDARDIZER_AUDIT_ENABLED: "0"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/ready"]
       interval: 15s
       timeout: 3s
       retries: 3

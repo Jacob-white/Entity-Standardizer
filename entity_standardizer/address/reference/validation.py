@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
@@ -27,6 +28,7 @@ __all__ = [
     "ReferenceValidation",
     "validate_against_reference",
     "apply_reference_validation",
+    "get_env_reference_provider",
 ]
 
 ERR_POSTAL_UNKNOWN = "ERR_POSTAL_UNKNOWN"
@@ -187,4 +189,19 @@ def apply_reference_validation(std_address: Any, provider: ReferenceProvider) ->
             if getattr(std_address, "routing_tier", "") == "AUTO_PASS":
                 std_address.routing_tier = "FUZZY_REVIEW"
     return std_address
+
+
+def get_env_reference_provider() -> Optional[ReferenceProvider]:
+    """Return a ``GeoNamesPostalProvider`` configured via ``ENTITY_STANDARDIZER_REFERENCE_DB`` (or legacy
+    ``ADDRESS_STANDARDIZER_REFERENCE_DB``), or ``None`` when unset or unavailable.
+    """
+    path = os.environ.get(REFERENCE_DB_ENV) or os.environ.get(LEGACY_REFERENCE_DB_ENV)
+    if not path:
+        return None
+    from entity_standardizer.address.reference.geonames import GeoNamesPostalProvider
+
+    try:
+        return GeoNamesPostalProvider(path)
+    except (OSError, ValueError):
+        return None
 

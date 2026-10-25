@@ -261,6 +261,30 @@ def test_address_subsystem_lazy_audit_and_native_dispatch(monkeypatch) -> None:
         audited = standardize_address("???")
         assert audited.audit_record is not None
         assert addr_audit._DEFAULT_AUDIT_LEDGER is not None
+
+        # Legacy ADDRESS_STANDARDIZER_AUDIT_ENABLED fallback
+        addr_audit._DEFAULT_AUDIT_LEDGER = None
+        monkeypatch.delenv("ENTITY_STANDARDIZER_AUDIT_ENABLED", raising=False)
+        monkeypatch.setenv("ADDRESS_STANDARDIZER_AUDIT_ENABLED", "true")
+        clear_cache()
+        audited_legacy = standardize_address("???")
+        assert audited_legacy.audit_record is not None
     finally:
         addr_audit._DEFAULT_AUDIT_LEDGER = saved_ledger
+
+    # 5. ENTITY_STANDARDIZER_ALLOW_LOCALITY boolean truthy values & ENTITY_STANDARDIZER_REFERENCE_DB
+    from entity_standardizer.address.reference.validation import get_env_reference_provider
+
+    with monkeypatch.context() as mp:
+        mp.setenv("ENTITY_STANDARDIZER_ALLOW_LOCALITY", "true")
+        clear_cache()
+        loc_addr = standardize_address("", city="New York", state="NY", postal_code="10001")
+        assert loc_addr.city == "NEW YORK"
+        assert loc_addr.state == "NY"
+
+        mp.delenv("ENTITY_STANDARDIZER_REFERENCE_DB", raising=False)
+        mp.delenv("ADDRESS_STANDARDIZER_REFERENCE_DB", raising=False)
+        assert get_env_reference_provider() is None
+        mp.setenv("ENTITY_STANDARDIZER_REFERENCE_DB", "/nonexistent/geonames.db")
+        assert get_env_reference_provider() is None
 

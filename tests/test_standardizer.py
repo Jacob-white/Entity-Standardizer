@@ -596,9 +596,25 @@ def test_fastapi_server_endpoints(monkeypatch) -> None:
         client.post(
             "/v1/standardize",
             json={"phone": "(415) 555-2671"},
-            headers={"Authorization": "Bearer key-beta"},
+            headers={"Authorization": "   Bearer   key-beta  "},
         ).status_code
         == 200
+    )
+    assert (
+        client.post(
+            "/v1/standardize",
+            json={"phone": "(415) 555-2671"},
+            headers={"Authorization": "Basic dXNlcjpwYXNz"},
+        ).status_code
+        == 401
+    )
+    assert (
+        client.post(
+            "/v1/standardize",
+            json={"phone": "(415) 555-2671"},
+            headers={"X-API-Key": "   "},
+        ).status_code
+        == 401
     )
     monkeypatch.delenv("ENTITY_STANDARDIZER_API_KEYS")
 

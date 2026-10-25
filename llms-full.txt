@@ -182,25 +182,28 @@ Returned by `standardize_contact(...)`:
 
 ## 4. FastAPI HTTP Microservice Endpoints (`entity_standardizer.server:app`)
 
+When `ENTITY_STANDARDIZER_API_KEYS` is set (comma-separated keys), all `/v1/*` routes require `X-API-Key: <key>` or `Authorization: Bearer <key>` (`GET /health` and `GET /ready` remain unauthenticated).
+
 1. `GET /health` -> `{"status": "ok", "version": "2.1.0"}`
-2. `POST /v1/contact` (`ContactStandardizeRequest`) -> `StandardizedContact`
-3. `POST /v1/contact/compare` (`ContactCompareRequest`) -> `ContactComparisonResult`
-4. `POST /v1/company` (`CompanyStandardizeRequest`) -> `StandardizedCompany`
-5. `POST /v1/company/compare` (`CompanyCompareRequest`) -> `CompanyComparisonResult`
-6. `POST /v1/person` (`PersonStandardizeRequest`) -> `StandardizedPerson`
-7. `POST /v1/person/compare` (`PersonCompareRequest`) -> `PersonComparisonResult`
-8. `POST /v1/job-title` (`JobTitleStandardizeRequest`) -> `StandardizedJobTitle`
-9. `POST /v1/email` (`EmailStandardizeRequest`) -> `StandardizedEmail`
-10. `POST /v1/url` (`UrlStandardizeRequest`) -> `StandardizedUrl`
-11. `POST /v1/social` (`SocialStandardizeRequest`) -> `StandardizedSocial`
-12. `POST /v1/address` (`AddressStandardizeRequest`) -> `StandardizedAddress`
-13. `POST /v1/standardize` (`PhoneStandardizeRequest`) -> `StandardizedPhone`
-14. `POST /v1/explain` (`PhoneStandardizeRequest`) -> `{"record": StandardizedPhone, "intelligence": dict, "explanation": dict}`
-15. `POST /v1/compare` (`PhoneCompareRequest`) -> `PhoneComparisonResult`
-16. `POST /v1/deduplicate` (`PhoneDeduplicateRequest`) -> `{"cluster_count": int, "clusters": list[PhoneCluster]}`
-17. `POST /v1/batch` (`PhoneBatchRequest`) -> `{"count": int, "results": list[StandardizedPhone]}`
-18. `GET /v1/countries` -> `{"count": 249, "countries": list[CountryDialPlan]}`
-19. `GET /v1/countries/{identifier}` -> `CountryDialPlan`
+2. `GET /ready` -> `{"status": "ready", "version": "2.1.0", "native_available": bool}`
+3. `POST /v1/contact` (`ContactStandardizeRequest`) -> `StandardizedContact`
+4. `POST /v1/contact/compare` (`ContactCompareRequest`) -> `ContactComparisonResult`
+5. `POST /v1/company` (`CompanyStandardizeRequest`) -> `StandardizedCompany`
+6. `POST /v1/company/compare` (`CompanyCompareRequest`) -> `CompanyComparisonResult`
+7. `POST /v1/person` (`PersonStandardizeRequest`) -> `StandardizedPerson`
+8. `POST /v1/person/compare` (`PersonCompareRequest`) -> `PersonComparisonResult`
+9. `POST /v1/job-title` (`JobTitleStandardizeRequest`) -> `StandardizedJobTitle`
+10. `POST /v1/email` (`EmailStandardizeRequest`) -> `StandardizedEmail`
+11. `POST /v1/url` (`UrlStandardizeRequest`) -> `StandardizedUrl`
+12. `POST /v1/social` (`SocialStandardizeRequest`) -> `StandardizedSocial`
+13. `POST /v1/address` (`AddressStandardizeRequest`) -> `StandardizedAddress`
+14. `POST /v1/standardize` (`PhoneStandardizeRequest`) -> `StandardizedPhone`
+15. `POST /v1/explain` (`PhoneStandardizeRequest`) -> `{"record": StandardizedPhone, "intelligence": dict, "explanation": dict}`
+16. `POST /v1/compare` (`PhoneCompareRequest`) -> `PhoneComparisonResult`
+17. `POST /v1/deduplicate` (`PhoneDeduplicateRequest`) -> `{"cluster_count": int, "clusters": list[PhoneCluster]}`
+18. `POST /v1/batch` (`PhoneBatchRequest`) -> `{"count": int, "results": list[StandardizedPhone]}`
+19. `GET /v1/countries` -> `{"count": 249, "countries": list[CountryDialPlan]}`
+20. `GET /v1/countries/{identifier}` -> `CountryDialPlan`
 
 ---
 
@@ -218,7 +221,7 @@ Run via `entity-standardizer-mcp` or `python -m entity_standardizer.mcp.server`.
 
 ## 6. DuckDB SQL Scalar UDFs (`register_duckdb_udfs`)
 
-Calling `register_duckdb_udfs(con, default_country="US")` registers **12 SQL scalar UDFs**:
+Calling `register_duckdb_udfs(con, default_country="US")` registers **13 SQL scalar UDFs**:
 - `standardize_phone_e164(VARCHAR) -> VARCHAR`
 - `standardize_phone_national(VARCHAR) -> VARCHAR`
 - `standardize_phone_international(VARCHAR) -> VARCHAR`
@@ -231,9 +234,10 @@ Calling `register_duckdb_udfs(con, default_country="US")` registers **12 SQL sca
 - `person_entity_key(VARCHAR) -> VARCHAR`
 - `standardize_email_udf(VARCHAR) -> VARCHAR`
 - `standardize_url_domain(VARCHAR) -> VARCHAR`
+- `es_standardize_address(VARCHAR, VARCHAR) -> VARCHAR`
 
 ---
 
 ## 7. Multi-Platform Client SDKs (`v2.1.0`)
 
-All 3 official client SDKs (`sdks/typescript`, `sdks/go`, `sdks/dotnet`) provide 100% model and method parity across all 19 HTTP operations (`health`, `standardizeContact`, `compareContacts`, `standardizeCompany`, `compareCompanies`, `standardizePerson`, `comparePersons`, `standardizeJobTitle`, `standardizeEmail`, `standardizeUrl`, `standardizeSocial`, `standardizeAddress`, `standardize`, `explain`, `compare`, `deduplicate`, `batch`, `listCountries`, `getCountry`) and are verified on every test run via `tests/test_sdk_contract.py`.
+All 3 official client SDKs (`sdks/typescript`, `sdks/go`, `sdks/dotnet`) expose `EntityStandardizerClient` (with `PhoneStandardizerClient` backwards-compatible alias) and provide 100% model and method parity across all HTTP operations (`health`, `standardizeContact`, `compareContacts`, `standardizeCompany`, `compareCompanies`, `standardizePerson`, `comparePersons`, `standardizeJobTitle`, `standardizeEmail`, `standardizeUrl`, `standardizeSocial`, `standardizeAddress`, `standardize`, `explain`, `compare`, `deduplicate`, `batch`, `listCountries`, `getCountry`) verified on every test run via `tests/test_sdk_contract.py`.

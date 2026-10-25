@@ -41,7 +41,7 @@ A unified, high-performance multi-national **Entity, Organization, Person, Web, 
 5. **Universal 249 ISO-3166-1 Country & ITU-T Dial-Plan Registry**:
    - Deterministic dial-plan metadata (`CountryDialPlan`) for every ISO-3166-1 jurisdiction, producing **ITU-T E.164**, **ITU-T E.123 National**, **ITU-T E.123 International**, and **IETF RFC 3966 URI** formats alongside NANP 25-country / 50-state attribution.
 6. **Multi-Pillar Entity Resolution & Modern Data Stack**:
-   - Compares and clusters multi-pillar records (`compare_contacts`, `cluster_contact_records`, `deduplicate_companies`, `deduplicate_persons`, `deduplicate_phones`), provides `mask_phone()` privacy redaction, lazy-loaded Apache Arrow / Polars (`standardize_arrow`, `standardize_companies_arrow`, `standardize_persons_arrow`) & DuckDB SQL scalar UDFs (`register_duckdb_udfs`), and parity-tested TypeScript/React, Go, and .NET SDKs.
+   - Compares and clusters multi-pillar records (`compare_contacts`, `cluster_contact_records`, `deduplicate_companies`, `deduplicate_persons`, `deduplicate_phones`), provides `mask_phone()` privacy redaction, lazy-loaded Apache Arrow / Polars (`standardize_arrow`, `standardize_addresses_arrow`, `standardize_companies_arrow`, `standardize_persons_arrow`) & DuckDB SQL scalar UDFs (`register_duckdb_udfs`), and parity-tested TypeScript/React, Go, and .NET SDKs.
 
 ---
 
@@ -142,7 +142,7 @@ entity-standardizer parse "+44 (0) 20 7946 0912 ext 42"
 entity-standardizer country JP
 entity-standardizer batch input.csv output.csv --phone-col phone --country-col country
 
-# Run the FastAPI HTTP service (19 HTTP routes across phone, address, company, person, job-title, email, url, social, contact)
+# Run the FastAPI HTTP service (20 HTTP routes across phone, address, company, person, job-title, email, url, social, contact)
 uvicorn entity_standardizer.server:app --host 0.0.0.0 --port 8000
 
 # Run the Model Context Protocol (MCP) server (17 tools across all entity standardization and comparison pillars)

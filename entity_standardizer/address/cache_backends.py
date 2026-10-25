@@ -14,9 +14,9 @@ Implementations:
   and treated as a cache miss (reads) or a no-op (writes), and the backend pauses for ``retry_after`` seconds before
   trying the server again.
 
-Select a backend with ``configure_cache(backend=...)`` or the ``ADDRESS_STANDARDIZER_CACHE_URL`` environment
-variable (``redis://``, ``rediss://`` or ``unix://`` URL). See ``docs/performance.md`` for what is shared between
-processes and what stays per process.
+Select a backend with ``configure_cache(backend=...)`` or the ``ENTITY_STANDARDIZER_CACHE_URL`` environment
+variable (with fallback to ``ADDRESS_STANDARDIZER_CACHE_URL``; ``redis://``, ``rediss://`` or ``unix://`` URL). See
+``docs/performance.md`` for what is shared between processes and what stays per process.
 """
 
 import json
