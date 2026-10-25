@@ -97,6 +97,64 @@ def test_diacritic_parity_and_canonical_maps() -> None:
     assert fold_to_ascii_key("Għasri") == "GHASRI"
 
 
+def test_diacritic_non_latin_and_symbol_preservation_parity() -> None:
+    """Assert non-Latin scripts and symbols are preserved without mutation across Python and Rust."""
+    from entity_standardizer._native_dispatch import _native_mod, is_native_available
+    from entity_standardizer.normalization import (
+        _fold_latin_diacritics_py,
+        fold_latin_diacritics,
+    )
+
+    test_cases: list[tuple[str, str]] = [
+        # 1. ASCII fast-path verification (exercises isascii() == True)
+        ("Acme Corp 123 Main St.", "Acme Corp 123 Main St."),
+        ("Plain ASCII String without any accents!", "Plain ASCII String without any accents!"),
+        # 2. Cyrillic: Ukrainian, Russian, Belarusian, Kazakh (preserving precomposed ї, etc.)
+        ("Київ, Одеса, Львів, Харків", "Київ, Одеса, Львів, Харків"),
+        ("Москва, Санкт-Петербург, Минск, Алматы", "Москва, Санкт-Петербург, Минск, Алматы"),
+        # 3. Greek: Monotonic & polytonic accented vowels (preserving ή, ί, ό, ά, etc.)
+        ("Αθήνα, Θεσσαλονίκη, Πάτρα, Ηράκλειο, Λάρισα", "Αθήνα, Θεσσαλονίκη, Πάτρα, Ηράκλειο, Λάρισα"),
+        ("ά έ ή ί ό ύ ώ ΐ ΰ", "ά έ ή ί ό ύ ώ ΐ ΰ"),
+        # 4. Arabic: Mashriq and Gulf (preserving hamza أ, ta marbuta ة, and harakat)
+        ("دبي, أبوظبي, الرياض, القاهرة, بيروت", "دبي, أبوظبي, الرياض, القاهرة, بيروت"),
+        ("عَمَّان, مَسْقَط", "عَمَّان, مَسْقَط"),
+        # 5. Korean Hangul: Precomposed NFC syllables must NOT decompose to individual Jamo
+        ("서울특별시 강남구 테헤란로 152", "서울특별시 강남구 테헤란로 152"),
+        ("부산광역시 해운대구, 제주특별자치도", "부산광역시 해운대구, 제주특별자치도"),
+        # 6. Chinese & Japanese: CJK ideographs, Hiragana, Katakana
+        ("北京市 海淀区, 广州市 天河区, 香港特別行政區", "北京市 海淀区, 广州市 天河区, 香港特別行政區"),
+        ("東京都 新宿区, とうきょう, トウキョウ", "東京都 新宿区, とうきょう, トウキョウ"),
+        # 7. Thai: Consonants, vowels, and tone marks
+        ("กรุงเทพมหานคร, เชียงใหม่, ภูเก็ต, พัทยา", "กรุงเทพมหานคร, เชียงใหม่, ภูเก็ต, พัทยา"),
+        # 8. Devanagari & Kannada: Indic scripts with matras and halant
+        ("नई दिल्ली, मुम्बई, ಬೆಂಗಳೂರು, சென்னை", "नई दिल्ली, मुम्बई, ಬೆಂಗಳೂರು, சென்னை"),
+        # 9. Symbols & Emojis: Compatibility symbols (™ must NOT become TM), legal, and emojis
+        (
+            "🏢 Company HQ 🚀 Acme Corp 🌐 123 Main St. © 2026 ® ™ ℠ № § ¶ °",
+            "🏢 Company HQ 🚀 Acme Corp 🌐 123 Main St. © 2026 ® ™ ℠ № § ¶ °",
+        ),
+        # 10. Mixed Latin diacritics and non-Latin scripts (only Latin diacritics fold!)
+        ("Acme™ Corporation, Київ (Kyiv), Ukraine - Crème Brûlée HQ", "Acme™ Corporation, Київ (Kyiv), Ukraine - Creme Brulee HQ"),
+        ("Hôtel de Ville, Αθήνα 105 52, Greece", "Hotel de Ville, Αθήνα 105 52, Greece"),
+        ("Branch: 서울특별시 강남구 & أبوظبي Tower #100", "Branch: 서울특별시 강남구 & أبوظبي Tower #100"),
+    ]
+
+    for raw, expected in test_cases:
+        # Verify pure Python implementation
+        py_folded = _fold_latin_diacritics_py(raw)
+        assert py_folded == expected, f"Pure-Python mismatch for {raw!r}: got {py_folded!r}, expected {expected!r}"
+
+        # Verify active dispatch function
+        dispatch_folded = fold_latin_diacritics(raw)
+        assert dispatch_folded == expected, f"Dispatch mismatch for {raw!r}: got {dispatch_folded!r}, expected {expected!r}"
+
+        # If native extension is compiled and available, verify 100% Rust equality
+        if is_native_available() and hasattr(_native_mod, "fold_latin_diacritics_rs"):
+            rust_folded = _native_mod.fold_latin_diacritics_rs(raw)
+            assert rust_folded == expected, f"Rust mismatch for {raw!r}: got {rust_folded!r}, expected {expected!r}"
+            assert rust_folded == py_folded, f"Rust vs Python parity failure for {raw!r}"
+
+
 def test_lazy_spatial_exports_and_dir() -> None:
     import entity_standardizer.address as addr_mod
 

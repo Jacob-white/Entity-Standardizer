@@ -201,6 +201,39 @@ _DOTTED_INITIALISM_RE = re.compile(
 # Danish/Norwegian A/S legal form
 _AS_SLASH_RE = re.compile(r"\bA\s*/\s*S\b", re.IGNORECASE)
 
+# Unicode alphanumeric extras where Rust char::is_alphanumeric() is True but Python \w is False
+# (892 BMP codepoints across Hebrew, Arabic, Devanagari, Bengali, Thai, Lao, etc.)
+_COMPANY_NON_WORD_RE = re.compile(
+    r"[^\w\s"
+    r"\u05b0-\u05bd\u05bf\u05c1-\u05c2\u05c4-\u05c5\u05c7"
+    r"\u0610-\u061a\u064b-\u0657\u0659-\u065f\u0670\u06d6-\u06dc\u06e1-\u06e4\u06e7-\u06e8\u06ed"
+    r"\u0711\u0730-\u073f\u07a6-\u07b0\u0816-\u0817\u081b-\u0823\u0825-\u0827\u0829-\u082c\u0897-\u089f"
+    r"\u08ca-\u08e1\u08e3-\u0903\u093a-\u093c\u093e-\u094c\u094e-\u094f\u0951-\u0957\u0962-\u0963"
+    r"\u0981-\u0983\u09bc\u09be-\u09c4\u09c7-\u09c8\u09cb-\u09cc\u09d7\u09e2-\u09e3\u0a01-\u0a03\u0a3c"
+    r"\u0a3e-\u0a42\u0a47-\u0a48\u0a4b-\u0a4c\u0a51\u0a70-\u0a71\u0a75\u0a81-\u0a83\u0abc\u0abe-\u0ac5"
+    r"\u0ac7-\u0ac9\u0acb-\u0acc\u0ae2-\u0ae3\u0afa-\u0afc\u0b01-\u0b03\u0b3c\u0b3e-\u0b44\u0b47-\u0b48\u0b4b-\u0b4c"
+    r"\u0b56-\u0b57\u0b62-\u0b63\u0b82\u0bbe-\u0bc2\u0bc6-\u0bc8\u0bca-\u0bcc\u0bd7\u0c00-\u0c04"
+    r"\u0c3e-\u0c44\u0c46-\u0c48\u0c4a-\u0c4c\u0c55-\u0c56\u0c62-\u0c63\u0c81-\u0c83\u0cbc\u0cbe-\u0cc4"
+    r"\u0cc6-\u0cc8\u0cca-\u0ccc\u0cd5-\u0cd6\u0ce2-\u0ce3\u0cf3\u0d00-\u0d03\u0d3b-\u0d3c\u0d3e-\u0d44"
+    r"\u0d46-\u0d48\u0d4a-\u0d4c\u0d57\u0d62-\u0d63\u0d81-\u0d83\u0dca\u0dcf-\u0dd4\u0dd6\u0dd8-\u0ddf"
+    r"\u0df2-\u0df3\u0e31\u0e34-\u0e3a\u0e47-\u0e4e\u0eb1\u0eb4-\u0ebc\u0ec8-\u0ecd\u0f18-\u0f19\u0f35"
+    r"\u0f37\u0f39\u0f3e-\u0f3f\u0f71-\u0f84\u0f86-\u0f87\u0f8d-\u0f97\u0f99-\u0fbc\u0fc6\u102b-\u103e"
+    r"\u1056-\u1059\u105e-\u1060\u1062-\u1064\u1067-\u106d\u1071-\u1074\u1082-\u108d\u108f\u109a-\u109d"
+    r"\u135d-\u135f\u16ee\u1712-\u1714\u1732-\u1734\u1752-\u1753\u1772-\u1773\u17b4-\u17d3\u17dd"
+    r"\u180b-\u180d\u1885-\u1886\u18a9\u1920-\u192b\u1930-\u193b\u1a17-\u1a1b\u1a55-\u1a5e\u1a60-\u1a7c"
+    r"\u1a7f\u1ab0-\u1ace\u1b00-\u1b04\u1b34-\u1b44\u1b6b-\u1b73\u1b80-\u1b82\u1ba1-\u1baa\u1bac-\u1bad\u1be6-\u1bf3"
+    r"\u1c24-\u1c37\u1c89-\u1c8a\u1cd0-\u1cd2\u1cd4-\u1ce8\u1ced\u1cf2-\u1cf4\u1cf7-\u1cf9\u1dc0-\u1dff\u2071\u207f"
+    r"\u2090-\u209c\u2102\u2107\u210a-\u2113\u2115\u2118-\u211d\u2124\u2128\u212c-\u212d\u212f-\u2139"
+    r"\u213c-\u213f\u2145-\u2149\u214e\u2160-\u2188\u2460-\u249b\u24b6-\u24e9\u24ea-\u24ff\u2cf2-\u2cf3\u2d7f"
+    r"\u2de0-\u2dff\u3005-\u3007\u3021-\u3029\u3031-\u3035\u3038-\u303c\u3099-\u309a\u3192-\u3195"
+    r"\u31d0-\u31e3\u3220-\u3229\u3248-\u324f\u3251-\u325f\u3280-\u3289\u32b1-\u32bf\ua66f\ua674-\ua67d"
+    r"\ua69e-\ua69f\ua6f0-\ua6f1\ua7cb-\ua7cd\ua7da-\ua7dc\ua802\ua806\ua80b\ua823-\ua827\ua82c\ua880-\ua881\ua8b4-\ua8c5"
+    r"\ua8e0-\ua8f1\ua8ff\ua926-\ua92d\ua947-\ua953\ua980-\ua983\ua9b3-\ua9c0\ua9e5\uaa29-\uaa36\uaa43"
+    r"\uaa4c-\uaa4d\uaa7b-\uaa7d\uaab0\uaab2-\uaab4\uaab7-\uaab8\uaabe-\uaabf\uaac1\uaaf5-\uaaf6"
+    r"\uaaeb-\uaaef\uab5b\uabe3-\uabea\uabec-\uabed\ufb1e\ufe00-\ufe0f\ufe20-\ufe2f"
+    r"]"
+)
+
 
 @dataclass(slots=True)
 class StandardizedCompany:
@@ -266,7 +299,7 @@ def _pure_normalize_tokens(text: str, actions: list[str] | None = None) -> list[
         return f" {letters} "
 
     working = _DOTTED_INITIALISM_RE.sub(_collapse_dotted, working)
-    working = re.sub(r"[^\w\s]", " ", working)
+    working = _COMPANY_NON_WORD_RE.sub(" ", working)
     raw_tokens = [t.upper() for t in working.split() if t]
 
     # Collapse consecutive single-letter tokens (e.g. "I B M" -> "IBM"), preserving "SA DE CV"
@@ -276,14 +309,21 @@ def _pure_normalize_tokens(text: str, actions: list[str] | None = None) -> list[
     while i < n:
         if (
             len(raw_tokens[i]) == 1
+            and raw_tokens[i].isascii()
             and raw_tokens[i].isalpha()
             and i + 1 < n
             and len(raw_tokens[i + 1]) == 1
+            and raw_tokens[i + 1].isascii()
             and raw_tokens[i + 1].isalpha()
         ):
             run = [raw_tokens[i]]
             j = i + 1
-            while j < n and len(raw_tokens[j]) == 1 and raw_tokens[j].isalpha():
+            while (
+                j < n
+                and len(raw_tokens[j]) == 1
+                and raw_tokens[j].isascii()
+                and raw_tokens[j].isalpha()
+            ):
                 run.append(raw_tokens[j])
                 j += 1
             collapsed.append("".join(run))

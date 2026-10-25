@@ -248,14 +248,117 @@ LATIN_LIGATURE_AND_STROKE_MAP: dict[str, str] = {
 _DIACRITIC_STROKE_MAP = str.maketrans(LATIN_LIGATURE_AND_STROKE_MAP)
 
 
+def _build_latin_diacritics_translate_table() -> dict[int, str | None]:
+    """Build a comprehensive translation table matching Rust's fold_latin_diacritics_to_chars.
+
+    Maps 854 codepoints:
+    - 320 combining diacritical marks in Latin blocks to None (deleted)
+    - 30 Latin ligatures and digraphs to multi-character expansions
+    - 504 Latin precomposed diacritics and stroked letters to ASCII base characters
+    Non-Latin scripts (Cyrillic, Greek, Arabic, Hangul, CJK, Devanagari, Thai) and
+    symbols are untouched.
+    """
+    mapping: dict[int, str | None] = {}
+
+    # 1. Drop combining diacritical marks in Latin combining blocks
+    combining_ranges = (
+        (0x0300, 0x036F),  # Combining Diacritical Marks
+        (0x1AB0, 0x1AFF),  # Combining Diacritical Marks Extended
+        (0x1DC0, 0x1DFF),  # Combining Diacritical Marks Supplement
+        (0x20D0, 0x20FF),  # Combining Diacritical Marks for Symbols
+        (0xFE20, 0xFE2F),  # Combining Half Marks
+    )
+    for start, end in combining_ranges:
+        for cp in range(start, end + 1):
+            mapping[cp] = None
+
+    # 2. Multi-character Latin ligatures and digraphs
+    multi_char_expansions = {
+        "ß": "ss",
+        "ẞ": "SS",
+        "æ": "ae",
+        "ǣ": "ae",
+        "ǽ": "ae",
+        "Æ": "AE",
+        "Ǣ": "AE",
+        "Ǽ": "AE",
+        "œ": "oe",
+        "Œ": "OE",
+        "þ": "th",
+        "Þ": "TH",
+        "Ǆ": "DZ",
+        "Ǳ": "DZ",
+        "ǅ": "Dz",
+        "ǲ": "Dz",
+        "ǆ": "dz",
+        "ǳ": "dz",
+        "Ĳ": "IJ",
+        "ĳ": "ij",
+        "Ǉ": "LJ",
+        "ǈ": "Lj",
+        "ǉ": "lj",
+        "Ǌ": "NJ",
+        "ǋ": "Nj",
+        "ǌ": "nj",
+        "Ŀ": "L\u00b7",
+        "ŀ": "l\u00b7",
+        "ẚ": "a\u02be",
+        "ŉ": "\u02bcn",
+    }
+    for ch, repl in multi_char_expansions.items():
+        mapping[ord(ch)] = repl
+
+    # 3. Stroked letters and single-char overrides
+    single_char_overrides = {
+        "đ": "d",
+        "Đ": "D",
+        "ð": "d",
+        "Ð": "D",
+        "ħ": "h",
+        "Ħ": "H",
+        "ł": "l",
+        "Ł": "L",
+        "ø": "o",
+        "Ø": "O",
+        "ǿ": "o",
+        "Ǿ": "O",
+        "ſ": "s",
+        "ẛ": "s",
+        "Ǯ": "Ʒ",
+        "ǯ": "ʒ",
+    }
+    for ch, repl in single_char_overrides.items():
+        mapping[ord(ch)] = repl
+
+    # 4. Decompose Latin characters in standard Latin blocks:
+    # Latin-1 Supplement (0x00C0..0x00FF), Latin Extended-A (0x0100..0x017F),
+    # Latin Extended-B (0x0180..0x024F), Latin Extended Additional (0x1E00..0x1EFF)
+    latin_blocks = (
+        (0x00C0, 0x00FF),
+        (0x0100, 0x017F),
+        (0x0180, 0x024F),
+        (0x1E00, 0x1EFF),
+    )
+    for start, end in latin_blocks:
+        for cp in range(start, end + 1):
+            if cp in mapping:
+                continue
+            ch = chr(cp)
+            nfd = unicodedata.normalize("NFD", ch)
+            if len(nfd) > 1 and unicodedata.combining(nfd[1]):
+                mapping[cp] = nfd[0]
+
+    return mapping
+
+
+_LATIN_DIACRITICS_TRANSLATE_TABLE: dict[int, str | None] = _build_latin_diacritics_translate_table()
+
+
 def _fold_latin_diacritics_py(text: str) -> str:
     """Pure-Python implementation of Latin diacritic and stroke folding."""
-    decomposed = "".join(
-        ch
-        for ch in unicodedata.normalize("NFKD", text)
-        if not unicodedata.combining(ch)
-    )
-    return decomposed.translate(_DIACRITIC_STROKE_MAP)
+    if text.isascii():
+        return text
+    return text.translate(_LATIN_DIACRITICS_TRANSLATE_TABLE)
 
 
 def fold_latin_diacritics(text: str) -> str:
