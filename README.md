@@ -15,6 +15,8 @@ A unified, high-performance multi-national **Entity, Organization, Person, Web, 
 
 - **[5-Minute Quickstart Guide](docs/quickstart.md)** — Step-by-step onboarding for joint contact cross-healing, company/person/web standardization, address & phone parsing, multi-pillar comparison & deduplication, Arrow/Polars/DuckDB SQL UDFs, CLI, and HTTP service.
 - **[Complete API Reference](docs/api_reference.md)** — Full reference for all Python dataclasses, functions, cross-healing enums, CLI commands, 18 FastAPI endpoints, 17 MCP tools, and columnar/SQL UDFs.
+- **[AI Agent & MCP Integration Guide](docs/ai_agent_guide.md)** & **[`llms.txt`](llms.txt)** — Model Context Protocol (MCP) setup, 17-tool catalog, autonomous agent decision tree, and token-efficient LLM context index.
+- **[Developer Cookbook & Production Recipes](docs/developer_cookbook.md)** — Copy-pasteable recipes for SEC/Form ADV hygiene, couple splitting, multi-pillar deduplication, Polars/Arrow/DuckDB ETL, and TCPA/IRSF anti-fraud guardrails.
 - **[Global Telephony Enterprise Blueprint](docs/GLOBAL_TELEPHONY_ARCHITECTURE_PLAN.md)** — Master architectural specification and global dial-plan roadmap.
 - **[Global Spatial & Address Enterprise Blueprint](docs/GLOBAL_SPATIAL_ENTERPRISE_BLUEPRINT.md)** — Master architectural specification for USPS Pub 28 / UPU S42 address standardization and offline geocoding.
 - **[Multi-Platform Client SDKs](sdks/README.md)** — Client library specifications and examples for TypeScript/React, .NET, and Go.

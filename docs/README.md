@@ -8,6 +8,8 @@
 
 - **[5-Minute Quickstart Guide](quickstart.md)** — Step-by-step onboarding for joint contact standardization, company/person/web normalization, USPS Pub 28 / UPU S42 address standardization, ITU-T E.164/E.123/RFC 3966 telephony parsing, entity comparison & deduplication, Arrow/Polars/DuckDB SQL UDFs, CLI, and HTTP service.
 - **[Complete API Reference](api_reference.md)** — Reference for all Python models, functions, cross-healing enums, CLI commands, 18 FastAPI endpoints, 17 MCP tools, and Arrow/Polars/DuckDB UDFs.
+- **[AI Agent & MCP Integration Guide](ai_agent_guide.md)** & **[`llms.txt`](../llms.txt)** — Model Context Protocol (MCP) configuration, 17-tool catalog, autonomous agent decision tree, and token-efficient LLM context index.
+- **[Developer Cookbook & Production Recipes](developer_cookbook.md)** — Production recipes for SEC/Form ADV hygiene, couple splitting, multi-pillar deduplication, Polars/Arrow/DuckDB ETL, and TCPA/IRSF anti-fraud guardrails.
 - **[Python API Docstrings](python_api.md)** — MkDocs docstring index for `entity_standardizer`, `address_standardizer`, and `phone_standardizer`.
 - **[Multi-Platform Client SDKs](../sdks/README.md)** — Official client libraries for TypeScript/React, .NET, and Go.
 - **[Operations & Deployment Guide](operations.md)** — Production deployment, observability, caching, and SLA configuration.

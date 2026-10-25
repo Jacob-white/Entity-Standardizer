@@ -11,6 +11,8 @@ The project overview, install instructions, and feature list live in the
 | :--- | :--- |
 | Standardize my first contact, company, person, address, or phone | [Quickstart](quickstart.md) |
 | Look up a model field, function, CLI command, HTTP endpoint, or MCP tool | [API reference](api_reference.md) |
+| Integrate with an AI agent, LLM, or Model Context Protocol (MCP) host | [AI Agent & MCP Guide](ai_agent_guide.md) and [`llms.txt`](../llms.txt) |
+| Copy production ETL, deduplication, or anti-fraud recipes | [Developer Cookbook](developer_cookbook.md) |
 | Call the HTTP service | [HTTP endpoints](api_endpoints.md) (generated from the OpenAPI schema; raw file: [openapi.json](openapi.json)) |
 | Browse docstrings for the main Python functions | [Python API](python_api.md) |
 | Validate postal codes against reference data | [Reference data](reference_data.md) |
