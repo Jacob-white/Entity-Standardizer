@@ -1,6 +1,6 @@
 # AGENTS.md - Working in Entity-Standardizer
 
-Guidance for AI coding agents and contributors. See [CONTRIBUTING.md](CONTRIBUTING.md), [docs/api_reference.md](docs/api_reference.md), and [docs/GLOBAL_TELEPHONY_ARCHITECTURE_PLAN.md](docs/GLOBAL_TELEPHONY_ARCHITECTURE_PLAN.md) for the master specifications.
+Guidance for AI coding agents and contributors. See [CONTRIBUTING.md](CONTRIBUTING.md), [llms.txt](llms.txt), [docs/ai_agent_guide.md](docs/ai_agent_guide.md), [docs/developer_cookbook.md](docs/developer_cookbook.md), [docs/api_reference.md](docs/api_reference.md), and [docs/GLOBAL_TELEPHONY_ARCHITECTURE_PLAN.md](docs/GLOBAL_TELEPHONY_ARCHITECTURE_PLAN.md) for the master specifications.
 
 ## What this is
 

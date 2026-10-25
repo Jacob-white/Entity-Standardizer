@@ -1,10 +1,114 @@
-# Phone Standardizer
+# Entity Standardizer (`entity_standardizer` v2.1.0)
 
-> Standalone zero-dependency multi-national telephone number standardization, ITU-T E.164/E.123/RFC 3966 formatting, NANP territory/state resolution, line-type classification, and entity linkage library for Python (with optional Rust PyO3 acceleration, FastAPI server, and MCP server).
+> Unified, zero-network offline Python + Rust PyO3 engine for multi-national Organization (ISO 20275 ELF), Person & Job Title, Email/URL/Social (RFC 5321/5322, IDNA, eTLD+1), Physical Address (USPS Pub 28 / UPU S42), and Telephone (ITU-T E.164 / E.123 / RFC 3966 / NANP) standardization, bidirectional cross-healing, and multi-pillar entity resolution across all 249 ISO-3166-1 countries.
 
-## Key Files
-- [README.md](README.md): Overview, quickstart, and capabilities.
-- [docs/GLOBAL_TELEPHONY_ARCHITECTURE_PLAN.md](docs/GLOBAL_TELEPHONY_ARCHITECTURE_PLAN.md): Full master technical blueprint.
-- [docs/quickstart.md](docs/quickstart.md): 5-minute developer onboarding.
-- [docs/api_reference.md](docs/api_reference.md): Complete Python, CLI, HTTP, and MCP API reference.
-- [SECURITY.md](SECURITY.md): Security policy, IRSF fraud detection, and PII masking.
+## Documentation Map
+
+- [README](README.md): Overview, highlights, quickstart, CLI, FastAPI, and MCP server usage.
+- [5-Minute Quickstart](docs/quickstart.md): Copy-pasteable examples for all 6 standardization and comparison pillars.
+- [Complete API Reference](docs/api_reference.md): Dataclasses, functions, `CrossHealingAction` enums, 18 FastAPI endpoints, 17 MCP tools, and 12 DuckDB SQL UDFs.
+- [AI Agent & MCP Guide](docs/ai_agent_guide.md): MCP server setup, tool selection decision tree, and autonomous agent workflows.
+- [Developer Cookbook](docs/developer_cookbook.md): Production ETL, CRM hygiene, entity resolution, Arrow/Polars/DuckDB, and anti-fraud recipes.
+- [Multi-Platform SDKs](sdks/README.md): TypeScript/React, Go, and .NET client libraries.
+- [Security Policy](SECURITY.md): ReDoS immunity, IRSF toll-fraud detection, sentinel domain rejection, and PII masking.
+
+## Canonical Python Imports (`entity_standardizer`)
+
+```python
+from entity_standardizer import (
+    # 1. Joint Multi-Pillar Contact Standardization, Cross-Healing & Resolution
+    standardize_contact,          # alias: standardize_entity
+    batch_standardize_contacts,   # alias: batch_standardize_entities
+    compare_contacts,             # alias: compare_entities
+    cluster_contact_records,
+    StandardizedContact,
+    ContactComparisonResult,
+    ContactCluster,
+    CrossHealingAction,
+
+    # 2. Organization / Company (ISO 20275 ELF, Diacritics, SEC /DE/, Series/Portfolio)
+    standardize_company,          # alias: standardize_organization
+    batch_standardize_companies,
+    compare_companies,            # alias: compare_organizations
+    deduplicate_companies,        # alias: deduplicate_organizations
+    StandardizedCompany,
+    CompanyComparisonResult,
+    CompanyCluster,
+
+    # 3. Person & Job Title (Diacritics, Couple Splitting, Org Guard, Root Nicknames, Executive Flag)
+    standardize_person,
+    batch_standardize_persons,
+    split_compound_persons,
+    is_organization_name,
+    compare_persons,
+    deduplicate_persons,
+    standardize_job_title,
+    batch_standardize_job_titles,
+    StandardizedPerson,
+    PersonComparisonResult,
+    PersonCluster,
+    StandardizedJobTitle,
+
+    # 4. Web: Email, Website URL & Social Profile
+    standardize_email,
+    batch_standardize_emails,
+    compare_emails,
+    standardize_url,              # alias: standardize_website
+    batch_standardize_urls,
+    compare_urls,                 # alias: compare_websites
+    standardize_social,
+    batch_standardize_socials,
+    StandardizedEmail,
+    EmailComparisonResult,
+    StandardizedUrl,
+    UrlComparisonResult,
+    StandardizedSocial,
+
+    # 5. Physical Address (USPS Pub 28 / UPU S42 / Rooftop & H3 Keys)
+    standardize_address,
+    validate_address,
+    batch_standardize,
+    autocomplete_address,
+    generate_normalized_address_key,
+    generate_building_key,
+    generate_phonetic_address_key,
+    StandardizedAddress,
+
+    # 6. Telephone (ITU-T E.164 / E.123 / RFC 3966 / NANP / IRSF Guardrails)
+    standardize_phone,
+    validate_phone,
+    format_e164,
+    format_national,
+    format_international,
+    format_rfc3966,
+    mask_phone,
+    explain_phone,
+    compare_phones,
+    deduplicate_phones,
+    batch_standardize_phones,
+    StandardizedPhone,
+    PhoneComparisonResult,
+    PhoneCluster,
+
+    # 7. Columnar Apache Arrow & Polars Helpers
+    standardize_companies_arrow,
+    standardize_companies_polars,
+    standardize_persons_arrow,
+    standardize_persons_polars,
+)
+from phone_standardizer.arrow import (
+    standardize_arrow,
+    standardize_polars,
+    register_duckdb_udfs,
+)
+```
+
+## Key Agent Rules & Invariants
+
+1. **Prefer `standardize_contact()` when multiple entity fields exist**: It rescues phones/emails/URLs misplaced in street lines, rescues corporate names misplaced in `person_name` (`ORGANIZATION_RESCUED_FROM_PERSON_FIELD`), rescues person names from `C/O` or email display names, and infers missing countries/states across pillars.
+2. **Use `compare_contacts()`, `compare_companies()`, and `compare_persons()` for entity resolution**: Never compare raw strings directly. `compare_persons()` protects against `GENERATIONAL_SUFFIX_CONFLICT` (`Jr.` vs `Sr.`), and `compare_companies()` resolves DBA/acronym aliases (`Pacific Investment Management Company (PIMCO)` == `PIMCO LLC`).
+3. **Check `is_valid`, `routing_tier`, and `risk_flags`**:
+   - Phone `routing_tier`: `"AUTO_PASS"`, `"FUZZY_REVIEW"`, `"MANUAL_STEWARDSHIP"`.
+   - Block outbound SMS/Voice OTP if `"PREMIUM_RATE_IRSF_RISK"` or `"FICTITIOUS_RANGE"` is in `phone.risk_flags`.
+   - Check `person.is_organization` when ingesting unvalidated contact name columns.
+   - Check `job_title.is_executive` to identify C-Suite, VP, Partner, Director, Principal, and Trustee decision-makers.
