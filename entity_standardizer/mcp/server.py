@@ -261,7 +261,7 @@ def handle_mcp_request(request: dict[str, Any]) -> dict[str, Any]:
             "id": req_id,
             "result": {
                 "protocolVersion": "2024-11-05",
-                "serverInfo": {"name": "phone-standardizer-mcp", "version": "2.1.0"},
+                "serverInfo": {"name": "entity-standardizer-mcp", "version": "2.1.0"},
                 "capabilities": {"tools": {}},
             },
         }
@@ -360,7 +360,7 @@ def handle_mcp_request(request: dict[str, Any]) -> dict[str, Any]:
             return {
                 "jsonrpc": "2.0",
                 "id": req_id,
-                "result": {"content": [{"type": "text", "text": json.dumps(addr_res.as_dict())}]},
+                "result": {"content": [{"type": "text", "text": json.dumps(addr_res.to_dict())}]},
             }
         if tool_name == "standardize_company":
             comp_res = standardize_company(args.get("name"), country=args.get("country"))

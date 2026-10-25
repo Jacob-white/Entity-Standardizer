@@ -99,7 +99,7 @@ def normalize_company_tokens_dispatch(text: str) -> tuple[list[str], bool, bool]
 
 
 def _damerau_levenshtein_distance_py(s1: str, s2: str) -> int:
-    """Pure-Python Optimal String Alignment (Damerau-Levenshtein) distance."""
+    """Pure-Python true Damerau-Levenshtein edit distance."""
     if s1 == s2:
         return 0
     len1, len2 = len(s1), len(s2)
@@ -108,28 +108,37 @@ def _damerau_levenshtein_distance_py(s1: str, s2: str) -> int:
     if len2 == 0:
         return len1
 
-    dp = [[0] * (len2 + 1) for _ in range(len1 + 1)]
+    inf = len1 + len2
+    da: dict[str, int] = {}
+    h = [[0] * (len2 + 2) for _ in range(len1 + 2)]
+
+    h[0][0] = inf
     for i in range(len1 + 1):
-        dp[i][0] = i
+        h[i + 1][0] = inf
+        h[i + 1][1] = i
     for j in range(len2 + 1):
-        dp[0][j] = j
+        h[0][j + 1] = inf
+        h[1][j + 1] = j
 
     for i in range(1, len1 + 1):
+        db = 0
         for j in range(1, len2 + 1):
-            cost = 0 if s1[i - 1] == s2[j - 1] else 1
-            dp[i][j] = min(
-                dp[i - 1][j] + 1,
-                dp[i][j - 1] + 1,
-                dp[i - 1][j - 1] + cost,
+            i1 = da.get(s2[j - 1], 0)
+            j1 = db
+            if s1[i - 1] == s2[j - 1]:
+                cost = 0
+                db = j
+            else:
+                cost = 1
+            h[i + 1][j + 1] = min(
+                h[i][j + 1] + 1,
+                h[i + 1][j] + 1,
+                h[i][j] + cost,
+                h[i1][j1] + (i - i1 - 1) + 1 + (j - j1 - 1),
             )
-            if (
-                i > 1
-                and j > 1
-                and s1[i - 1] == s2[j - 2]
-                and s1[i - 2] == s2[j - 1]
-            ):
-                dp[i][j] = min(dp[i][j], dp[i - 2][j - 2] + 1)
-    return dp[len1][len2]
+        da[s1[i - 1]] = i
+
+    return h[len1 + 1][len2 + 1]
 
 
 def damerau_levenshtein_distance_dispatch(s1: str, s2: str) -> int:

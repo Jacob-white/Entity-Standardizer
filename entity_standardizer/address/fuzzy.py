@@ -26,45 +26,9 @@ def _pure_damerau_levenshtein_distance(s1: str, s2: str) -> int:
     Computes true Damerau-Levenshtein edit distance between s1 and s2 in pure Python.
     Supports insertion, deletion, substitution, and transposition of adjacent characters.
     """
-    len1, len2 = len(s1), len(s2)
-    if s1 == s2:
-        return 0
-    if len1 == 0:
-        return len2
-    if len2 == 0:
-        return len1
+    from entity_standardizer._native_dispatch import _damerau_levenshtein_distance_py
 
-    # Matrix of size (len1 + 2) x (len2 + 2)
-    inf = len1 + len2
-    da: Dict[str, int] = {}
-    h = [[0] * (len2 + 2) for _ in range(len1 + 2)]
-
-    h[0][0] = inf
-    for i in range(len1 + 1):
-        h[i + 1][0] = inf
-        h[i + 1][1] = i
-    for j in range(len2 + 1):
-        h[0][j + 1] = inf
-        h[1][j + 1] = j
-
-    for i in range(1, len1 + 1):
-        db = 0
-        for j in range(1, len2 + 1):
-            i1 = da.get(s2[j - 1], 0)
-            j1 = db
-            cost = 0 if s1[i - 1] == s2[j - 1] else 1
-            if cost == 0:
-                db = j
-
-            h[i + 1][j + 1] = min(
-                h[i][j + 1] + 1,        # deletion
-                h[i + 1][j] + 1,        # insertion
-                h[i][j] + cost,         # substitution
-                h[i1][j1] + (i - i1 - 1) + 1 + (j - j1 - 1)  # transposition
-            )
-        da[s1[i - 1]] = i
-
-    return h[len1 + 1][len2 + 1]
+    return _damerau_levenshtein_distance_py(s1, s2)
 
 
 def damerau_levenshtein_distance(s1: str, s2: str) -> int:

@@ -333,6 +333,7 @@ def test_version_and_openapi_docs_sync() -> None:
 
     mcp_init = handle_mcp_request({"jsonrpc": "2.0", "id": 1, "method": "initialize"})
     assert mcp_init is not None
+    assert mcp_init["result"]["serverInfo"]["name"] == "entity-standardizer-mcp"
     assert mcp_init["result"]["serverInfo"]["version"] == version
 
     pyproject = (repo_root / "pyproject.toml").read_text(encoding="utf-8")

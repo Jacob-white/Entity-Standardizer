@@ -248,6 +248,7 @@ def test_native_dispatch_extended_functions(monkeypatch, tmp_path) -> None:
     assert damerau_levenshtein_distance_dispatch("", "123") == 3
     assert damerau_levenshtein_distance_dispatch("123", "") == 3
     assert damerau_levenshtein_distance_dispatch("4155552671", "4155552617") == 1
+    assert damerau_levenshtein_distance_dispatch("ABC", "CA") == 2
 
     batch_py = standardize_batch_e164_dispatch(
         [

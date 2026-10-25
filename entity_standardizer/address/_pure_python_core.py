@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 ENGINE_NAME: str = "PurePythonCore"
 IS_NATIVE: bool = False
 VERSION: str = "2.1.0"
+__version__: str = VERSION
 
 
 def compute_soundex(token: str) -> str:

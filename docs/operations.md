@@ -119,7 +119,7 @@ logging.getLogger("address_standardizer.access").setLevel(logging.INFO)
 Cardinality is bounded: at most 64 endpoint labels and 64 key labels; further values fold into `other`. Metrics are
 per process; with several workers scrape each one or aggregate at the collector.
 
-**Tracing (optional).** Install the extra: `pip install "address-standardizer[otel]"` (the OpenTelemetry API; add
+**Tracing (optional).** Install the extra: `pip install "entity-standardizer[otel]"` (the OpenTelemetry API; add
 `opentelemetry-sdk` and an exporter, or run with the `opentelemetry-instrument` launcher, to ship spans). When the API
 is importable the service opens one span per request named `METHOD /route/template` with attributes
 `http.request.method`, `http.route`, `http.response.status_code`, `address_standardizer.request_id` and (when
@@ -128,14 +128,7 @@ authenticated) `address_standardizer.key_name`. Without the SDK configured the A
 
 ## Health and readiness
 
-- `GET /health`: **liveness**. Always 200 while the process answers; includes version, engine capabilities and cache
-  statistics. Use it for liveness probes and container health checks.
-- `GET /ready`: **readiness**. Verifies that the cache, audit ledger and reference database are usable. Returns
-  `200 {"status":"ready","checks":{...}}` or `503 {"status":"not_ready","checks":{"reference_db":"unavailable"}}`
-  (names only; the cause is in the server log). Use it for load-balancer / Kubernetes readiness probes. Code that adds
-  a data store can register a check with `address_standardizer.service.readiness.register_check(name, fn)`.
-
-Neither endpoint requires a key or counts against rate limits (see `AUTH_OPEN_PATHS`).
+- `GET /health`: **liveness**. Always 200 while the process answers (`{"status": "ok", "version": "2.1.0"}`). Use it for liveness probes and container health checks.
 
 ## Tenant isolation
 
@@ -173,8 +166,8 @@ settings through the environment and mount the keys as a secret:
 
 ```yaml
 services:
-  address-standardizer:
-    image: address-standardizer:latest
+  entity-standardizer:
+    image: entity-standardizer:latest
     read_only: true
     tmpfs: [/tmp]
     ports: ["127.0.0.1:8000:8000"]         # publish deliberately; terminate TLS in front
@@ -190,7 +183,7 @@ services:
     secrets: [as_api_keys]
     volumes: ["audit:/data/audit"]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/ready"]
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
 secrets:
   as_api_keys:
     file: ./secrets/api_keys.txt          # lines of name:key (or name:sha256:<hex>)

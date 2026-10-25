@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Comprehensive Google Drive Dataset Address-Standardizer Benchmark Harness.
+"""Comprehensive Google Drive Dataset Address Benchmark Harness.
 
-Evaluates Address-Standardizer (/home/jwhite/Address-Standardizer) across all
+Evaluates Entity-Standardizer (/home/jwhite/Entity-Standardizer) across all
 address-bearing dataset files in .drive_datasets/ spanning all 6 suites:
   1. AdvizorPro (AP_20261019)
   2. AdvisorAtlas (AdvisorAtlas_20261019)
@@ -22,6 +22,7 @@ from pathlib import Path
 import sys
 import time
 
+__version__ = "2.1.0"
 REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))

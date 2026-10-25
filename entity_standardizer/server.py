@@ -232,7 +232,7 @@ def create_app() -> FastAPI:
             country=req.country,
             allow_locality=True,
         )
-        return res.as_dict()
+        return res.to_dict()
 
     @app.post("/v1/company")
     def company_endpoint(req: CompanyStandardizeRequest) -> dict[str, Any]:

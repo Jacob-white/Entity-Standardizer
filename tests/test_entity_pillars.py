@@ -1288,12 +1288,23 @@ def test_v2_1_person_diacritics_compound_splitting_international_suffixes_and_co
 
     # Model serialization parity (.to_dict() on StandardizedAddress and AddressValidationResult)
     from entity_standardizer import standardize_address, validate_address
+    from entity_standardizer.address import _pure_python_core
+    from entity_standardizer.address.fuzzy import (
+        _pure_damerau_levenshtein_distance,
+        damerau_levenshtein_distance,
+    )
+    from entity_standardizer.address.phonetics import (
+        _pure_generate_phonetic_address_key,
+        generate_phonetic_address_key,
+    )
 
+    assert _pure_python_core.__version__ == "2.1.0"
+    assert _pure_damerau_levenshtein_distance("ABC", "CA") == 2
+    assert damerau_levenshtein_distance("ABC", "CA") == 2
     addr_obj = standardize_address(street1="350 Fifth Ave", city="New York", state="NY", postal_code="10118")
     assert addr_obj.to_dict() == addr_obj.as_dict()
+    assert _pure_generate_phonetic_address_key(
+        addr_obj.street1, addr_obj.postal_code, addr_obj.city
+    ) == generate_phonetic_address_key(addr_obj.street1, addr_obj.postal_code, addr_obj.city)
     val_obj = validate_address("350 Fifth Ave, New York, NY 10118")
     assert val_obj.to_dict() == val_obj.as_dict()
-
-
-
-

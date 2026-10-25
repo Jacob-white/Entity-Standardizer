@@ -104,16 +104,12 @@ Reason codes (same `WARN_` / `ERR_` convention as `confidence.py`): `ERR_POSTAL_
 ### CLI
 
 ```bash
-address-standardizer parse "100 Wall St, Chicago, NY 10005" --reference-db data/geonames_postal.db --confidence
+entity-standardizer address "100 Wall St" --city "Chicago" --state "NY" --postal-code "10005"
 ```
-
-`--reference-db` applies to a single address (not piped input or `batch`).
 
 ### REST
 
-Set `ADDRESS_STANDARDIZER_REFERENCE_DB=/path/to/geonames_postal.db` on the server. Each `/v1/standardize` response (and
-each `/v1/batch` item) then carries a `reference_validation` object. Without the variable the response is unchanged.
-If the file cannot be opened, the object is still returned with `status: "not_checked"` and the reason in `detail`.
+Use `POST /v1/address` on `entity_standardizer.server:app` (or pass `reference_provider=GeoNamesPostalProvider(...)` in Python when calling `standardize_address` directly). If `ADDRESS_STANDARDIZER_REFERENCE_DB=/path/to/geonames_postal.db` is configured for `attach_server_reference_validation`, a `reference_validation` object is attached (`status: "not_checked"` with `detail` when the file cannot be opened).
 
 ## Accuracy limits, honestly
 
