@@ -14,7 +14,7 @@ A unified, high-performance multi-national **Entity, Organization, Person, Web, 
 ## 📚 Documentation & Quickstarts
 
 - **[5-Minute Quickstart Guide](docs/quickstart.md)** — Step-by-step onboarding for joint contact cross-healing, company/person/web standardization, address & phone parsing, multi-pillar comparison & deduplication, Arrow/Polars/DuckDB SQL UDFs, CLI, and HTTP service.
-- **[Complete API Reference](docs/api_reference.md)** — Full reference for all Python dataclasses, functions, cross-healing enums, CLI commands, 18 FastAPI endpoints, 17 MCP tools, and columnar/SQL UDFs.
+- **[Complete API Reference](docs/api_reference.md)** — Full reference for all Python dataclasses, functions, cross-healing enums, CLI commands, 19 HTTP routes (18 `/v1/*` endpoints + `GET /health`), 17 MCP tools, and columnar/SQL UDFs.
 - **[AI Agent & MCP Integration Guide](docs/ai_agent_guide.md)** & **[`llms.txt`](llms.txt)** — Model Context Protocol (MCP) setup, 17-tool catalog, autonomous agent decision tree, and token-efficient LLM context index.
 - **[Developer Cookbook & Production Recipes](docs/developer_cookbook.md)** — Copy-pasteable recipes for SEC/Form ADV hygiene, couple splitting, multi-pillar deduplication, Polars/Arrow/DuckDB ETL, and TCPA/IRSF anti-fraud guardrails.
 - **[Global Telephony Enterprise Blueprint](docs/GLOBAL_TELEPHONY_ARCHITECTURE_PLAN.md)** — Master architectural specification and global dial-plan roadmap.
@@ -125,7 +125,7 @@ assert mask_phone("+1 (415) 555-2671", strategy="partial") == "+1******2671"
 
 ```bash
 # Joint multi-pillar contact standardization
-entity-standardizer contact --street1 "350 Fifth Ave" --city "New York" --postal-code "10118" --phone "555-2368" --organization "The Acme Inc." --person "Smith, Bob" --email "bob@acme.com"
+entity-standardizer contact --street1 "350 Fifth Ave" --city "New York" --postal-code "10118" --phone "555-2368" --organization "The Acme Inc." --person-name "Smith, Bob" --email "bob@acme.com"
 
 # Standardize or compare organization, person, job title, email, URL, or social profile
 entity-standardizer company "KKR Opportunities III S.à r.l."
@@ -143,7 +143,7 @@ entity-standardizer parse "+44 (0) 20 7946 0912 ext 42"
 entity-standardizer country JP
 entity-standardizer batch input.csv output.csv --phone-col phone --country-col country
 
-# Run the FastAPI HTTP service (18 endpoints across phone, address, company, person, job-title, email, url, social, contact)
+# Run the FastAPI HTTP service (19 HTTP routes across phone, address, company, person, job-title, email, url, social, contact)
 uvicorn phone_standardizer.server:app --host 0.0.0.0 --port 8000
 
 # Run the Model Context Protocol (MCP) server (17 tools across all entity standardization and comparison pillars)

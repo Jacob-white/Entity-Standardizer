@@ -16,6 +16,9 @@ func TestClientStandardizeAndBatch(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
+		case "/health":
+			_ = json.NewEncoder(w).Encode(HealthResponse{Status: "ok", Version: "2.1.0"})
+			return
 		case "/v1/standardize":
 			_ = json.NewEncoder(w).Encode(StandardizedPhone{
 				RawInput:    "(415) 555-2671",
@@ -107,6 +110,15 @@ func TestClientStandardizeAndBatch(t *testing.T) {
 				Confidence:  0.98,
 			})
 			return
+		case "/v1/company/compare":
+			_ = json.NewEncoder(w).Encode(CompanyComparisonResult{
+				IsMatch:   true,
+				Score:     1.0,
+				MatchType: "EXACT_COMPANY_KEY",
+				CompanyA:  StandardizedCompany{LegalName: strPtr("ACME HOLDINGS INC"), IsValid: true},
+				CompanyB:  StandardizedCompany{LegalName: strPtr("ACME HOLDINGS INC"), IsValid: true},
+			})
+			return
 		case "/v1/person":
 			_ = json.NewEncoder(w).Encode(StandardizedPerson{
 				RawInput:      "Dr. Bob Smith",
@@ -116,6 +128,26 @@ func TestClientStandardizeAndBatch(t *testing.T) {
 				LastName:      strPtr("SMITH"),
 				IsValid:       true,
 				Confidence:    0.98,
+			})
+			return
+		case "/v1/person/compare":
+			_ = json.NewEncoder(w).Encode(PersonComparisonResult{
+				IsMatch:   true,
+				Score:     0.96,
+				MatchType: "ROOT_NAME_MATCH",
+				PersonA:   StandardizedPerson{RootFirstName: strPtr("ROBERT"), LastName: strPtr("SMITH"), IsValid: true},
+				PersonB:   StandardizedPerson{RootFirstName: strPtr("ROBERT"), LastName: strPtr("SMITH"), IsValid: true},
+			})
+			return
+		case "/v1/job-title":
+			_ = json.NewEncoder(w).Encode(StandardizedJobTitle{
+				RawInput:        "CCO",
+				NormalizedTitle: strPtr("CHIEF COMPLIANCE OFFICER"),
+				SeniorityLevel:  strPtr("C_SUITE"),
+				Department:      strPtr("LEGAL"),
+				IsExecutive:     true,
+				IsValid:         true,
+				Confidence:      0.96,
 			})
 			return
 		case "/v1/email":
@@ -166,12 +198,25 @@ func TestClientStandardizeAndBatch(t *testing.T) {
 				OverallConfidence:   0.97,
 			})
 			return
+		case "/v1/contact/compare":
+			_ = json.NewEncoder(w).Encode(ContactComparisonResult{
+				IsMatch:        true,
+				Score:          0.98,
+				MatchType:      "MULTI_PILLAR_MATCH",
+				MatchedPillars: []string{"organization", "phone"},
+				PillarScores:   map[string]float64{"organization": 1.0, "phone": 1.0},
+			})
+			return
 		}
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer srv.Close()
 
 	client := NewClient(srv.URL)
+	health, err := client.Health(context.Background())
+	if err != nil || health.Status != "ok" || health.Version != "2.1.0" {
+		t.Fatalf("unexpected health response: %+v, err=%v", health, err)
+	}
 	res, err := client.Standardize(context.Background(), PhoneStandardizeRequest{
 		Phone: "(415) 555-2671",
 	})
@@ -239,11 +284,34 @@ func TestClientStandardizeAndBatch(t *testing.T) {
 		t.Fatalf("unexpected company result: %+v, err=%v", compRes, err)
 	}
 
+	compCmpRes, err := client.CompareCompanies(context.Background(), CompanyCompareRequest{
+		CompanyA: "Acme Holdings, Inc.",
+		CompanyB: "ACME HOLDINGS INC /DE/",
+	})
+	if err != nil || !compCmpRes.IsMatch || compCmpRes.MatchType != "EXACT_COMPANY_KEY" {
+		t.Fatalf("unexpected compare companies result: %+v, err=%v", compCmpRes, err)
+	}
+
 	perRes, err := client.StandardizePerson(context.Background(), PersonStandardizeRequest{
 		Name: "Dr. Bob Smith",
 	})
 	if err != nil || perRes.RootFirstName == nil || *perRes.RootFirstName != "ROBERT" {
 		t.Fatalf("unexpected person result: %+v, err=%v", perRes, err)
+	}
+
+	perCmpRes, err := client.ComparePersons(context.Background(), PersonCompareRequest{
+		PersonA: "Dr. Bob Smith",
+		PersonB: "Robert Smith",
+	})
+	if err != nil || !perCmpRes.IsMatch || perCmpRes.MatchType != "ROOT_NAME_MATCH" {
+		t.Fatalf("unexpected compare persons result: %+v, err=%v", perCmpRes, err)
+	}
+
+	titleRes, err := client.StandardizeJobTitle(context.Background(), JobTitleStandardizeRequest{
+		Title: "CCO",
+	})
+	if err != nil || !titleRes.IsExecutive || titleRes.NormalizedTitle == nil || *titleRes.NormalizedTitle != "CHIEF COMPLIANCE OFFICER" {
+		t.Fatalf("unexpected job title result: %+v, err=%v", titleRes, err)
 	}
 
 	emailRes, err := client.StandardizeEmail(context.Background(), EmailStandardizeRequest{
@@ -275,5 +343,13 @@ func TestClientStandardizeAndBatch(t *testing.T) {
 	})
 	if err != nil || contactRes.Phone.E164 == nil || *contactRes.Phone.E164 != "+12125552368" || contactRes.Address.State != "NY" {
 		t.Fatalf("unexpected contact result: %+v, err=%v", contactRes, err)
+	}
+
+	contactCmpRes, err := client.CompareContacts(context.Background(), ContactCompareRequest{
+		ContactA: map[string]any{"organization": "Acme Holdings, Inc.", "phone": "+12125552368"},
+		ContactB: map[string]any{"organization": "ACME HOLDINGS INC", "phone": "212-555-2368"},
+	})
+	if err != nil || !contactCmpRes.IsMatch || contactCmpRes.MatchType != "MULTI_PILLAR_MATCH" {
+		t.Fatalf("unexpected compare contacts result: %+v, err=%v", contactCmpRes, err)
 	}
 }

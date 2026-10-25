@@ -25,7 +25,7 @@ test("PhoneStandardizerClient and PhoneInputController interact with API", async
       return {
         ok: true,
         status: 200,
-        json: async () => ({ status: "ok", version: "2.0.0" }),
+        json: async () => ({ status: "ok", version: "2.1.0" }),
       };
     }
     if (u.endsWith("/v1/standardize")) {
@@ -197,6 +197,19 @@ test("PhoneStandardizerClient and PhoneInputController interact with API", async
         }),
       };
     }
+    if (u.endsWith("/v1/company/compare")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          is_match: true,
+          score: 1.0,
+          match_type: "EXACT_COMPANY_KEY",
+          company_a: { legal_name: "ACME HOLDINGS INC", is_valid: true },
+          company_b: { legal_name: "ACME HOLDINGS INC", is_valid: true },
+        }),
+      };
+    }
     if (u.endsWith("/v1/person")) {
       return {
         ok: true,
@@ -215,9 +228,39 @@ test("PhoneStandardizerClient and PhoneInputController interact with API", async
           person_key: "SMITH|BOB||",
           person_root_key: "SMITH|ROBERT",
           phonetic_key: "S530|R163",
+          is_organization: false,
           is_valid: true,
           confidence: 0.98,
           healing_actions: ["CREDENTIALS_EXTRACTED", "SALUTATION_EXTRACTED", "NICKNAME_RESOLVED_TO_ROOT"],
+        }),
+      };
+    }
+    if (u.endsWith("/v1/person/compare")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          is_match: true,
+          score: 0.96,
+          match_type: "ROOT_NAME_MATCH",
+          person_a: { root_first_name: "ROBERT", last_name: "SMITH", is_valid: true },
+          person_b: { root_first_name: "ROBERT", last_name: "SMITH", is_valid: true },
+        }),
+      };
+    }
+    if (u.endsWith("/v1/job-title")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          raw_input: "CCO",
+          normalized_title: "CHIEF COMPLIANCE OFFICER",
+          seniority_level: "C_SUITE",
+          department: "LEGAL",
+          is_executive: true,
+          is_valid: true,
+          confidence: 0.96,
+          healing_actions: ["TITLE_ABBREVIATION_EXPANDED"],
         }),
       };
     }
@@ -344,6 +387,19 @@ test("PhoneStandardizerClient and PhoneInputController interact with API", async
         }),
       };
     }
+    if (u.endsWith("/v1/contact/compare")) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({
+          is_match: true,
+          score: 0.98,
+          match_type: "MULTI_PILLAR_MATCH",
+          matched_pillars: ["organization", "phone"],
+          pillar_scores: { organization: 1.0, phone: 1.0 },
+        }),
+      };
+    }
     return { ok: false, status: 404, json: async () => ({}) };
   };
 
@@ -355,7 +411,7 @@ test("PhoneStandardizerClient and PhoneInputController interact with API", async
 
   const health = await client.health();
   assert.equal(health.status, "ok");
-  assert.equal(health.version, "2.0.0");
+  assert.equal(health.version, "2.1.0");
 
   const country = await client.getCountry("US");
   assert.equal(country.calling_code, "1");
@@ -396,8 +452,26 @@ test("PhoneStandardizerClient and PhoneInputController interact with API", async
   assert.equal(comp.legal_suffix, "INC");
   assert.equal(comp.brand_stem, "ACME");
 
+  const compCmp = await client.compareCompanies({
+    company_a: "Acme Holdings, Inc.",
+    company_b: "ACME HOLDINGS INC /DE/",
+  });
+  assert.equal(compCmp.is_match, true);
+  assert.equal(compCmp.match_type, "EXACT_COMPANY_KEY");
+
   const person = await client.standardizePerson({ name: "Dr. Bob Smith, PhD" });
   assert.equal(person.root_first_name, "ROBERT");
+
+  const personCmp = await client.comparePersons({
+    person_a: "Dr. Bob Smith",
+    person_b: "Robert Smith",
+  });
+  assert.equal(personCmp.is_match, true);
+  assert.equal(personCmp.match_type, "ROOT_NAME_MATCH");
+
+  const titleRes = await client.standardizeJobTitle({ title: "CCO" });
+  assert.equal(titleRes.normalized_title, "CHIEF COMPLIANCE OFFICER");
+  assert.equal(titleRes.is_executive, true);
 
   const email = await client.standardizeEmail({ email: "jane.doe+work@gmail.com" });
   assert.equal(email.email, "janedoe@gmail.com");
@@ -421,6 +495,13 @@ test("PhoneStandardizerClient and PhoneInputController interact with API", async
     "PHONE_HEALED_FROM_STANDARDIZED_ADDRESS",
   ]);
 
+  const contactCmp = await client.compareContacts({
+    contact_a: { organization: "Acme Holdings, Inc.", phone: "+12125552368" },
+    contact_b: { organization: "ACME HOLDINGS INC", phone: "212-555-2368" },
+  });
+  assert.equal(contactCmp.is_match, true);
+  assert.equal(contactCmp.match_type, "MULTI_PILLAR_MATCH");
+
   const failingClient = new PhoneStandardizerClient({
     fetchImpl: async () => ({ ok: false, status: 500, json: async () => ({}) }),
   });
@@ -433,8 +514,20 @@ test("PhoneStandardizerClient and PhoneInputController interact with API", async
     /Standardize company failed with status 500/
   );
   await assert.rejects(
+    () => failingClient.compareCompanies({ company_a: "Acme", company_b: "Beta" }),
+    /Compare companies failed with status 500/
+  );
+  await assert.rejects(
     () => failingClient.standardizePerson({ name: "Jane Doe" }),
     /Standardize person failed with status 500/
+  );
+  await assert.rejects(
+    () => failingClient.comparePersons({ person_a: "Jane Doe", person_b: "John Doe" }),
+    /Compare persons failed with status 500/
+  );
+  await assert.rejects(
+    () => failingClient.standardizeJobTitle({ title: "CCO" }),
+    /Standardize job title failed with status 500/
   );
   await assert.rejects(
     () => failingClient.standardizeEmail({ email: "jane@acme.com" }),
@@ -451,6 +544,10 @@ test("PhoneStandardizerClient and PhoneInputController interact with API", async
   await assert.rejects(
     () => failingClient.standardizeContact({ street1: "350 Fifth Ave", phone: "555-2368" }),
     /Standardize contact failed with status 500/
+  );
+  await assert.rejects(
+    () => failingClient.compareContacts({ contact_a: {}, contact_b: {} }),
+    /Compare contacts failed with status 500/
   );
 
   let callbackRecord = null;

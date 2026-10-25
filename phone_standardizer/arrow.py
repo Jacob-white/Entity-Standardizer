@@ -25,15 +25,7 @@ pl: Any = _UNSET
 duckdb: Any = _UNSET
 
 
-def standardize_arrow(
-    table_or_batch: Any,
-    phone_col: str = "phone",
-    country_col: str | None = None,
-    default_country: str = "US",
-    output_prefix: str = "phone_",
-    as_struct: bool = False,
-) -> Any:
-    """Standardize phone numbers in an Apache Arrow Table or RecordBatch."""
+def _ensure_pyarrow() -> Any:
     global pa
     if pa is _UNSET:
         try:
@@ -44,6 +36,33 @@ def standardize_arrow(
             pa = None
     if pa is None:
         raise ImportError("pyarrow is required to use standardize_arrow. Install with `pip install pyarrow`.")
+    return pa
+
+
+def _ensure_polars() -> Any:
+    global pl
+    if pl is _UNSET:
+        try:
+            import polars as _pl  # type: ignore[import-not-found]
+
+            pl = _pl
+        except ImportError:
+            pl = None
+    if pl is None:
+        raise ImportError("polars is required to use standardize_polars. Install with `pip install polars`.")
+    return pl
+
+
+def standardize_arrow(
+    table_or_batch: Any,
+    phone_col: str = "phone",
+    country_col: str | None = None,
+    default_country: str = "US",
+    output_prefix: str = "phone_",
+    as_struct: bool = False,
+) -> Any:
+    """Standardize phone numbers in an Apache Arrow Table or RecordBatch."""
+    _ensure_pyarrow()
 
     is_batch = isinstance(table_or_batch, pa.RecordBatch)
     if is_batch:
@@ -137,16 +156,7 @@ def standardize_polars(
     output_prefix: str = "phone_",
 ) -> Any:
     """Standardize phone numbers in a Polars DataFrame or LazyFrame."""
-    global pl
-    if pl is _UNSET:
-        try:
-            import polars as _pl  # type: ignore[import-not-found]
-
-            pl = _pl
-        except ImportError:
-            pl = None
-    if pl is None:
-        raise ImportError("polars is required to use standardize_polars. Install with `pip install polars`.")
+    _ensure_polars()
 
     is_lazy = isinstance(df_or_lazy, pl.LazyFrame)
     if is_lazy:
@@ -246,6 +256,7 @@ def standardize_companies_arrow(
     output_prefix: str = "company_",
 ) -> Any:
     """Standardize company/organization names in an Apache Arrow Table."""
+    _ensure_pyarrow()
     from entity_standardizer.company import standardize_company
 
     col_names = table.column_names
@@ -285,6 +296,7 @@ def standardize_companies_polars(
     output_prefix: str = "company_",
 ) -> Any:
     """Standardize company/organization names in a Polars DataFrame."""
+    _ensure_polars()
     std_tbl = standardize_companies_arrow(
         df.to_arrow(),
         company_col=company_col,
@@ -300,6 +312,7 @@ def standardize_persons_arrow(
     output_prefix: str = "person_",
 ) -> Any:
     """Standardize person full names in an Apache Arrow Table."""
+    _ensure_pyarrow()
     from entity_standardizer.person import standardize_person
 
     col_names = table.column_names
@@ -331,6 +344,7 @@ def standardize_persons_polars(
     output_prefix: str = "person_",
 ) -> Any:
     """Standardize person full names in a Polars DataFrame."""
+    _ensure_polars()
     std_tbl = standardize_persons_arrow(
         df.to_arrow(),
         person_col=person_col,

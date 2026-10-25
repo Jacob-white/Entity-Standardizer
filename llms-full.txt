@@ -1,16 +1,239 @@
-# Phone Standardizer — Full LLM Context
+# Entity Standardizer — Full LLM & AI Agent Context (`v2.1.0`)
 
 Owned and maintained by **HobbyHabbit LLC** under the **MIT License**.
 
-## Core API (`phone_standardizer`)
-- `standardize_phone(raw_phone, country=None, default_country="US", address_context=None) -> StandardizedPhone`
-- `validate_phone(raw_phone, country=None, default_country="US") -> bool`
-- `format_e164(raw_phone, country=None, default_country="US") -> str | None`
-- `format_national(raw_phone, country=None, default_country="US") -> str | None`
-- `format_international(raw_phone, country=None, default_country="US") -> str | None`
-- `format_rfc3966(raw_phone, country=None, default_country="US") -> str | None`
-- `mask_phone(raw_phone, strategy="partial", country=None, default_country="US") -> str`
-- `batch_standardize_phones(records, default_country="US") -> list[StandardizedPhone]`
-- `stream_standardize_csv(input_path, output_path, phone_col="phone", country_col="country", default_country="US") -> int`
-- `stream_standardize_jsonl(input_path, output_path, phone_key="phone", country_key="country", default_country="US") -> int`
-- `get_dial_plan(identifier) -> CountryDialPlan | None`
+> **Entity Standardizer** (`entity_standardizer`, `address_standardizer`, `phone_standardizer` `v2.1.0`) is a zero-network, deterministic Python + Rust PyO3 engine for multi-national **Organization / Company** (ISO 20275 ELF), **Person & Job Title**, **Email / Website URL / Social Profile** (RFC 5321/5322, IDNA, eTLD+1), **Physical Address** (USPS Publication 28, UPU S42, CASS/DPV, offline rooftop & H3 geocoding), and **Telephone** (ITU-T E.164, E.123, RFC 3966, NANP, 249-country dial plans, IRSF toll-fraud detection) standardization, bidirectional cross-healing, and multi-pillar entity resolution.
+
+---
+
+## 1. Architecture & Package Entry Points
+
+- **`entity_standardizer`**: Unified top-level façade re-exporting all 6 entity pillars, joint contact cross-healing, pairwise comparison, graph-based deduplication, and Apache Arrow / Polars helpers.
+- **`phone_standardizer`**: Telephone standardization engine (`standardize_phone`, `explain_phone`, `compare_phones`, `deduplicate_phones`, `mask_phone`), joint 6-pillar contact engine (`phone_standardizer.joint`), multi-pillar clustering (`phone_standardizer.dedup`), FastAPI server (`phone_standardizer.server:app`), MCP server (`phone_standardizer.mcp.server`), and DuckDB/Arrow/Polars integrations (`phone_standardizer.arrow`).
+- **`address_standardizer`**: USPS Publication 28 & UPU S42 international physical address standardization, validation, typeahead autocomplete, and normalized/building/phonetic keys.
+- **`_phone_standardizer_rs` / `phone_standardizer._native_dispatch`**: Optional native Rust PyO3 extension (`src/lib.rs`) accelerating phone digit extraction, Unicode digit folding, vanity translation, Damerau-Levenshtein distance, company token normalization, and batch E.164 standardization with 100% pure-Python fallback parity.
+
+### CLI Entry Points (`pyproject.toml`)
+- `entity-standardizer` / `phone-standardizer` — Unified CLI (`parse`, `country`, `batch`, `compare`, `dedup`, `address`, `company`, `person`, `compare-companies`, `compare-persons`, `title`, `email`, `url`, `social`, `contact`).
+- `entity-standardizer-mcp` / `phone-standardizer-mcp` — Model Context Protocol (MCP) stdio JSON-RPC 2.0 server exposing 17 tools.
+- `address-standardizer` — Dedicated physical address CLI and microservice launcher.
+
+---
+
+## 2. Canonical Python Imports & Function Signatures
+
+```python
+from entity_standardizer import (
+    # 1. Joint 6-Pillar Contact Standardization, Cross-Healing & Entity Resolution
+    standardize_contact,          # alias: standardize_entity
+    batch_standardize_contacts,   # alias: batch_standardize_entities
+    compare_contacts,             # alias: compare_entities
+    cluster_contact_records,
+    StandardizedContact,          # alias: StandardizedEntity
+    ContactComparisonResult,
+    ContactCluster,
+    CrossHealingAction,
+
+    # 2. Organization / Company (ISO 20275 ELF, Diacritics, SEC /DE/, Series/Portfolio)
+    standardize_company,          # alias: standardize_organization
+    batch_standardize_companies,  # alias: batch_standardize_organizations
+    compare_companies,            # alias: compare_organizations
+    deduplicate_companies,        # alias: deduplicate_organizations
+    StandardizedCompany,          # alias: StandardizedOrganization
+    CompanyComparisonResult,
+    CompanyCluster,
+
+    # 3. Person & Job Title (Diacritics, Couple Splitting, Org Guard, Root Nicknames, Executive Flag)
+    standardize_person,
+    batch_standardize_persons,
+    split_compound_persons,
+    is_organization_name,
+    compare_persons,
+    deduplicate_persons,
+    standardize_job_title,
+    batch_standardize_job_titles,
+    StandardizedPerson,
+    PersonComparisonResult,
+    PersonCluster,
+    StandardizedJobTitle,
+
+    # 4. Web: Email, Website URL & Social Profile
+    standardize_email,
+    batch_standardize_emails,
+    compare_emails,
+    standardize_url,              # alias: standardize_website
+    batch_standardize_urls,       # alias: batch_standardize_websites
+    compare_urls,                 # alias: compare_websites
+    standardize_social,
+    batch_standardize_socials,
+    StandardizedEmail,
+    EmailComparisonResult,
+    StandardizedUrl,              # alias: StandardizedWebsite
+    UrlComparisonResult,
+    StandardizedSocial,
+
+    # 5. Physical Address (USPS Pub 28 / UPU S42 / Rooftop & H3 Keys)
+    standardize_address,
+    validate_address,
+    batch_standardize,
+    autocomplete_address,
+    generate_normalized_address_key,
+    generate_building_key,
+    generate_phonetic_address_key,
+    StandardizedAddress,
+
+    # 6. Telephone (ITU-T E.164 / E.123 / RFC 3966 / NANP / IRSF Guardrails)
+    standardize_phone,
+    validate_phone,
+    format_e164,
+    format_national,
+    format_international,
+    format_rfc3966,
+    mask_phone,
+    explain_phone,
+    compare_phones,
+    deduplicate_phones,
+    batch_standardize_phones,
+    StandardizedPhone,
+    PhoneComparisonResult,
+    PhoneCluster,
+
+    # 7. Columnar Apache Arrow & Polars Helpers
+    standardize_companies_arrow,
+    standardize_companies_polars,
+    standardize_persons_arrow,
+    standardize_persons_polars,
+)
+from phone_standardizer.arrow import (
+    standardize_arrow,
+    standardize_polars,
+    register_duckdb_udfs,
+)
+```
+
+---
+
+## 3. Complete Dataclass Schemas & Healing Action Codes
+
+### 3.1 `StandardizedContact` (`phone_standardizer.joint`)
+Returned by `standardize_contact(...)`:
+- `address: StandardizedAddress`
+- `phone: StandardizedPhone`
+- `fax: StandardizedPhone | None`
+- `organization: StandardizedCompany | None`
+- `person: StandardizedPerson | None`
+- `job_title: StandardizedJobTitle | None`
+- `email: StandardizedEmail | None`
+- `website: StandardizedUrl | None`
+- `social: StandardizedSocial | None`
+- `entity_key: str | None` — Composite deterministic entity key (`"<company_key>|<person_root_key>|<address_key>|<phone_key>|<email_key>"`).
+- `cross_healing_actions: list[str]` — Values from `CrossHealingAction`:
+  - `PHONE_RESCUED_FROM_ADDRESS_FIELD`
+  - `EMAIL_RESCUED_FROM_FIELD`
+  - `URL_RESCUED_FROM_FIELD`
+  - `ORGANIZATION_RESCUED_FROM_PERSON_FIELD`
+  - `PERSON_RESCUED_FROM_EMAIL_OR_CARE_OF`
+  - `ORGANIZATION_INFERRED_FROM_DOMAIN`
+  - `EMAIL_WEBSITE_DOMAIN_MATCH`
+  - `EMAIL_WEBSITE_DOMAIN_MISMATCH`
+  - `COUNTRY_INFERRED_FROM_ENTITY_PILLARS`
+  - `ADDRESS_COUNTRY_INFERRED_FROM_PHONE`
+  - `ADDRESS_ZIP_STATE_HEALED_FROM_PHONE_NPA`
+  - `PHONE_HEALED_FROM_STANDARDIZED_ADDRESS`
+- `overall_confidence: float` (`0.0` to `1.0`)
+
+### 3.2 `ContactComparisonResult` & `ContactCluster`
+- `ContactComparisonResult`: `is_match: bool`, `score: float`, `match_type: str` (`"MULTI_PILLAR_MATCH"`, `"SINGLE_PILLAR_<PILLAR>_MATCH"`, `"PERSON_GENERATIONAL_CONFLICT"`, `"NO_MATCH"`, `"INSUFFICIENT_PILLARS"`), `matched_pillars: list[str]`, `pillar_scores: dict[str, float]`, `contact_a: StandardizedContact`, `contact_b: StandardizedContact`.
+- `ContactCluster`: `cluster_id: str`, `golden_phone: StandardizedPhone | None`, `address_keys: tuple[str, ...]`, `records: tuple[dict[str, Any], ...]`, `match_reasons: tuple[str, ...]`.
+
+### 3.3 `StandardizedCompany` (`entity_standardizer.company`)
+- `raw_input: str`
+- `legal_name: str | None` — Canonical uppercase legal name (`"BLACKROCK INC"`).
+- `base_name: str | None` — Core name stripped of legal suffix, leading article, DBA/FKA, and branch unit (`"BLACKROCK"`).
+- `brand_stem: str | None` — Core brand stem stripped of trailing corporate noise words (`HOLDINGS`, `GROUP`, `PARTNERS`, `CAPITAL`, `MANAGEMENT`, `ADVISORS`, etc.).
+- `legal_suffix: str | None` — Canonical ISO 20275 ELF code (`"LLC"`, `"INC"`, `"CORP"`, `"LP"`, `"LLP"`, `"LLLP"`, `"PC"`, `"PLLC"`, `"PA"`, `"NA"`, `"FSB"`, `"PLC"`, `"LTD"`, `"ULC"`, `"GMBH"`, `"AG"`, `"KG"`, `"KGAA"`, `"SE"`, `"SARL"`, `"SAS"`, `"SA"`, `"SCSP"`, `"SPC"`, `"DST"`, `"REIT"`, `"TRUST"`, `"SRL"`, `"SPA"`, `"BV"`, `"NV"`, `"AB"`, `"ASA"`, `"AS"`, `"OY"`, `"APS"`, `"KK"`, `"PTY LTD"`, `"PTE LTD"`, `"PVT LTD"`, `"SDN BHD"`, `"BHD"`, `"SP Z OO"`, `"KFT"`, `"SRO"`, `"DOO"`, `"OU"`, `"SA DE CV"`, `"LTDA"`, `"FOUNDATION"`, `"ASSN"`).
+- `dba_name: str | None` — Extracted Doing-Business-As / Trading-As / parenthesized acronym alias (`"PIMCO"`).
+- `fka_name: str | None` — Extracted Formerly-Known-As name.
+- `branch_unit: str | None` — Extracted division, branch, Series (`"SERIES A"`), Segregated Portfolio (`"SEGREGATED PORTFOLIO 1"`), or institutional role (`"PROGRAM MANAGER"`).
+- `inferred_country_iso2: str | None`
+- `company_key: str | None` (`"<base_name>|<legal_suffix>"`)
+- `brand_key: str | None`
+- `phonetic_key: str | None`
+- `is_valid: bool`, `confidence: float`
+- `healing_actions: list[str]` — `"SEC_STATE_SUFFIX_STRIPPED"`, `"DBA_EXTRACTED"`, `"FKA_EXTRACTED"`, `"BRANCH_UNIT_EXTRACTED"`, `"AMPERSAND_NORMALIZED"`, `"INITIALISM_COLLAPSED"`, `"LEADING_ARTICLE_STRIPPED"`, `"LEGAL_SUFFIX_NORMALIZED"`.
+
+### 3.4 `StandardizedPerson` & `StandardizedJobTitle` (`entity_standardizer.person`)
+- `StandardizedPerson`:
+  - `raw_input: str`, `full_name: str | None`, `salutation: str | None`, `first_name: str | None`, `root_first_name: str | None` (resolves 145+ diminutives, e.g., `"BOB"` -> `"ROBERT"`), `middle_name: str | None`, `last_name: str | None`, `nickname: str | None`, `generational_suffix: str | None` (`"JR"`, `"SR"`, `"II"`, `"III"`, `"IV"`, `"V"`), `credentials: list[str]`, `person_key: str | None`, `person_root_key: str | None`, `phonetic_key: str | None`, `is_organization: bool`, `is_valid: bool`, `confidence: float`.
+  - `healing_actions: list[str]` — `"DIACRITICS_FOLDED"`, `"PLACEHOLDER_STRIPPED"`, `"COMPOUND_PERSON_SPLIT"`, `"ORGANIZATION_DETECTED_IN_PERSON_FIELD"`, `"NICKNAME_EXTRACTED"`, `"CREDENTIALS_EXTRACTED"`, `"LAST_FIRST_UNINVERTED"`, `"SALUTATION_EXTRACTED"`, `"GENERATIONAL_SUFFIX_EXTRACTED"`, `"NICKNAME_RESOLVED_TO_ROOT"`.
+- `StandardizedJobTitle`:
+  - `raw_input: str`, `normalized_title: str | None` (`"CHIEF COMPLIANCE OFFICER"`), `seniority_level: str | None` (`"C_SUITE"`, `"OWNER_PARTNER"`, `"VP"`, `"DIRECTOR"`, `"MANAGER"`, `"SENIOR"`, `"ENTRY"`, `"INDIVIDUAL_CONTRIBUTOR"`), `department: str | None` (`"ENGINEERING"`, `"FINANCE"`, `"MARKETING"`, `"SALES"`, `"OPERATIONS"`, `"LEGAL"`, `"HR"`, `"EXECUTIVE"`, `"GENERAL"`), `is_executive: bool`, `is_valid: bool`, `confidence: float`, `healing_actions: list[str]` (`"JSON_ARRAY_UNPACKED"`, `"TITLE_ABBREVIATION_EXPANDED"`).
+
+### 3.5 `StandardizedEmail`, `StandardizedUrl` & `StandardizedSocial` (`entity_standardizer.web`)
+- `StandardizedEmail`: `raw_input`, `email`, `local_part`, `raw_local_part`, `subaddress`, `domain`, `display_name`, `email_type` (`"CORPORATE"`, `"FREE_WEBMAIL"`, `"ROLE_ACCOUNT"`, `"DISPOSABLE"`, or `None`), `is_free_provider`, `is_role_account`, `is_disposable`, `inferred_country_iso2`, `email_key`, `is_valid`, `confidence`, `healing_actions` (`"DISPLAY_NAME_EXTRACTED"`, `"MAILTO_PREFIX_STRIPPED"`, `"IDNA_PUNYCODE_NORMALIZED"`, `"DOMAIN_TYPO_HEALED"`, `"GMAIL_DOMAIN_CANONICALIZED"`, `"SUBADDRESS_EXTRACTED"`, `"GMAIL_DOTS_CANONICALIZED"`).
+- `StandardizedUrl`: `raw_input`, `url`, `scheme`, `host`, `domain` (eTLD+1), `subdomain`, `public_suffix`, `brand_stem`, `path`, `inferred_country_iso2`, `url_key`, `is_valid`, `confidence`, `healing_actions` (`"SCHEME_ADDED"`, `"SCHEME_UPGRADED_HTTPS"`, `"IDNA_PUNYCODE_NORMALIZED"`, `"WWW_STRIPPED"`, `"TRACKING_PARAMS_STRIPPED"`).
+- `StandardizedSocial`: `raw_input`, `platform` (`"LINKEDIN"`, `"X"`, `"GITHUB"`, `"INSTAGRAM"`, `"FACEBOOK"`, `"YOUTUBE"`), `handle`, `profile_type`, `url`, `social_key`, `is_valid`, `confidence`, `healing_actions` (`"WWW_STRIPPED"`, `"TWITTER_CANONICALIZED_TO_X"`, `"HANDLE_EXPANDED_TO_URL"`).
+
+### 3.6 `StandardizedAddress` (`address_standardizer.models`) & `StandardizedPhone` (`phone_standardizer.models`)
+- `StandardizedAddress`: `street1`, `street2`, `city`, `state`, `postal_code`, `country`, `country_iso3`, `normalized_address_key`, `building_key`, `phonetic_key`, `address_status`, `is_us`, `is_private_residence`, `is_registered_agent_hub`, `deliverability`, `latitude`, `longitude`, `precision`, `confidence_score`, `routing_tier`, `rdi`, `cmra`, `vacant`, `dpv_footnotes`, `care_of`, `failure_reason_codes`, `warning_codes`.
+- `StandardizedPhone`: `raw_input`, `e164`, `national`, `international`, `rfc3966`, `country_calling_code`, `country_iso2`, `country_iso3`, `country_name`, `national_significant_number`, `area_code`, `subscriber_number`, `extension`, `vanity_alias`, `region_code`, `line_type`, `is_valid`, `is_possible`, `phone_key`, `phone_ext_key`, `confidence`, `routing_tier` (`"AUTO_PASS"`, `"FUZZY_REVIEW"`, `"MANUAL_STEWARDSHIP"`), `risk_flags` (`"PREMIUM_RATE_IRSF_RISK"`, `"FICTITIOUS_RANGE"`, `"REPEATED_DIGITS"`, `"SEQUENTIAL_DIGITS"`, `"INVALID_NANP_NPA"`), `healing_actions`.
+
+---
+
+## 4. FastAPI HTTP Microservice Endpoints (`phone_standardizer.server:app`)
+
+1. `GET /health` -> `{"status": "ok", "version": "2.1.0"}`
+2. `POST /v1/contact` (`ContactStandardizeRequest`) -> `StandardizedContact`
+3. `POST /v1/contact/compare` (`ContactCompareRequest`) -> `ContactComparisonResult`
+4. `POST /v1/company` (`CompanyStandardizeRequest`) -> `StandardizedCompany`
+5. `POST /v1/company/compare` (`CompanyCompareRequest`) -> `CompanyComparisonResult`
+6. `POST /v1/person` (`PersonStandardizeRequest`) -> `StandardizedPerson`
+7. `POST /v1/person/compare` (`PersonCompareRequest`) -> `PersonComparisonResult`
+8. `POST /v1/job-title` (`JobTitleStandardizeRequest`) -> `StandardizedJobTitle`
+9. `POST /v1/email` (`EmailStandardizeRequest`) -> `StandardizedEmail`
+10. `POST /v1/url` (`UrlStandardizeRequest`) -> `StandardizedUrl`
+11. `POST /v1/social` (`SocialStandardizeRequest`) -> `StandardizedSocial`
+12. `POST /v1/address` (`AddressStandardizeRequest`) -> `StandardizedAddress`
+13. `POST /v1/standardize` (`PhoneStandardizeRequest`) -> `StandardizedPhone`
+14. `POST /v1/explain` (`PhoneStandardizeRequest`) -> `{"record": StandardizedPhone, "intelligence": dict, "explanation": dict}`
+15. `POST /v1/compare` (`PhoneCompareRequest`) -> `PhoneComparisonResult`
+16. `POST /v1/deduplicate` (`PhoneDeduplicateRequest`) -> `{"cluster_count": int, "clusters": list[PhoneCluster]}`
+17. `POST /v1/batch` (`PhoneBatchRequest`) -> `{"count": int, "results": list[StandardizedPhone]}`
+18. `GET /v1/countries` -> `{"count": 249, "countries": list[CountryDialPlan]}`
+19. `GET /v1/countries/{identifier}` -> `CountryDialPlan`
+
+---
+
+## 5. Model Context Protocol (MCP) Server (`entity-standardizer-mcp`)
+
+Run via `entity-standardizer-mcp` or `python -m phone_standardizer.mcp.server`. Exposes **17 tools**:
+- `standardize_contact`, `compare_contacts`
+- `standardize_company`, `compare_companies`
+- `standardize_person`, `compare_persons`, `standardize_job_title`
+- `standardize_email`, `standardize_url`, `standardize_social`
+- `standardize_address`
+- `standardize_phone`, `explain_phone`, `compare_phones`, `deduplicate_phones`, `mask_phone`, `lookup_country_dial_plan`
+
+---
+
+## 6. DuckDB SQL Scalar UDFs (`register_duckdb_udfs`)
+
+Calling `register_duckdb_udfs(con, default_country="US")` registers **12 SQL scalar UDFs**:
+- `standardize_phone_e164(VARCHAR) -> VARCHAR`
+- `standardize_phone_national(VARCHAR) -> VARCHAR`
+- `standardize_phone_international(VARCHAR) -> VARCHAR`
+- `validate_phone_udf(VARCHAR) -> BOOLEAN`
+- `mask_phone_udf(VARCHAR) -> VARCHAR`
+- `phone_blocking_keys(VARCHAR) -> VARCHAR[]`
+- `standardize_company_name(VARCHAR) -> VARCHAR`
+- `company_entity_key(VARCHAR) -> VARCHAR`
+- `standardize_person_name(VARCHAR) -> VARCHAR`
+- `person_entity_key(VARCHAR) -> VARCHAR`
+- `standardize_email_udf(VARCHAR) -> VARCHAR`
+- `standardize_url_domain(VARCHAR) -> VARCHAR`
+
+---
+
+## 7. Multi-Platform Client SDKs (`v2.1.0`)
+
+All 3 official client SDKs (`sdks/typescript`, `sdks/go`, `sdks/dotnet`) provide 100% model and method parity across all 19 HTTP operations (`health`, `standardizeContact`, `compareContacts`, `standardizeCompany`, `compareCompanies`, `standardizePerson`, `comparePersons`, `standardizeJobTitle`, `standardizeEmail`, `standardizeUrl`, `standardizeSocial`, `standardizeAddress`, `standardize`, `explain`, `compare`, `deduplicate`, `batch`, `listCountries`, `getCountry`) and are verified on every test run via `tests/test_sdk_contract.py`.

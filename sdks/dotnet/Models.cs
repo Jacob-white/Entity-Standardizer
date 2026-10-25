@@ -3,6 +3,15 @@ using System.Text.Json.Serialization;
 
 namespace PhoneStandardizer.Client;
 
+public sealed class HealthResponse
+{
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "";
+
+    [JsonPropertyName("version")]
+    public string Version { get; set; } = "";
+}
+
 public sealed class PhoneStandardizeRequest
 {
     [JsonPropertyName("phone")]
@@ -336,10 +345,34 @@ public sealed class CompanyStandardizeRequest
     public string? Country { get; set; }
 }
 
+public sealed class CompanyCompareRequest
+{
+    [JsonPropertyName("company_a")]
+    public string CompanyA { get; set; } = "";
+
+    [JsonPropertyName("company_b")]
+    public string CompanyB { get; set; } = "";
+}
+
 public sealed class PersonStandardizeRequest
 {
     [JsonPropertyName("name")]
     public string Name { get; set; } = "";
+}
+
+public sealed class PersonCompareRequest
+{
+    [JsonPropertyName("person_a")]
+    public string PersonA { get; set; } = "";
+
+    [JsonPropertyName("person_b")]
+    public string PersonB { get; set; } = "";
+}
+
+public sealed class JobTitleStandardizeRequest
+{
+    [JsonPropertyName("title")]
+    public string Title { get; set; } = "";
 }
 
 public sealed class EmailStandardizeRequest
@@ -406,6 +439,18 @@ public sealed class ContactStandardizeRequest
 
     [JsonPropertyName("social")]
     public string? Social { get; set; }
+
+    [JsonPropertyName("default_country")]
+    public string DefaultCountry { get; set; } = "US";
+}
+
+public sealed class ContactCompareRequest
+{
+    [JsonPropertyName("contact_a")]
+    public Dictionary<string, object?> ContactA { get; set; } = new();
+
+    [JsonPropertyName("contact_b")]
+    public Dictionary<string, object?> ContactB { get; set; } = new();
 
     [JsonPropertyName("default_country")]
     public string DefaultCountry { get; set; } = "US";
@@ -504,6 +549,24 @@ public sealed class StandardizedCompany
     public List<string> HealingActions { get; set; } = new();
 }
 
+public sealed class CompanyComparisonResult
+{
+    [JsonPropertyName("is_match")]
+    public bool IsMatch { get; set; }
+
+    [JsonPropertyName("score")]
+    public double Score { get; set; }
+
+    [JsonPropertyName("match_type")]
+    public string MatchType { get; set; } = "";
+
+    [JsonPropertyName("company_a")]
+    public StandardizedCompany? CompanyA { get; set; }
+
+    [JsonPropertyName("company_b")]
+    public StandardizedCompany? CompanyB { get; set; }
+}
+
 public sealed class StandardizedPerson
 {
     [JsonPropertyName("raw_input")]
@@ -556,6 +619,24 @@ public sealed class StandardizedPerson
 
     [JsonPropertyName("healing_actions")]
     public List<string> HealingActions { get; set; } = new();
+}
+
+public sealed class PersonComparisonResult
+{
+    [JsonPropertyName("is_match")]
+    public bool IsMatch { get; set; }
+
+    [JsonPropertyName("score")]
+    public double Score { get; set; }
+
+    [JsonPropertyName("match_type")]
+    public string MatchType { get; set; } = "";
+
+    [JsonPropertyName("person_a")]
+    public StandardizedPerson? PersonA { get; set; }
+
+    [JsonPropertyName("person_b")]
+    public StandardizedPerson? PersonB { get; set; }
 }
 
 public sealed class StandardizedJobTitle
@@ -748,4 +829,28 @@ public sealed class StandardizedContact
 
     [JsonPropertyName("overall_confidence")]
     public double OverallConfidence { get; set; }
+}
+
+public sealed class ContactComparisonResult
+{
+    [JsonPropertyName("is_match")]
+    public bool IsMatch { get; set; }
+
+    [JsonPropertyName("score")]
+    public double Score { get; set; }
+
+    [JsonPropertyName("match_type")]
+    public string MatchType { get; set; } = "";
+
+    [JsonPropertyName("matched_pillars")]
+    public List<string> MatchedPillars { get; set; } = new();
+
+    [JsonPropertyName("pillar_scores")]
+    public Dictionary<string, double> PillarScores { get; set; } = new();
+
+    [JsonPropertyName("contact_a")]
+    public StandardizedContact? ContactA { get; set; }
+
+    [JsonPropertyName("contact_b")]
+    public StandardizedContact? ContactB { get; set; }
 }

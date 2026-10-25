@@ -67,6 +67,15 @@ func (c *Client) getJSON(ctx context.Context, path string, out any) error {
 	return json.NewDecoder(resp.Body).Decode(out)
 }
 
+// Health checks the health and version of the Phone Standardizer microservice.
+func (c *Client) Health(ctx context.Context) (*HealthResponse, error) {
+	var out HealthResponse
+	if err := c.getJSON(ctx, "/health", &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // Standardize parses, validates, and formats a single telephone number.
 func (c *Client) Standardize(ctx context.Context, req PhoneStandardizeRequest) (*StandardizedPhone, error) {
 	var out StandardizedPhone
@@ -148,10 +157,37 @@ func (c *Client) StandardizeCompany(ctx context.Context, req CompanyStandardizeR
 	return &out, nil
 }
 
+// CompareCompanies compares two organization or company names via POST /v1/company/compare.
+func (c *Client) CompareCompanies(ctx context.Context, req CompanyCompareRequest) (*CompanyComparisonResult, error) {
+	var out CompanyComparisonResult
+	if err := c.postJSON(ctx, "/v1/company/compare", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // StandardizePerson standardizes a person full name via POST /v1/person.
 func (c *Client) StandardizePerson(ctx context.Context, req PersonStandardizeRequest) (*StandardizedPerson, error) {
 	var out StandardizedPerson
 	if err := c.postJSON(ctx, "/v1/person", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ComparePersons compares two person full names via POST /v1/person/compare.
+func (c *Client) ComparePersons(ctx context.Context, req PersonCompareRequest) (*PersonComparisonResult, error) {
+	var out PersonComparisonResult
+	if err := c.postJSON(ctx, "/v1/person/compare", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// StandardizeJobTitle standardizes a job title and classifies seniority and department via POST /v1/job-title.
+func (c *Client) StandardizeJobTitle(ctx context.Context, req JobTitleStandardizeRequest) (*StandardizedJobTitle, error) {
+	var out StandardizedJobTitle
+	if err := c.postJSON(ctx, "/v1/job-title", req, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -188,6 +224,15 @@ func (c *Client) StandardizeSocial(ctx context.Context, req SocialStandardizeReq
 func (c *Client) StandardizeContact(ctx context.Context, req ContactStandardizeRequest) (*StandardizedContact, error) {
 	var out StandardizedContact
 	if err := c.postJSON(ctx, "/v1/contact", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// CompareContacts compares two multi-pillar contact/entity records via POST /v1/contact/compare.
+func (c *Client) CompareContacts(ctx context.Context, req ContactCompareRequest) (*ContactComparisonResult, error) {
+	var out ContactComparisonResult
+	if err := c.postJSON(ctx, "/v1/contact/compare", req, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
