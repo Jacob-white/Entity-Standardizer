@@ -6,13 +6,13 @@ Entity Standardizer provides the unified FastAPI HTTP microservice (`entity_stan
 uvicorn entity_standardizer.server:app --host 0.0.0.0 --port 8000
 ```
 
-It exposes **20 HTTP routes** across:
+It exposes **29 HTTP routes** (27 `/v1/*` endpoints + `GET /health` + `GET /ready`) across:
 - **Liveness & Readiness Probes**: `GET /health`, `GET /ready`
-- **Joint 6-Pillar Contact Standardization & Comparison**: `POST /v1/contact`, `POST /v1/contact/compare`
-- **Organization / Company**: `POST /v1/company`, `POST /v1/company/compare`
-- **Person & Job Title**: `POST /v1/person`, `POST /v1/person/compare`, `POST /v1/job-title`
-- **Email, Website URL & Social**: `POST /v1/email`, `POST /v1/url`, `POST /v1/social`
-- **Physical Address**: `POST /v1/address`
+- **Joint 6-Pillar Contact Standardization, Comparison, Clustering & Batch**: `POST /v1/contact`, `POST /v1/contact/compare`, `POST /v1/contact/cluster`, `POST /v1/contact/batch`
+- **Organization / Company**: `POST /v1/company`, `POST /v1/company/compare`, `POST /v1/company/deduplicate`
+- **Person & Job Title**: `POST /v1/person`, `POST /v1/person/compare`, `POST /v1/person/deduplicate`, `POST /v1/job-title`
+- **Email, Website URL & Social**: `POST /v1/email`, `POST /v1/email/compare`, `POST /v1/url`, `POST /v1/url/compare`, `POST /v1/social`
+- **Physical Address**: `POST /v1/address`, `POST /v1/address/compare`, `POST /v1/address/deduplicate`, `POST /v1/address/autocomplete`
 - **Telephone**: `POST /v1/standardize`, `POST /v1/explain`, `POST /v1/compare`, `POST /v1/deduplicate`, `POST /v1/batch`, `GET /v1/countries`, `GET /v1/countries/{identifier}`
 
 ---

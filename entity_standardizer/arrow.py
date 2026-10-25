@@ -1,9 +1,9 @@
 """Modern Data Stack Plugins: Apache Arrow, Polars, and DuckDB Vectorized UDFs.
 
-Provides high-throughput columnar phone standardization for analytical tables:
-- Vectorized Apache Arrow Table & RecordBatch transformations (`standardize_arrow`)
-- Polars DataFrame & LazyFrame integration (`standardize_polars`)
-- Embedded DuckDB SQL scalar UDFs (`register_duckdb_udfs`)
+Provides high-throughput columnar 6-pillar entity standardization for analytical tables:
+- Vectorized Apache Arrow Table & RecordBatch transformations (`standardize_arrow`, `standardize_*_arrow` — 8 functions)
+- Polars DataFrame & LazyFrame integration (`standardize_polars`, `standardize_*_polars` — 8 functions)
+- Embedded DuckDB SQL scalar UDFs across all 6 pillars (`register_duckdb_udfs` — 15 UDFs)
 """
 
 from __future__ import annotations
@@ -195,7 +195,7 @@ def standardize_polars(
 
 
 def register_duckdb_udfs(con: Any, default_country: str = "US") -> None:
-    """Register scalar phone standardization UDFs on a DuckDB connection."""
+    """Register 15 scalar 6-pillar entity standardization UDFs on a DuckDB connection."""
     global duckdb
     if duckdb is _UNSET:
         try:

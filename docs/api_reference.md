@@ -14,6 +14,7 @@ This document specifies the public Python API, dataclasses, CLI subcommands, Fas
 - `fax: StandardizedPhone | None` — Standardized fax telephone record (if provided).
 - `organization: StandardizedCompany | None` — Standardized company/organization record.
 - `person: StandardizedPerson | None` — Standardized contact person record.
+- `additional_persons: list[StandardizedPerson]` — Additional standardized person records split from compound/couple person inputs.
 - `job_title: StandardizedJobTitle | None` — Standardized job title record.
 - `email: StandardizedEmail | None` — Standardized email address record.
 - `website: StandardizedUrl | None` — Standardized website URL record.
@@ -28,6 +29,7 @@ This document specifies the public Python API, dataclasses, CLI subcommands, Fas
 - `URL_RESCUED_FROM_FIELD`
 - `ORGANIZATION_RESCUED_FROM_PERSON_FIELD`
 - `PERSON_RESCUED_FROM_EMAIL_OR_CARE_OF`
+- `COMPOUND_PERSON_SPLIT`
 - `ORGANIZATION_INFERRED_FROM_DOMAIN`
 - `EMAIL_WEBSITE_DOMAIN_MATCH`
 - `EMAIL_WEBSITE_DOMAIN_MISMATCH`
@@ -241,4 +243,37 @@ Calling `register_duckdb_udfs(con, default_country="US")` registers **15 SQL sca
 - `es_standardize_address(VARCHAR, VARCHAR) -> VARCHAR`
 - `es_standardize_social(VARCHAR, VARCHAR) -> VARCHAR`
 - `es_standardize_contact_key(VARCHAR, VARCHAR, VARCHAR, VARCHAR, VARCHAR) -> VARCHAR`
+
+---
+
+## 6. Command Line Interface (`entity-standardizer` — 23 Subcommands)
+
+The unified `entity-standardizer` CLI exposes **23 subcommands**:
+
+| Subcommand | Description |
+| :--- | :--- |
+| `contact` | Jointly standardize and cross-heal a multi-pillar contact record |
+| `cluster-contacts` | Cluster multi-pillar contact records into Golden Contact Clusters |
+| `company` | Standardize a company/organization name (ISO 20275 ELF) |
+| `compare-companies` | Compare two company names |
+| `dedup-companies` | Cluster and deduplicate company names into Golden Company Records |
+| `person` | Standardize a person's full name |
+| `compare-persons` | Compare two person names |
+| `dedup-persons` | Cluster and deduplicate person names into Golden Person Records |
+| `title` | Standardize a job title and classify seniority, department, and executive status |
+| `email` | Standardize an email address |
+| `compare-emails` | Compare two email addresses |
+| `url` | Standardize a website URL |
+| `compare-urls` | Compare two website URLs |
+| `social` | Standardize a social profile URL or `@handle` |
+| `address` | Standardize a physical/mailing address (USPS Pub 28 / UPU S42) |
+| `compare-addresses` | Compare two physical addresses |
+| `dedup-addresses` | Cluster and deduplicate physical addresses into Golden Address Records |
+| `autocomplete` | Suggest canonical address completions for a street prefix |
+| `parse` | Standardize a telephone number into E.164, National, International, and RFC 3966 formats |
+| `compare` | Compare two telephone numbers |
+| `dedup` | Cluster and deduplicate telephone numbers into Golden Phone Records |
+| `country` | Look up a `CountryDialPlan` by ISO-2, ISO-3, calling code, or name |
+| `batch` | Stream-standardize a CSV file across phone, address, company, person, email, and URL columns |
+
 
