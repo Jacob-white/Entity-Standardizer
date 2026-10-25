@@ -150,14 +150,96 @@ type PhoneExplainReport struct {
 	Explanation  PhoneExplanation  `json:"explanation"`
 }
 
+// ReadyResponse is the response payload for GET /ready.
+type ReadyResponse struct {
+	Status          string `json:"status"`
+	Version         string `json:"version"`
+	NativeAvailable bool   `json:"native_available"`
+}
+
 // AddressStandardizeRequest is the request payload for POST /v1/address.
 type AddressStandardizeRequest struct {
-	Street1    string `json:"street1,omitempty"`
-	Street2    string `json:"street2,omitempty"`
+	Street1         string `json:"street1,omitempty"`
+	Street2         string `json:"street2,omitempty"`
+	City            string `json:"city,omitempty"`
+	State           string `json:"state,omitempty"`
+	PostalCode      string `json:"postal_code,omitempty"`
+	Country         string `json:"country,omitempty"`
+	EnableGeocoding bool   `json:"enable_geocoding,omitempty"`
+	Explain         bool   `json:"explain,omitempty"`
+}
+
+// AddressCompareRequest is the request payload for POST /v1/address/compare.
+type AddressCompareRequest struct {
+	AddressA       any     `json:"address_a"`
+	AddressB       any     `json:"address_b"`
+	Country        string  `json:"country,omitempty"`
+	FuzzyThreshold float64 `json:"fuzzy_threshold,omitempty"`
+}
+
+// AddressDeduplicateRequest is the request payload for POST /v1/address/deduplicate.
+type AddressDeduplicateRequest struct {
+	Addresses      []any   `json:"addresses"`
+	Country        string  `json:"country,omitempty"`
+	FuzzyThreshold float64 `json:"fuzzy_threshold,omitempty"`
+}
+
+// AddressAutocompleteRequest is the request payload for POST /v1/address/autocomplete.
+type AddressAutocompleteRequest struct {
+	Prefix     string `json:"prefix"`
 	City       string `json:"city,omitempty"`
 	State      string `json:"state,omitempty"`
 	PostalCode string `json:"postal_code,omitempty"`
-	Country    string `json:"country,omitempty"`
+	MaxResults int    `json:"max_results,omitempty"`
+}
+
+// AutocompleteSuggestion represents a single address autocomplete suggestion.
+type AutocompleteSuggestion struct {
+	Text                    string   `json:"text"`
+	Street1                 string   `json:"street1"`
+	Street2                 string   `json:"street2"`
+	City                    string   `json:"city"`
+	State                   string   `json:"state"`
+	PostalCode              string   `json:"postal_code"`
+	Country                 string   `json:"country"`
+	SecondaryPromptRequired bool     `json:"secondary_prompt_required"`
+	SuggestedSecondaryUnits []string `json:"suggested_secondary_units"`
+	HighlightRanges         [][]int  `json:"highlight_ranges"`
+	Score                   float64  `json:"score"`
+	PromptMessage           *string  `json:"prompt_message"`
+	Latitude                *float64 `json:"latitude"`
+	Longitude               *float64 `json:"longitude"`
+	DistanceMeters          *float64 `json:"distance_meters"`
+}
+
+// AddressAutocompleteResponse represents the response payload from POST /v1/address/autocomplete.
+type AddressAutocompleteResponse struct {
+	Count       int                      `json:"count"`
+	Suggestions []AutocompleteSuggestion `json:"suggestions"`
+}
+
+// AddressComparisonResult represents the response payload from POST /v1/address/compare.
+type AddressComparisonResult struct {
+	IsMatch   bool                `json:"is_match"`
+	Score     float64             `json:"score"`
+	MatchType string              `json:"match_type"`
+	AddressA  StandardizedAddress `json:"address_a"`
+	AddressB  StandardizedAddress `json:"address_b"`
+}
+
+// AddressCluster represents a deduplicated Golden Address cluster.
+type AddressCluster struct {
+	ClusterID     int                   `json:"cluster_id"`
+	GoldenAddress StandardizedAddress   `json:"golden_address"`
+	Members       []StandardizedAddress `json:"members"`
+	RawInputs     []any                 `json:"raw_inputs"`
+	Confidence    float64               `json:"confidence"`
+}
+
+// AddressDeduplicateResponse represents the response payload from POST /v1/address/deduplicate.
+type AddressDeduplicateResponse struct {
+	ClusterCount int              `json:"cluster_count"`
+	Clusters     []AddressCluster `json:"clusters"`
 }
 
 // CompanyStandardizeRequest is the request payload for POST /v1/company.
@@ -172,6 +254,28 @@ type CompanyCompareRequest struct {
 	CompanyB string `json:"company_b"`
 }
 
+// CompanyDeduplicateRequest is the request payload for POST /v1/company/deduplicate.
+type CompanyDeduplicateRequest struct {
+	Companies      []string `json:"companies"`
+	Country        string   `json:"country,omitempty"`
+	FuzzyThreshold float64  `json:"fuzzy_threshold,omitempty"`
+}
+
+// CompanyCluster represents a deduplicated Golden Company cluster.
+type CompanyCluster struct {
+	ClusterID     string                `json:"cluster_id"`
+	GoldenCompany StandardizedCompany   `json:"golden_company"`
+	Members       []StandardizedCompany `json:"members"`
+	RawInputs     []string              `json:"raw_inputs"`
+	MatchTypes    []string              `json:"match_types"`
+}
+
+// CompanyDeduplicateResponse represents the response payload from POST /v1/company/deduplicate.
+type CompanyDeduplicateResponse struct {
+	ClusterCount int              `json:"cluster_count"`
+	Clusters     []CompanyCluster `json:"clusters"`
+}
+
 // PersonStandardizeRequest is the request payload for POST /v1/person.
 type PersonStandardizeRequest struct {
 	Name string `json:"name"`
@@ -181,6 +285,27 @@ type PersonStandardizeRequest struct {
 type PersonCompareRequest struct {
 	PersonA string `json:"person_a"`
 	PersonB string `json:"person_b"`
+}
+
+// PersonDeduplicateRequest is the request payload for POST /v1/person/deduplicate.
+type PersonDeduplicateRequest struct {
+	Persons        []string `json:"persons"`
+	FuzzyThreshold float64  `json:"fuzzy_threshold,omitempty"`
+}
+
+// PersonCluster represents a deduplicated Golden Person cluster.
+type PersonCluster struct {
+	ClusterID    string               `json:"cluster_id"`
+	GoldenPerson StandardizedPerson   `json:"golden_person"`
+	Members      []StandardizedPerson `json:"members"`
+	RawInputs    []string             `json:"raw_inputs"`
+	MatchTypes   []string             `json:"match_types"`
+}
+
+// PersonDeduplicateResponse represents the response payload from POST /v1/person/deduplicate.
+type PersonDeduplicateResponse struct {
+	ClusterCount int             `json:"cluster_count"`
+	Clusters     []PersonCluster `json:"clusters"`
 }
 
 // JobTitleStandardizeRequest is the request payload for POST /v1/job-title.
@@ -193,9 +318,39 @@ type EmailStandardizeRequest struct {
 	Email string `json:"email"`
 }
 
+// EmailCompareRequest is the request payload for POST /v1/email/compare.
+type EmailCompareRequest struct {
+	EmailA string `json:"email_a"`
+	EmailB string `json:"email_b"`
+}
+
+// EmailComparisonResult represents the response payload from POST /v1/email/compare.
+type EmailComparisonResult struct {
+	IsMatch   bool              `json:"is_match"`
+	Score     float64           `json:"score"`
+	MatchType string            `json:"match_type"`
+	EmailA    StandardizedEmail `json:"email_a"`
+	EmailB    StandardizedEmail `json:"email_b"`
+}
+
 // UrlStandardizeRequest is the request payload for POST /v1/url.
 type UrlStandardizeRequest struct {
 	URL string `json:"url"`
+}
+
+// UrlCompareRequest is the request payload for POST /v1/url/compare.
+type UrlCompareRequest struct {
+	URLA string `json:"url_a"`
+	URLB string `json:"url_b"`
+}
+
+// UrlComparisonResult represents the response payload from POST /v1/url/compare.
+type UrlComparisonResult struct {
+	IsMatch   bool            `json:"is_match"`
+	Score     float64         `json:"score"`
+	MatchType string          `json:"match_type"`
+	URLA      StandardizedUrl `json:"url_a"`
+	URLB      StandardizedUrl `json:"url_b"`
 }
 
 // SocialStandardizeRequest is the request payload for POST /v1/social.
@@ -228,6 +383,40 @@ type ContactCompareRequest struct {
 	ContactA       map[string]any `json:"contact_a"`
 	ContactB       map[string]any `json:"contact_b"`
 	DefaultCountry string         `json:"default_country,omitempty"`
+}
+
+// ContactClusterRequest is the request payload for POST /v1/contact/cluster.
+type ContactClusterRequest struct {
+	Records        []map[string]any `json:"records"`
+	DefaultCountry string           `json:"default_country,omitempty"`
+}
+
+// ContactCluster represents a unified Golden Entity cluster returned by POST /v1/contact/cluster.
+type ContactCluster struct {
+	ClusterID        string            `json:"cluster_id"`
+	GoldenPhone      StandardizedPhone `json:"golden_phone"`
+	GoldenAddressKey *string           `json:"golden_address_key"`
+	RecordIDs        []string          `json:"record_ids"`
+	Records          []map[string]any  `json:"records"`
+	LinkageReasons   []string          `json:"linkage_reasons"`
+}
+
+// ContactClusterResponse represents the response payload from POST /v1/contact/cluster.
+type ContactClusterResponse struct {
+	ClusterCount int              `json:"cluster_count"`
+	Clusters     []ContactCluster `json:"clusters"`
+}
+
+// ContactBatchRequest is the request payload for POST /v1/contact/batch.
+type ContactBatchRequest struct {
+	Contacts       []map[string]any `json:"contacts"`
+	DefaultCountry string           `json:"default_country,omitempty"`
+}
+
+// ContactBatchResponse represents the response payload from POST /v1/contact/batch.
+type ContactBatchResponse struct {
+	Count   int                   `json:"count"`
+	Results []StandardizedContact `json:"results"`
 }
 
 // StandardizedAddress represents a normalized physical/postal address returned by POST /v1/address.
@@ -376,6 +565,7 @@ type StandardizedContact struct {
 	Fax                 *StandardizedPhone    `json:"fax"`
 	Organization        *StandardizedCompany  `json:"organization"`
 	Person              *StandardizedPerson   `json:"person"`
+	AdditionalPersons   []StandardizedPerson  `json:"additional_persons"`
 	JobTitle            *StandardizedJobTitle `json:"job_title"`
 	Email               *StandardizedEmail    `json:"email"`
 	Website             *StandardizedUrl      `json:"website"`

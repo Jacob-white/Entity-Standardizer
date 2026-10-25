@@ -6,16 +6,34 @@ import json
 import sys
 from typing import Any
 
+from entity_standardizer.address.autocomplete import autocomplete_address
 from entity_standardizer.address.standardizer import standardize_address
-from entity_standardizer.company import compare_companies, standardize_company
+from entity_standardizer.company import (
+    compare_companies,
+    deduplicate_companies,
+    standardize_company,
+)
 from entity_standardizer.person import (
     compare_persons,
+    deduplicate_persons,
     standardize_job_title,
     standardize_person,
 )
-from entity_standardizer.web import standardize_email, standardize_social, standardize_url
+from entity_standardizer.web import (
+    compare_emails,
+    compare_urls,
+    standardize_email,
+    standardize_social,
+    standardize_url,
+)
 from entity_standardizer.audit import explain_phone
-from entity_standardizer.dedup import compare_phones, deduplicate_phones
+from entity_standardizer.dedup import (
+    cluster_contact_records,
+    compare_addresses,
+    compare_phones,
+    deduplicate_addresses,
+    deduplicate_phones,
+)
 from entity_standardizer.joint import compare_contacts, standardize_contact
 from entity_standardizer.registry import get_dial_plan
 from entity_standardizer.standardizer import mask_phone, standardize_phone
@@ -114,7 +132,51 @@ MCP_TOOLS: list[dict[str, Any]] = [
                 "state": {"type": "string"},
                 "postal_code": {"type": "string"},
                 "country": {"type": "string", "default": "US"},
+                "enable_geocoding": {"type": "boolean", "default": False},
+                "explain": {"type": "boolean", "default": False},
             },
+        },
+    },
+    {
+        "name": "compare_addresses",
+        "description": "Compare two physical/mailing addresses across exact address_key, street/postal/city keys, phonetic key, and fuzzy similarity.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "address_a": {"type": ["string", "object"]},
+                "address_b": {"type": ["string", "object"]},
+                "country": {"type": "string", "default": "US"},
+                "fuzzy_threshold": {"type": "number", "default": 0.85},
+            },
+            "required": ["address_a", "address_b"],
+        },
+    },
+    {
+        "name": "deduplicate_addresses",
+        "description": "Cluster and deduplicate physical/mailing addresses into Golden Address Records.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "addresses": {"type": "array", "items": {"type": ["string", "object"]}},
+                "country": {"type": "string", "default": "US"},
+                "fuzzy_threshold": {"type": "number", "default": 0.85},
+            },
+            "required": ["addresses"],
+        },
+    },
+    {
+        "name": "autocomplete_address",
+        "description": "Suggest canonical address completions for a partial street address prefix.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "prefix": {"type": "string"},
+                "city": {"type": "string"},
+                "state": {"type": "string"},
+                "postal_code": {"type": "string"},
+                "max_results": {"type": "integer", "default": 5},
+            },
+            "required": ["prefix"],
         },
     },
     {
@@ -164,6 +226,19 @@ MCP_TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "deduplicate_companies",
+        "description": "Cluster and deduplicate company names into Golden Company Records.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "companies": {"type": "array", "items": {"type": "string"}},
+                "country": {"type": "string"},
+                "fuzzy_threshold": {"type": "number", "default": 0.85},
+            },
+            "required": ["companies"],
+        },
+    },
+    {
         "name": "compare_persons",
         "description": "Compare two person names across exact person_key, nickname root_first_name, first initial, and phonetic keys.",
         "inputSchema": {
@@ -173,6 +248,18 @@ MCP_TOOLS: list[dict[str, Any]] = [
                 "person_b": {"type": "string"},
             },
             "required": ["person_a", "person_b"],
+        },
+    },
+    {
+        "name": "deduplicate_persons",
+        "description": "Cluster and deduplicate person names into Golden Person Records.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "persons": {"type": "array", "items": {"type": "string"}},
+                "fuzzy_threshold": {"type": "number", "default": 0.85},
+            },
+            "required": ["persons"],
         },
     },
     {
@@ -187,6 +274,18 @@ MCP_TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "compare_emails",
+        "description": "Compare two email addresses across exact canonical email, subaddress-stripped base email, domain match, and typo similarity.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "email_a": {"type": "string"},
+                "email_b": {"type": "string"},
+            },
+            "required": ["email_a", "email_b"],
+        },
+    },
+    {
         "name": "standardize_url",
         "description": "Standardize a website URL (HTTPS upgrade, www/tracking parameter removal, eTLD+1 registrable domain).",
         "inputSchema": {
@@ -195,6 +294,18 @@ MCP_TOOLS: list[dict[str, Any]] = [
                 "url": {"type": "string"},
             },
             "required": ["url"],
+        },
+    },
+    {
+        "name": "compare_urls",
+        "description": "Compare two website URLs across exact canonical URL, registrable domain, host match, and fuzzy similarity.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "url_a": {"type": "string"},
+                "url_b": {"type": "string"},
+            },
+            "required": ["url_a", "url_b"],
         },
     },
     {
@@ -244,6 +355,18 @@ MCP_TOOLS: list[dict[str, Any]] = [
                 "default_country": {"type": "string", "default": "US"},
             },
             "required": ["contact_a", "contact_b"],
+        },
+    },
+    {
+        "name": "cluster_contact_records",
+        "description": "Cluster multi-pillar contact records into Golden Entity Clusters with survivorship selection.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "records": {"type": "array", "items": {"type": "object"}},
+                "default_country": {"type": "string", "default": "US"},
+            },
+            "required": ["records"],
         },
     },
 ]
@@ -356,11 +479,63 @@ def handle_mcp_request(request: dict[str, Any]) -> dict[str, Any]:
                 postal_code=args.get("postal_code"),
                 country=args.get("country", "US"),
                 allow_locality=True,
+                enable_geocoding=bool(args.get("enable_geocoding", False)),
+                explain=bool(args.get("explain", False)),
             )
             return {
                 "jsonrpc": "2.0",
                 "id": req_id,
                 "result": {"content": [{"type": "text", "text": json.dumps(addr_res.to_dict())}]},
+            }
+        if tool_name == "compare_addresses":
+            ca_res = compare_addresses(
+                args.get("address_a", ""),
+                args.get("address_b", ""),
+                country=args.get("country", "US"),
+                fuzzy_threshold=float(args.get("fuzzy_threshold", 0.85)),
+            )
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {"content": [{"type": "text", "text": json.dumps(ca_res.to_dict())}]},
+            }
+        if tool_name == "deduplicate_addresses":
+            addr_clusters = deduplicate_addresses(
+                args.get("addresses") or [],
+                country=args.get("country", "US"),
+                fuzzy_threshold=float(args.get("fuzzy_threshold", 0.85)),
+            )
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": json.dumps([c.to_dict() for c in addr_clusters]),
+                        }
+                    ]
+                },
+            }
+        if tool_name == "autocomplete_address":
+            suggestions = autocomplete_address(
+                prefix=args.get("prefix", ""),
+                city=args.get("city"),
+                state=args.get("state"),
+                postal_code=args.get("postal_code"),
+                max_results=int(args.get("max_results", 5)),
+            )
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": json.dumps([s.to_dict() for s in suggestions]),
+                        }
+                    ]
+                },
             }
         if tool_name == "standardize_company":
             comp_res = standardize_company(args.get("name"), country=args.get("country"))
@@ -390,12 +565,47 @@ def handle_mcp_request(request: dict[str, Any]) -> dict[str, Any]:
                 "id": req_id,
                 "result": {"content": [{"type": "text", "text": json.dumps(cc_res.to_dict())}]},
             }
+        if tool_name == "deduplicate_companies":
+            comp_clusters = deduplicate_companies(
+                args.get("companies") or [],
+                country=args.get("country"),
+                fuzzy_threshold=float(args.get("fuzzy_threshold", 0.85)),
+            )
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": json.dumps([c.to_dict() for c in comp_clusters]),
+                        }
+                    ]
+                },
+            }
         if tool_name == "compare_persons":
             cp_res = compare_persons(args.get("person_a"), args.get("person_b"))
             return {
                 "jsonrpc": "2.0",
                 "id": req_id,
                 "result": {"content": [{"type": "text", "text": json.dumps(cp_res.to_dict())}]},
+            }
+        if tool_name == "deduplicate_persons":
+            per_clusters = deduplicate_persons(
+                args.get("persons") or [],
+                fuzzy_threshold=float(args.get("fuzzy_threshold", 0.85)),
+            )
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": json.dumps([c.to_dict() for c in per_clusters]),
+                        }
+                    ]
+                },
             }
         if tool_name == "standardize_email":
             email_res = standardize_email(args.get("email"))
@@ -404,12 +614,26 @@ def handle_mcp_request(request: dict[str, Any]) -> dict[str, Any]:
                 "id": req_id,
                 "result": {"content": [{"type": "text", "text": json.dumps(email_res.to_dict())}]},
             }
+        if tool_name == "compare_emails":
+            ce_res = compare_emails(args.get("email_a"), args.get("email_b"))
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {"content": [{"type": "text", "text": json.dumps(ce_res.to_dict())}]},
+            }
         if tool_name == "standardize_url":
             url_res = standardize_url(args.get("url"))
             return {
                 "jsonrpc": "2.0",
                 "id": req_id,
                 "result": {"content": [{"type": "text", "text": json.dumps(url_res.to_dict())}]},
+            }
+        if tool_name == "compare_urls":
+            cu_res = compare_urls(args.get("url_a"), args.get("url_b"))
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {"content": [{"type": "text", "text": json.dumps(cu_res.to_dict())}]},
             }
         if tool_name == "standardize_social":
             soc_res = standardize_social(args.get("profile"), platform=args.get("platform"))
@@ -454,6 +678,23 @@ def handle_mcp_request(request: dict[str, Any]) -> dict[str, Any]:
                 "id": req_id,
                 "result": {
                     "content": [{"type": "text", "text": json.dumps(cmp_contact_res.to_dict())}]
+                },
+            }
+        if tool_name == "cluster_contact_records":
+            ent_clusters = cluster_contact_records(
+                args.get("records") or [],
+                default_country=args.get("default_country", "US"),
+            )
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {
+                    "content": [
+                        {
+                            "type": "text",
+                            "text": json.dumps([c.to_dict() for c in ent_clusters]),
+                        }
+                    ]
                 },
             }
         return {

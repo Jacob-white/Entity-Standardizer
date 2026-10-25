@@ -82,6 +82,15 @@ func (c *Client) Health(ctx context.Context) (*HealthResponse, error) {
 	return &out, nil
 }
 
+// Ready checks the readiness and native engine availability via GET /ready.
+func (c *Client) Ready(ctx context.Context) (*ReadyResponse, error) {
+	var out ReadyResponse
+	if err := c.getJSON(ctx, "/ready", &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // Standardize parses, validates, and formats a single telephone number.
 func (c *Client) Standardize(ctx context.Context, req PhoneStandardizeRequest) (*StandardizedPhone, error) {
 	var out StandardizedPhone
@@ -154,6 +163,33 @@ func (c *Client) StandardizeAddress(ctx context.Context, req AddressStandardizeR
 	return &out, nil
 }
 
+// CompareAddresses compares two physical/postal addresses via POST /v1/address/compare.
+func (c *Client) CompareAddresses(ctx context.Context, req AddressCompareRequest) (*AddressComparisonResult, error) {
+	var out AddressComparisonResult
+	if err := c.postJSON(ctx, "/v1/address/compare", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// DeduplicateAddresses clusters and deduplicates addresses into Golden Address Records via POST /v1/address/deduplicate.
+func (c *Client) DeduplicateAddresses(ctx context.Context, req AddressDeduplicateRequest) (*AddressDeduplicateResponse, error) {
+	var out AddressDeduplicateResponse
+	if err := c.postJSON(ctx, "/v1/address/deduplicate", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// AutocompleteAddress suggests canonical address completions via POST /v1/address/autocomplete.
+func (c *Client) AutocompleteAddress(ctx context.Context, req AddressAutocompleteRequest) (*AddressAutocompleteResponse, error) {
+	var out AddressAutocompleteResponse
+	if err := c.postJSON(ctx, "/v1/address/autocomplete", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // StandardizeCompany standardizes an organization or company name via POST /v1/company.
 func (c *Client) StandardizeCompany(ctx context.Context, req CompanyStandardizeRequest) (*StandardizedCompany, error) {
 	var out StandardizedCompany
@@ -167,6 +203,15 @@ func (c *Client) StandardizeCompany(ctx context.Context, req CompanyStandardizeR
 func (c *Client) CompareCompanies(ctx context.Context, req CompanyCompareRequest) (*CompanyComparisonResult, error) {
 	var out CompanyComparisonResult
 	if err := c.postJSON(ctx, "/v1/company/compare", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// DeduplicateCompanies clusters and deduplicates company names via POST /v1/company/deduplicate.
+func (c *Client) DeduplicateCompanies(ctx context.Context, req CompanyDeduplicateRequest) (*CompanyDeduplicateResponse, error) {
+	var out CompanyDeduplicateResponse
+	if err := c.postJSON(ctx, "/v1/company/deduplicate", req, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -190,6 +235,15 @@ func (c *Client) ComparePersons(ctx context.Context, req PersonCompareRequest) (
 	return &out, nil
 }
 
+// DeduplicatePersons clusters and deduplicates person names via POST /v1/person/deduplicate.
+func (c *Client) DeduplicatePersons(ctx context.Context, req PersonDeduplicateRequest) (*PersonDeduplicateResponse, error) {
+	var out PersonDeduplicateResponse
+	if err := c.postJSON(ctx, "/v1/person/deduplicate", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // StandardizeJobTitle standardizes a job title and classifies seniority and department via POST /v1/job-title.
 func (c *Client) StandardizeJobTitle(ctx context.Context, req JobTitleStandardizeRequest) (*StandardizedJobTitle, error) {
 	var out StandardizedJobTitle
@@ -208,10 +262,28 @@ func (c *Client) StandardizeEmail(ctx context.Context, req EmailStandardizeReque
 	return &out, nil
 }
 
+// CompareEmails compares two email addresses via POST /v1/email/compare.
+func (c *Client) CompareEmails(ctx context.Context, req EmailCompareRequest) (*EmailComparisonResult, error) {
+	var out EmailComparisonResult
+	if err := c.postJSON(ctx, "/v1/email/compare", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // StandardizeUrl standardizes a website URL via POST /v1/url.
 func (c *Client) StandardizeUrl(ctx context.Context, req UrlStandardizeRequest) (*StandardizedUrl, error) {
 	var out StandardizedUrl
 	if err := c.postJSON(ctx, "/v1/url", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// CompareUrls compares two website URLs via POST /v1/url/compare.
+func (c *Client) CompareUrls(ctx context.Context, req UrlCompareRequest) (*UrlComparisonResult, error) {
+	var out UrlComparisonResult
+	if err := c.postJSON(ctx, "/v1/url/compare", req, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -239,6 +311,24 @@ func (c *Client) StandardizeContact(ctx context.Context, req ContactStandardizeR
 func (c *Client) CompareContacts(ctx context.Context, req ContactCompareRequest) (*ContactComparisonResult, error) {
 	var out ContactComparisonResult
 	if err := c.postJSON(ctx, "/v1/contact/compare", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ClusterContacts clusters multi-pillar contact records into Golden Entity Clusters via POST /v1/contact/cluster.
+func (c *Client) ClusterContacts(ctx context.Context, req ContactClusterRequest) (*ContactClusterResponse, error) {
+	var out ContactClusterResponse
+	if err := c.postJSON(ctx, "/v1/contact/cluster", req, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// BatchStandardizeContacts standardizes multiple contact records in a single request via POST /v1/contact/batch.
+func (c *Client) BatchStandardizeContacts(ctx context.Context, req ContactBatchRequest) (*ContactBatchResponse, error) {
+	var out ContactBatchResponse
+	if err := c.postJSON(ctx, "/v1/contact/batch", req, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil

@@ -349,6 +349,126 @@
         }
       }
     },
+    "/v1/address/compare": {
+      "post": {
+        "summary": "Address Compare Endpoint",
+        "operationId": "address_compare_endpoint_v1_address_compare_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddressCompareRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Address Compare Endpoint V1 Address Compare Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/address/deduplicate": {
+      "post": {
+        "summary": "Address Deduplicate Endpoint",
+        "operationId": "address_deduplicate_endpoint_v1_address_deduplicate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddressDeduplicateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Address Deduplicate Endpoint V1 Address Deduplicate Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/address/autocomplete": {
+      "post": {
+        "summary": "Address Autocomplete Endpoint",
+        "operationId": "address_autocomplete_endpoint_v1_address_autocomplete_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AddressAutocompleteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Address Autocomplete Endpoint V1 Address Autocomplete Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/company": {
       "post": {
         "summary": "Company Endpoint",
@@ -412,6 +532,46 @@
                   "additionalProperties": true,
                   "type": "object",
                   "title": "Response Company Compare Endpoint V1 Company Compare Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/company/deduplicate": {
+      "post": {
+        "summary": "Company Deduplicate Endpoint",
+        "operationId": "company_deduplicate_endpoint_v1_company_deduplicate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CompanyDeduplicateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Company Deduplicate Endpoint V1 Company Deduplicate Post"
                 }
               }
             }
@@ -509,6 +669,46 @@
         }
       }
     },
+    "/v1/person/deduplicate": {
+      "post": {
+        "summary": "Person Deduplicate Endpoint",
+        "operationId": "person_deduplicate_endpoint_v1_person_deduplicate_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PersonDeduplicateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Person Deduplicate Endpoint V1 Person Deduplicate Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/job-title": {
       "post": {
         "summary": "Job Title Endpoint",
@@ -589,6 +789,46 @@
         }
       }
     },
+    "/v1/email/compare": {
+      "post": {
+        "summary": "Email Compare Endpoint",
+        "operationId": "email_compare_endpoint_v1_email_compare_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EmailCompareRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Email Compare Endpoint V1 Email Compare Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/url": {
       "post": {
         "summary": "Url Endpoint",
@@ -612,6 +852,46 @@
                   "additionalProperties": true,
                   "type": "object",
                   "title": "Response Url Endpoint V1 Url Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/url/compare": {
+      "post": {
+        "summary": "Url Compare Endpoint",
+        "operationId": "url_compare_endpoint_v1_url_compare_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UrlCompareRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Url Compare Endpoint V1 Url Compare Post"
                 }
               }
             }
@@ -748,10 +1028,237 @@
           }
         }
       }
+    },
+    "/v1/contact/cluster": {
+      "post": {
+        "summary": "Contact Cluster Endpoint",
+        "operationId": "contact_cluster_endpoint_v1_contact_cluster_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContactClusterRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Contact Cluster Endpoint V1 Contact Cluster Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/contact/batch": {
+      "post": {
+        "summary": "Contact Batch Endpoint",
+        "operationId": "contact_batch_endpoint_v1_contact_batch_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ContactBatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Contact Batch Endpoint V1 Contact Batch Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "AddressAutocompleteRequest": {
+        "properties": {
+          "prefix": {
+            "type": "string",
+            "title": "Prefix",
+            "description": "Partial street or address prefix string."
+          },
+          "city": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "City",
+            "description": "Optional city filter."
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State",
+            "description": "Optional state filter."
+          },
+          "postal_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Postal Code",
+            "description": "Optional postal code filter."
+          },
+          "max_results": {
+            "type": "integer",
+            "maximum": 50.0,
+            "minimum": 1.0,
+            "title": "Max Results",
+            "description": "Maximum number of suggestions to return.",
+            "default": 5
+          }
+        },
+        "type": "object",
+        "required": [
+          "prefix"
+        ],
+        "title": "AddressAutocompleteRequest",
+        "description": "Request payload for /v1/address/autocomplete."
+      },
+      "AddressCompareRequest": {
+        "properties": {
+          "address_a": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "additionalProperties": true,
+                "type": "object"
+              }
+            ],
+            "title": "Address A",
+            "description": "First address string or dictionary."
+          },
+          "address_b": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "additionalProperties": true,
+                "type": "object"
+              }
+            ],
+            "title": "Address B",
+            "description": "Second address string or dictionary."
+          },
+          "country": {
+            "type": "string",
+            "title": "Country",
+            "description": "ISO country code or name.",
+            "default": "US"
+          },
+          "fuzzy_threshold": {
+            "type": "number",
+            "title": "Fuzzy Threshold",
+            "description": "Fuzzy similarity threshold (0.0-1.0).",
+            "default": 0.85
+          }
+        },
+        "type": "object",
+        "required": [
+          "address_a",
+          "address_b"
+        ],
+        "title": "AddressCompareRequest",
+        "description": "Request payload for /v1/address/compare."
+      },
+      "AddressDeduplicateRequest": {
+        "properties": {
+          "addresses": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "additionalProperties": true,
+                  "type": "object"
+                }
+              ]
+            },
+            "type": "array",
+            "maxItems": 1000,
+            "title": "Addresses",
+            "description": "List of raw address strings or dictionaries to cluster."
+          },
+          "country": {
+            "type": "string",
+            "title": "Country",
+            "description": "ISO country code or name.",
+            "default": "US"
+          },
+          "fuzzy_threshold": {
+            "type": "number",
+            "title": "Fuzzy Threshold",
+            "description": "Fuzzy similarity threshold (0.0-1.0).",
+            "default": 0.85
+          }
+        },
+        "type": "object",
+        "required": [
+          "addresses"
+        ],
+        "title": "AddressDeduplicateRequest",
+        "description": "Request payload for /v1/address/deduplicate."
+      },
       "AddressStandardizeRequest": {
         "properties": {
           "street1": {
@@ -819,6 +1326,18 @@
             "title": "Country",
             "description": "ISO country code or name.",
             "default": "US"
+          },
+          "enable_geocoding": {
+            "type": "boolean",
+            "title": "Enable Geocoding",
+            "description": "Enable offline spatial coordinate resolution.",
+            "default": false
+          },
+          "explain": {
+            "type": "boolean",
+            "title": "Explain",
+            "description": "Include standardization explanation and field confidence.",
+            "default": false
           }
         },
         "type": "object",
@@ -846,6 +1365,43 @@
         "title": "CompanyCompareRequest",
         "description": "Request payload for /v1/company/compare."
       },
+      "CompanyDeduplicateRequest": {
+        "properties": {
+          "companies": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 1000,
+            "title": "Companies",
+            "description": "List of raw company names to cluster."
+          },
+          "country": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Country",
+            "description": "Optional ISO country hint."
+          },
+          "fuzzy_threshold": {
+            "type": "number",
+            "title": "Fuzzy Threshold",
+            "description": "Fuzzy similarity threshold (0.0-1.0).",
+            "default": 0.85
+          }
+        },
+        "type": "object",
+        "required": [
+          "companies"
+        ],
+        "title": "CompanyDeduplicateRequest",
+        "description": "Request payload for /v1/company/deduplicate."
+      },
       "CompanyStandardizeRequest": {
         "properties": {
           "name": {
@@ -872,6 +1428,58 @@
         ],
         "title": "CompanyStandardizeRequest",
         "description": "Request payload for /v1/company."
+      },
+      "ContactBatchRequest": {
+        "properties": {
+          "contacts": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "maxItems": 1000,
+            "title": "Contacts",
+            "description": "List of raw contact dictionaries to standardize."
+          },
+          "default_country": {
+            "type": "string",
+            "title": "Default Country",
+            "description": "Fallback ISO country code.",
+            "default": "US"
+          }
+        },
+        "type": "object",
+        "required": [
+          "contacts"
+        ],
+        "title": "ContactBatchRequest",
+        "description": "Request payload for /v1/contact/batch."
+      },
+      "ContactClusterRequest": {
+        "properties": {
+          "records": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "type": "array",
+            "maxItems": 1000,
+            "title": "Records",
+            "description": "List of raw contact dictionaries to cluster."
+          },
+          "default_country": {
+            "type": "string",
+            "title": "Default Country",
+            "description": "Fallback ISO country code.",
+            "default": "US"
+          }
+        },
+        "type": "object",
+        "required": [
+          "records"
+        ],
+        "title": "ContactClusterRequest",
+        "description": "Request payload for /v1/contact/cluster."
       },
       "ContactCompareRequest": {
         "properties": {
@@ -1083,6 +1691,27 @@
         "title": "ContactStandardizeRequest",
         "description": "Request payload for /v1/contact (joint multi-pillar entity cross-healing)."
       },
+      "EmailCompareRequest": {
+        "properties": {
+          "email_a": {
+            "type": "string",
+            "title": "Email A",
+            "description": "First email address string."
+          },
+          "email_b": {
+            "type": "string",
+            "title": "Email B",
+            "description": "Second email address string."
+          }
+        },
+        "type": "object",
+        "required": [
+          "email_a",
+          "email_b"
+        ],
+        "title": "EmailCompareRequest",
+        "description": "Request payload for /v1/email/compare."
+      },
       "EmailStandardizeRequest": {
         "properties": {
           "email": {
@@ -1146,6 +1775,31 @@
         ],
         "title": "PersonCompareRequest",
         "description": "Request payload for /v1/person/compare."
+      },
+      "PersonDeduplicateRequest": {
+        "properties": {
+          "persons": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "maxItems": 1000,
+            "title": "Persons",
+            "description": "List of raw person names to cluster."
+          },
+          "fuzzy_threshold": {
+            "type": "number",
+            "title": "Fuzzy Threshold",
+            "description": "Fuzzy similarity threshold (0.0-1.0).",
+            "default": 0.85
+          }
+        },
+        "type": "object",
+        "required": [
+          "persons"
+        ],
+        "title": "PersonDeduplicateRequest",
+        "description": "Request payload for /v1/person/deduplicate."
       },
       "PersonStandardizeRequest": {
         "properties": {
@@ -1322,6 +1976,27 @@
         ],
         "title": "SocialStandardizeRequest",
         "description": "Request payload for /v1/social."
+      },
+      "UrlCompareRequest": {
+        "properties": {
+          "url_a": {
+            "type": "string",
+            "title": "Url A",
+            "description": "First website URL string."
+          },
+          "url_b": {
+            "type": "string",
+            "title": "Url B",
+            "description": "Second website URL string."
+          }
+        },
+        "type": "object",
+        "required": [
+          "url_a",
+          "url_b"
+        ],
+        "title": "UrlCompareRequest",
+        "description": "Request payload for /v1/url/compare."
       },
       "UrlStandardizeRequest": {
         "properties": {

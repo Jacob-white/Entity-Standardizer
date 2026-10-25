@@ -86,8 +86,19 @@ def stream_standardize_csv(
     phone_col: str = "phone",
     country_col: str | None = "country",
     default_country: str = "US",
+    *,
+    address_col: str | None = None,
+    company_col: str | None = None,
+    person_col: str | None = None,
+    email_col: str | None = None,
+    url_col: str | None = None,
 ) -> int:
-    """Stream-process a CSV file, appending standardized phone columns, and return row count."""
+    """Stream-process a CSV file, appending standardized multi-pillar columns, and return row count."""
+    from entity_standardizer.address.standardizer import standardize_address
+    from entity_standardizer.company import standardize_company
+    from entity_standardizer.person import standardize_person
+    from entity_standardizer.web import standardize_email, standardize_url
+
     in_path = Path(input_path)
     out_path = Path(output_path)
     count = 0
@@ -104,6 +115,25 @@ def stream_standardize_csv(
         "phone_confidence",
         "phone_routing_tier",
     ]
+    if address_col:
+        extra_cols.extend(
+            [
+                "address_line_1",
+                "address_city",
+                "address_state",
+                "address_postal_code",
+                "address_key",
+            ]
+        )
+    if company_col:
+        extra_cols.extend(["company_legal_name", "company_key"])
+    if person_col:
+        extra_cols.extend(["person_full_name", "person_key"])
+    if email_col:
+        extra_cols.extend(["email_canonical", "email_domain"])
+    if url_col:
+        extra_cols.extend(["url_canonical", "url_domain"])
+
     with in_path.open("r", encoding="utf-8", newline="") as fin, out_path.open(
         "w", encoding="utf-8", newline=""
     ) as fout:
@@ -120,22 +150,69 @@ def stream_standardize_csv(
                 country=country_hint,
                 default_country=default_country,
             )
-            out_row = dict(row)
+            out_row: dict[str, Any] = {k: _csv_safe_cell(v) for k, v in row.items()}
             out_row.update(
                 {
                     "phone_e164": res.e164 or "",
-                    "phone_national": res.national or "",
+                    "phone_national": _csv_safe_cell(res.national or ""),
                     "phone_international": res.international or "",
-                    "phone_rfc3966": res.rfc3966 or "",
+                    "phone_rfc3966": _csv_safe_cell(res.rfc3966 or ""),
                     "phone_country_iso2": res.country_iso2 or "",
                     "phone_region_code": res.region_code or "",
                     "phone_line_type": res.line_type,
-                    "phone_extension": res.extension or "",
+                    "phone_extension": _csv_safe_cell(res.extension or ""),
                     "phone_is_valid": str(res.is_valid),
                     "phone_confidence": f"{res.confidence:.4f}",
                     "phone_routing_tier": res.routing_tier,
                 }
             )
+            if address_col and address_col in row:
+                addr_res = standardize_address(
+                    row.get(address_col, ""),
+                    country=country_hint or default_country,
+                    allow_locality=True,
+                )
+                out_row.update(
+                    {
+                        "address_line_1": _csv_safe_cell(addr_res.street1 or ""),
+                        "address_city": _csv_safe_cell(addr_res.city or ""),
+                        "address_state": _csv_safe_cell(addr_res.state or ""),
+                        "address_postal_code": _csv_safe_cell(addr_res.postal_code or ""),
+                        "address_key": _csv_safe_cell(addr_res.normalized_address_key or ""),
+                    }
+                )
+            if company_col and company_col in row:
+                comp_res = standardize_company(row.get(company_col, ""), country=country_hint)
+                out_row.update(
+                    {
+                        "company_legal_name": _csv_safe_cell(comp_res.legal_name or ""),
+                        "company_key": _csv_safe_cell(comp_res.company_key or ""),
+                    }
+                )
+            if person_col and person_col in row:
+                per_res = standardize_person(row.get(person_col, ""))
+                out_row.update(
+                    {
+                        "person_full_name": _csv_safe_cell(per_res.full_name or ""),
+                        "person_key": _csv_safe_cell(per_res.person_key or ""),
+                    }
+                )
+            if email_col and email_col in row:
+                em_res = standardize_email(row.get(email_col, ""))
+                out_row.update(
+                    {
+                        "email_canonical": _csv_safe_cell(em_res.email or ""),
+                        "email_domain": _csv_safe_cell(em_res.domain or ""),
+                    }
+                )
+            if url_col and url_col in row:
+                url_res = standardize_url(row.get(url_col, ""))
+                out_row.update(
+                    {
+                        "url_canonical": _csv_safe_cell(url_res.url or ""),
+                        "url_domain": _csv_safe_cell(url_res.domain or ""),
+                    }
+                )
             writer.writerow(out_row)
             count += 1
     return count

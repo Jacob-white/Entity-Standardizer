@@ -551,9 +551,36 @@ class StandardizedAddress:
                 d["alternatives"] = [dict(a) for a in self.alternatives]
         return d
 
+    @property
+    def secondary_unit(self) -> str:
+        return self.street2
+
+    @property
+    def phonetic_address_key(self) -> Optional[str]:
+        return self.phonetic_key
+
+    @property
+    def house_number(self) -> Optional[str]:
+        m = re.match(r"^(\d+[A-Z]?(?:-\d+)?)\b", (self.street1 or "").strip())
+        return m.group(1) if m else None
+
     def to_dict(self) -> Dict[str, Any]:
         """Serialize the standardized address record into a JSON-compatible dictionary."""
-        return self.as_dict()
+        d = self.as_dict(include_explanation=self.explanation is not None)
+        if self.spatial_result is not None or self.latitude is not None:
+            unresolved = self.precision == "UNRESOLVED"
+            d["latitude"] = None if unresolved else self.latitude
+            d["longitude"] = None if unresolved else self.longitude
+            d["precision"] = self.precision
+            d["accuracy_radius_meters"] = None if unresolved else self.accuracy_radius_meters
+            d["census_tract"] = self.census_tract
+            d["fips_code"] = self.fips_code
+            d["spatial_result"] = (
+                self.spatial_result.as_dict()
+                if hasattr(self.spatial_result, "as_dict")
+                else self.spatial_result
+            )
+        return d
 
     def as_extended_dict(self) -> Dict[str, Any]:
         """Returns comprehensive enterprise dictionary including all risk, confidence, and audit metadata."""

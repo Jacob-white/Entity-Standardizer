@@ -3,18 +3,33 @@
  */
 
 import {
+  AddressAutocompleteRequest,
+  AddressCluster,
+  AddressCompareRequest,
+  AddressComparisonResult,
+  AddressDeduplicateRequest,
   AddressStandardizeRequest,
+  AutocompleteSuggestion,
+  CompanyCluster,
   CompanyCompareRequest,
   CompanyComparisonResult,
+  CompanyDeduplicateRequest,
   CompanyStandardizeRequest,
+  ContactBatchRequest,
+  ContactCluster,
+  ContactClusterRequest,
   ContactCompareRequest,
   ContactComparisonResult,
   ContactStandardizeRequest,
   CountryDialPlan,
+  EmailCompareRequest,
+  EmailComparisonResult,
   EmailStandardizeRequest,
   JobTitleStandardizeRequest,
+  PersonCluster,
   PersonCompareRequest,
   PersonComparisonResult,
+  PersonDeduplicateRequest,
   PersonStandardizeRequest,
   PhoneBatchRequest,
   PhoneCluster,
@@ -23,6 +38,7 @@ import {
   PhoneDeduplicateRequest,
   PhoneExplainReport,
   PhoneStandardizeRequest,
+  ReadyResponse,
   SocialStandardizeRequest,
   StandardizedAddress,
   StandardizedCompany,
@@ -33,6 +49,8 @@ import {
   StandardizedPhone,
   StandardizedSocial,
   StandardizedUrl,
+  UrlCompareRequest,
+  UrlComparisonResult,
   UrlStandardizeRequest,
 } from "./types.js";
 
@@ -97,6 +115,18 @@ export class EntityStandardizerClient {
       throw new Error(`Health check failed with status ${res.status}`);
     }
     return (await res.json()) as { status: string; version: string };
+  }
+
+  async ready(options?: RequestOptions): Promise<ReadyResponse> {
+    const res = await this.fetchImpl(`${this.baseUrl}/ready`, {
+      method: "GET",
+      headers: this.headers,
+      signal: options?.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Ready check failed with status ${res.status}`);
+    }
+    return (await res.json()) as ReadyResponse;
   }
 
   async standardize(
@@ -224,6 +254,54 @@ export class EntityStandardizerClient {
     return (await res.json()) as StandardizedAddress;
   }
 
+  async compareAddresses(
+    req: AddressCompareRequest,
+    options?: RequestOptions
+  ): Promise<AddressComparisonResult> {
+    const res = await this.fetchImpl(`${this.baseUrl}/v1/address/compare`, {
+      method: "POST",
+      headers: this.headers,
+      body: JSON.stringify(req),
+      signal: options?.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Compare addresses failed with status ${res.status}`);
+    }
+    return (await res.json()) as AddressComparisonResult;
+  }
+
+  async deduplicateAddresses(
+    req: AddressDeduplicateRequest,
+    options?: RequestOptions
+  ): Promise<{ cluster_count: number; clusters: AddressCluster[] }> {
+    const res = await this.fetchImpl(`${this.baseUrl}/v1/address/deduplicate`, {
+      method: "POST",
+      headers: this.headers,
+      body: JSON.stringify(req),
+      signal: options?.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Deduplicate addresses failed with status ${res.status}`);
+    }
+    return (await res.json()) as { cluster_count: number; clusters: AddressCluster[] };
+  }
+
+  async autocompleteAddress(
+    req: AddressAutocompleteRequest,
+    options?: RequestOptions
+  ): Promise<{ count: number; suggestions: AutocompleteSuggestion[] }> {
+    const res = await this.fetchImpl(`${this.baseUrl}/v1/address/autocomplete`, {
+      method: "POST",
+      headers: this.headers,
+      body: JSON.stringify(req),
+      signal: options?.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Autocomplete address failed with status ${res.status}`);
+    }
+    return (await res.json()) as { count: number; suggestions: AutocompleteSuggestion[] };
+  }
+
   async standardizeCompany(
     req: CompanyStandardizeRequest,
     options?: RequestOptions
@@ -254,6 +332,22 @@ export class EntityStandardizerClient {
       throw new Error(`Compare companies failed with status ${res.status}`);
     }
     return (await res.json()) as CompanyComparisonResult;
+  }
+
+  async deduplicateCompanies(
+    req: CompanyDeduplicateRequest,
+    options?: RequestOptions
+  ): Promise<{ cluster_count: number; clusters: CompanyCluster[] }> {
+    const res = await this.fetchImpl(`${this.baseUrl}/v1/company/deduplicate`, {
+      method: "POST",
+      headers: this.headers,
+      body: JSON.stringify(req),
+      signal: options?.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Deduplicate companies failed with status ${res.status}`);
+    }
+    return (await res.json()) as { cluster_count: number; clusters: CompanyCluster[] };
   }
 
   async standardizePerson(
@@ -288,6 +382,22 @@ export class EntityStandardizerClient {
     return (await res.json()) as PersonComparisonResult;
   }
 
+  async deduplicatePersons(
+    req: PersonDeduplicateRequest,
+    options?: RequestOptions
+  ): Promise<{ cluster_count: number; clusters: PersonCluster[] }> {
+    const res = await this.fetchImpl(`${this.baseUrl}/v1/person/deduplicate`, {
+      method: "POST",
+      headers: this.headers,
+      body: JSON.stringify(req),
+      signal: options?.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Deduplicate persons failed with status ${res.status}`);
+    }
+    return (await res.json()) as { cluster_count: number; clusters: PersonCluster[] };
+  }
+
   async standardizeJobTitle(
     req: JobTitleStandardizeRequest,
     options?: RequestOptions
@@ -320,6 +430,22 @@ export class EntityStandardizerClient {
     return (await res.json()) as StandardizedEmail;
   }
 
+  async compareEmails(
+    req: EmailCompareRequest,
+    options?: RequestOptions
+  ): Promise<EmailComparisonResult> {
+    const res = await this.fetchImpl(`${this.baseUrl}/v1/email/compare`, {
+      method: "POST",
+      headers: this.headers,
+      body: JSON.stringify(req),
+      signal: options?.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Compare emails failed with status ${res.status}`);
+    }
+    return (await res.json()) as EmailComparisonResult;
+  }
+
   async standardizeUrl(
     req: UrlStandardizeRequest,
     options?: RequestOptions
@@ -334,6 +460,22 @@ export class EntityStandardizerClient {
       throw new Error(`Standardize url failed with status ${res.status}`);
     }
     return (await res.json()) as StandardizedUrl;
+  }
+
+  async compareUrls(
+    req: UrlCompareRequest,
+    options?: RequestOptions
+  ): Promise<UrlComparisonResult> {
+    const res = await this.fetchImpl(`${this.baseUrl}/v1/url/compare`, {
+      method: "POST",
+      headers: this.headers,
+      body: JSON.stringify(req),
+      signal: options?.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Compare urls failed with status ${res.status}`);
+    }
+    return (await res.json()) as UrlComparisonResult;
   }
 
   async standardizeSocial(
@@ -382,6 +524,38 @@ export class EntityStandardizerClient {
       throw new Error(`Compare contacts failed with status ${res.status}`);
     }
     return (await res.json()) as ContactComparisonResult;
+  }
+
+  async clusterContacts(
+    req: ContactClusterRequest,
+    options?: RequestOptions
+  ): Promise<{ cluster_count: number; clusters: ContactCluster[] }> {
+    const res = await this.fetchImpl(`${this.baseUrl}/v1/contact/cluster`, {
+      method: "POST",
+      headers: this.headers,
+      body: JSON.stringify(req),
+      signal: options?.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Cluster contacts failed with status ${res.status}`);
+    }
+    return (await res.json()) as { cluster_count: number; clusters: ContactCluster[] };
+  }
+
+  async batchStandardizeContacts(
+    req: ContactBatchRequest,
+    options?: RequestOptions
+  ): Promise<{ count: number; results: StandardizedContact[] }> {
+    const res = await this.fetchImpl(`${this.baseUrl}/v1/contact/batch`, {
+      method: "POST",
+      headers: this.headers,
+      body: JSON.stringify(req),
+      signal: options?.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Batch standardize contacts failed with status ${res.status}`);
+    }
+    return (await res.json()) as { count: number; results: StandardizedContact[] };
   }
 }
 

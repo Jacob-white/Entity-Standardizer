@@ -516,11 +516,13 @@ def cluster_contact_records(
     postal_code_field: str = "postal_code",
     id_field: str = "id",
     fuzzy_threshold: float = 0.88,
+    default_country: str = "US",
 ) -> list[ContactCluster]:
     """Perform cross-domain entity resolution over contact records using phone and address keys."""
     if not records:
         return []
 
+    from entity_standardizer.address.standardizer import standardize_address
     from entity_standardizer.company import standardize_company
     from entity_standardizer.person import standardize_person
     from entity_standardizer.web import standardize_email
@@ -528,6 +530,7 @@ def cluster_contact_records(
     n = len(records)
     parsed_phones: list[StandardizedPhone] = []
     addr_keys: list[str | None] = []
+    addr_hub_flags: list[bool] = []
     email_buckets: dict[str, list[int]] = {}
     person_org_buckets: dict[str, list[int]] = {}
 
@@ -543,11 +546,27 @@ def cluster_contact_records(
             standardize_phone(
                 str(raw_phone) if raw_phone is not None else "",
                 country=str(inferred_country) if inferred_country else None,
+                default_country=default_country,
                 address_context=addr_ctx,
             )
         )
         raw_addr_key = rec.get(address_key_field)
+        is_hub = _is_shared_hub_or_cmra(rec)
+        if not raw_addr_key and (rec.get("street1") or rec.get("address")):
+            std_addr = standardize_address(
+                street1=rec.get("street1") or rec.get("address"),
+                street2=rec.get("street2"),
+                city=rec.get("city"),
+                state=rec.get("state"),
+                postal_code=str(postal) if postal is not None else None,
+                country=str(inferred_country or default_country),
+                allow_locality=True,
+            )
+            raw_addr_key = std_addr.normalized_address_key or std_addr.building_key
+            if std_addr.is_registered_agent_hub or std_addr.is_cmra:
+                is_hub = True
         addr_keys.append(str(raw_addr_key).strip() if raw_addr_key else None)
+        addr_hub_flags.append(is_hub)
 
         raw_email = rec.get("email")
         if raw_email:
@@ -600,7 +619,7 @@ def cluster_contact_records(
     # 2. Link by shared Address-Standardizer normalized_address_key (excluding CMRA & Registered Agent hubs)
     addr_buckets: dict[str, list[int]] = {}
     for idx, ak in enumerate(addr_keys):
-        if ak and not _is_shared_hub_or_cmra(records[idx]):
+        if ak and not addr_hub_flags[idx]:
             addr_buckets.setdefault(ak, []).append(idx)
 
     for indices in addr_buckets.values():
@@ -633,6 +652,177 @@ def cluster_contact_records(
                 record_ids=rec_ids,
                 records=tuple(records[i] for i in member_indices),
                 linkage_reasons=tuple(sorted(dsu.reasons[root_idx] or {"SINGLETON"})),
+            )
+        )
+    return clusters
+
+
+@dataclass(frozen=True, slots=True)
+class AddressComparisonResult:
+    """Structured result of comparing two physical/mailing addresses for entity resolution."""
+
+    is_match: bool
+    score: float
+    match_type: str
+    address_a: Any
+    address_b: Any
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize address comparison result to a JSON-compatible dictionary."""
+        return {
+            "is_match": self.is_match,
+            "score": round(self.score, 4),
+            "match_type": self.match_type,
+            "address_a": self.address_a.to_dict(),
+            "address_b": self.address_b.to_dict(),
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class AddressCluster:
+    """A deduplicated cluster of physical/mailing addresses resolved to a single Golden Address Record."""
+
+    cluster_id: int
+    golden_address: Any
+    members: tuple[Any, ...]
+    raw_inputs: tuple[Any, ...]
+    confidence: float
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize address cluster to a JSON-compatible dictionary."""
+        return {
+            "cluster_id": self.cluster_id,
+            "golden_address": self.golden_address.to_dict(),
+            "members": [m.to_dict() for m in self.members],
+            "raw_inputs": list(self.raw_inputs),
+            "confidence": round(self.confidence, 4),
+        }
+
+
+def _coerce_address(
+    val: str | dict[str, Any] | Any | None,
+    country: str = "US",
+) -> Any:
+    from entity_standardizer.address.models import StandardizedAddress
+    from entity_standardizer.address.standardizer import standardize_address
+
+    if isinstance(val, StandardizedAddress):
+        return val
+    if isinstance(val, dict):
+        return standardize_address(
+            street1=val.get("street1") or val.get("address"),
+            street2=val.get("street2"),
+            city=val.get("city"),
+            state=val.get("state"),
+            postal_code=val.get("postal_code"),
+            country=val.get("country") or country,
+            allow_locality=True,
+        )
+    return standardize_address(val, country=country, allow_locality=True)
+
+
+def compare_addresses(
+    address_a: str | dict[str, Any] | Any | None,
+    address_b: str | dict[str, Any] | Any | None,
+    country: str = "US",
+    fuzzy_threshold: float = 0.85,
+) -> AddressComparisonResult:
+    """Compare two physical/mailing addresses across normalized keys, building keys, phonetic keys, and rooftop edit distance."""
+    from entity_standardizer._native_dispatch import damerau_levenshtein_distance_dispatch
+
+    a = _coerce_address(address_a, country=country)
+    b = _coerce_address(address_b, country=country)
+
+    if (not a.street1 and not a.postal_code) or (not b.street1 and not b.postal_code):
+        return AddressComparisonResult(False, 0.0, "INVALID_INPUT", a, b)
+
+    if a.normalized_address_key and a.normalized_address_key == b.normalized_address_key:
+        return AddressComparisonResult(True, 1.0, "EXACT_ADDRESS_KEY", a, b)
+
+    if a.building_key and a.building_key == b.building_key:
+        if a.secondary_unit and b.secondary_unit and a.secondary_unit != b.secondary_unit:
+            return AddressComparisonResult(False, 0.75, "DIFFERENT_UNIT_SAME_BUILDING", a, b)
+        return AddressComparisonResult(True, 0.94, "BUILDING_KEY_MATCH", a, b)
+
+    if (
+        a.phonetic_address_key
+        and a.phonetic_address_key == b.phonetic_address_key
+        and a.house_number == b.house_number
+    ):
+        return AddressComparisonResult(True, 0.90, "PHONETIC_ADDRESS_MATCH", a, b)
+
+    full_a = a.full_rooftop_address or a.street1 or ""
+    full_b = b.full_rooftop_address or b.street1 or ""
+    max_len = max(len(full_a), len(full_b), 1)
+    dist = damerau_levenshtein_distance_dispatch(full_a, full_b)
+    sim = round(max(0.0, 1.0 - (dist / max_len)), 4)
+
+    if a.house_number == b.house_number and sim >= fuzzy_threshold:
+        return AddressComparisonResult(True, sim, "FUZZY_ROOFTOP_MATCH", a, b)
+
+    return AddressComparisonResult(False, sim, "NO_MATCH", a, b)
+
+
+def _address_survivorship_rank(addr: Any) -> tuple[int, float, int, int, int]:
+    return (
+        1 if addr.address_status == "standardized" else 0,
+        float(addr.confidence_score or 0.0),
+        1 if addr.postal_code else 0,
+        1 if addr.street2 else 0,
+        len(addr.street1 or ""),
+    )
+
+
+def deduplicate_addresses(
+    addresses: Sequence[str | dict[str, Any] | Any],
+    country: str = "US",
+    fuzzy_threshold: float = 0.85,
+) -> list[AddressCluster]:
+    """Cluster and deduplicate a collection of physical/mailing addresses into Golden Address Records."""
+    if not addresses:
+        return []
+
+    parsed = [_coerce_address(addr, country=country) for addr in addresses]
+    n = len(parsed)
+    dsu = DisjointSet(range(n))
+
+    buckets: dict[tuple[Any, ...], list[int]] = {}
+    for idx, addr in enumerate(parsed):
+        if not addr.street1 and not addr.postal_code:
+            continue
+        if addr.normalized_address_key:
+            buckets.setdefault(("nak", addr.normalized_address_key), []).append(idx)
+        if addr.building_key:
+            buckets.setdefault(("bk", addr.building_key), []).append(idx)
+        if addr.phonetic_address_key:
+            buckets.setdefault(("pk", addr.phonetic_address_key), []).append(idx)
+        if addr.house_number:
+            buckets.setdefault(("hn_zip", addr.house_number, (addr.postal_code or "")[:5]), []).append(idx)
+
+    candidate_pairs: set[tuple[int, int]] = set()
+    for indices in buckets.values():
+        for i_pos in range(len(indices)):
+            for j_pos in range(i_pos + 1, len(indices)):
+                a_idx, b_idx = indices[i_pos], indices[j_pos]
+                candidate_pairs.add((min(a_idx, b_idx), max(a_idx, b_idx)))
+
+    for i, j in sorted(candidate_pairs):
+        cmp = compare_addresses(parsed[i], parsed[j], country=country, fuzzy_threshold=fuzzy_threshold)
+        if cmp.is_match:
+            dsu.union(i, j, cmp.match_type)
+
+    clusters: list[AddressCluster] = []
+    for cluster_num, (_, member_indices) in enumerate(dsu.groups().items(), start=1):
+        members = tuple(parsed[i] for i in member_indices)
+        golden = max(members, key=_address_survivorship_rank)
+        conf = round(float(golden.confidence_score or 0.0), 4)
+        clusters.append(
+            AddressCluster(
+                cluster_id=cluster_num,
+                golden_address=golden,
+                members=members,
+                raw_inputs=tuple(addresses[i] for i in member_indices),
+                confidence=conf,
             )
         )
     return clusters

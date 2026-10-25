@@ -713,10 +713,12 @@ def deduplicate_companies(
     *,
     country: str | None = None,
     min_score: float = 0.90,
+    fuzzy_threshold: float | None = None,
 ) -> list[CompanyCluster]:
     """Cluster and deduplicate a collection of company names into Golden Company Records."""
     if not companies:
         return []
+    threshold = fuzzy_threshold if fuzzy_threshold is not None else min_score
 
     parsed: list[StandardizedCompany] = [
         c if isinstance(c, StandardizedCompany) else standardize_company(c, country=country)
@@ -753,7 +755,7 @@ def deduplicate_companies(
 
     for i, j in sorted(candidate_pairs):
         cmp = compare_companies(parsed[i], parsed[j])
-        if cmp.is_match and cmp.score >= min_score:
+        if cmp.is_match and cmp.score >= threshold:
             dsu.union(i, j, cmp.match_type)
 
     clusters: list[CompanyCluster] = []

@@ -44,6 +44,12 @@ export interface PhoneDeduplicateRequest {
   fuzzy_threshold?: number;
 }
 
+export interface ReadyResponse {
+  status: string;
+  version: string;
+  native_available: boolean;
+}
+
 export interface AddressStandardizeRequest {
   street1?: string | null;
   street2?: string | null;
@@ -51,6 +57,63 @@ export interface AddressStandardizeRequest {
   state?: string | null;
   postal_code?: string | null;
   country?: string;
+  enable_geocoding?: boolean;
+  explain?: boolean;
+}
+
+export interface AddressCompareRequest {
+  address_a: string | Record<string, unknown>;
+  address_b: string | Record<string, unknown>;
+  country?: string;
+  fuzzy_threshold?: number;
+}
+
+export interface AddressDeduplicateRequest {
+  addresses: Array<string | Record<string, unknown>>;
+  country?: string;
+  fuzzy_threshold?: number;
+}
+
+export interface AddressAutocompleteRequest {
+  prefix: string;
+  city?: string | null;
+  state?: string | null;
+  postal_code?: string | null;
+  max_results?: number;
+}
+
+export interface AutocompleteSuggestion {
+  text: string;
+  street1: string;
+  street2: string;
+  city: string;
+  state: string;
+  postal_code: string;
+  country: string;
+  secondary_prompt_required: boolean;
+  suggested_secondary_units: string[];
+  highlight_ranges: Array<[number, number]>;
+  score: number;
+  prompt_message: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  distance_meters: number | null;
+}
+
+export interface AddressComparisonResult {
+  is_match: boolean;
+  score: number;
+  match_type: string;
+  address_a: StandardizedAddress;
+  address_b: StandardizedAddress;
+}
+
+export interface AddressCluster {
+  cluster_id: number;
+  golden_address: StandardizedAddress;
+  members: StandardizedAddress[];
+  raw_inputs: unknown[];
+  confidence: number;
 }
 
 export interface CompanyStandardizeRequest {
@@ -63,6 +126,20 @@ export interface CompanyCompareRequest {
   company_b: string;
 }
 
+export interface CompanyDeduplicateRequest {
+  companies: string[];
+  country?: string | null;
+  fuzzy_threshold?: number;
+}
+
+export interface CompanyCluster {
+  cluster_id: string;
+  golden_company: StandardizedCompany;
+  members: StandardizedCompany[];
+  raw_inputs: string[];
+  match_types: string[];
+}
+
 export interface PersonStandardizeRequest {
   name: string;
 }
@@ -70,6 +147,19 @@ export interface PersonStandardizeRequest {
 export interface PersonCompareRequest {
   person_a: string;
   person_b: string;
+}
+
+export interface PersonDeduplicateRequest {
+  persons: string[];
+  fuzzy_threshold?: number;
+}
+
+export interface PersonCluster {
+  cluster_id: string;
+  golden_person: StandardizedPerson;
+  members: StandardizedPerson[];
+  raw_inputs: string[];
+  match_types: string[];
 }
 
 export interface JobTitleStandardizeRequest {
@@ -80,8 +170,34 @@ export interface EmailStandardizeRequest {
   email: string;
 }
 
+export interface EmailCompareRequest {
+  email_a: string;
+  email_b: string;
+}
+
+export interface EmailComparisonResult {
+  is_match: boolean;
+  score: number;
+  match_type: string;
+  email_a: StandardizedEmail;
+  email_b: StandardizedEmail;
+}
+
 export interface UrlStandardizeRequest {
   url: string;
+}
+
+export interface UrlCompareRequest {
+  url_a: string;
+  url_b: string;
+}
+
+export interface UrlComparisonResult {
+  is_match: boolean;
+  score: number;
+  match_type: string;
+  url_a: StandardizedUrl;
+  url_b: StandardizedUrl;
 }
 
 export interface SocialStandardizeRequest {
@@ -110,6 +226,25 @@ export interface ContactStandardizeRequest {
 export interface ContactCompareRequest {
   contact_a: Record<string, unknown>;
   contact_b: Record<string, unknown>;
+  default_country?: string;
+}
+
+export interface ContactClusterRequest {
+  records: Array<Record<string, unknown>>;
+  default_country?: string;
+}
+
+export interface ContactCluster {
+  cluster_id: string;
+  golden_phone: StandardizedPhone;
+  golden_address_key: string | null;
+  record_ids: string[];
+  records: Array<Record<string, unknown>>;
+  linkage_reasons: string[];
+}
+
+export interface ContactBatchRequest {
+  contacts: Array<Record<string, unknown>>;
   default_country?: string;
 }
 
@@ -249,6 +384,7 @@ export interface StandardizedContact {
   fax: StandardizedPhone | null;
   organization: StandardizedCompany | null;
   person: StandardizedPerson | null;
+  additional_persons: StandardizedPerson[];
   job_title: StandardizedJobTitle | null;
   email: StandardizedEmail | null;
   website: StandardizedUrl | null;

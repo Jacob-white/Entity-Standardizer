@@ -315,6 +315,18 @@ public sealed class PhoneExplainReport
     public PhoneExplanation? Explanation { get; set; }
 }
 
+public sealed class ReadyResponse
+{
+    [JsonPropertyName("status")]
+    public string Status { get; set; } = "";
+
+    [JsonPropertyName("version")]
+    public string Version { get; set; } = "";
+
+    [JsonPropertyName("native_available")]
+    public bool NativeAvailable { get; set; }
+}
+
 public sealed class AddressStandardizeRequest
 {
     [JsonPropertyName("street1")]
@@ -334,6 +346,159 @@ public sealed class AddressStandardizeRequest
 
     [JsonPropertyName("country")]
     public string Country { get; set; } = "US";
+
+    [JsonPropertyName("enable_geocoding")]
+    public bool EnableGeocoding { get; set; }
+
+    [JsonPropertyName("explain")]
+    public bool Explain { get; set; }
+}
+
+public sealed class AddressCompareRequest
+{
+    [JsonPropertyName("address_a")]
+    public object AddressA { get; set; } = "";
+
+    [JsonPropertyName("address_b")]
+    public object AddressB { get; set; } = "";
+
+    [JsonPropertyName("country")]
+    public string Country { get; set; } = "US";
+
+    [JsonPropertyName("fuzzy_threshold")]
+    public double FuzzyThreshold { get; set; } = 0.85;
+}
+
+public sealed class AddressDeduplicateRequest
+{
+    [JsonPropertyName("addresses")]
+    public List<object> Addresses { get; set; } = new();
+
+    [JsonPropertyName("country")]
+    public string Country { get; set; } = "US";
+
+    [JsonPropertyName("fuzzy_threshold")]
+    public double FuzzyThreshold { get; set; } = 0.85;
+}
+
+public sealed class AddressAutocompleteRequest
+{
+    [JsonPropertyName("prefix")]
+    public string Prefix { get; set; } = "";
+
+    [JsonPropertyName("city")]
+    public string? City { get; set; }
+
+    [JsonPropertyName("state")]
+    public string? State { get; set; }
+
+    [JsonPropertyName("postal_code")]
+    public string? PostalCode { get; set; }
+
+    [JsonPropertyName("max_results")]
+    public int MaxResults { get; set; } = 5;
+}
+
+public sealed class AutocompleteSuggestion
+{
+    [JsonPropertyName("text")]
+    public string Text { get; set; } = "";
+
+    [JsonPropertyName("street1")]
+    public string Street1 { get; set; } = "";
+
+    [JsonPropertyName("street2")]
+    public string Street2 { get; set; } = "";
+
+    [JsonPropertyName("city")]
+    public string City { get; set; } = "";
+
+    [JsonPropertyName("state")]
+    public string State { get; set; } = "";
+
+    [JsonPropertyName("postal_code")]
+    public string PostalCode { get; set; } = "";
+
+    [JsonPropertyName("country")]
+    public string Country { get; set; } = "USA";
+
+    [JsonPropertyName("secondary_prompt_required")]
+    public bool SecondaryPromptRequired { get; set; }
+
+    [JsonPropertyName("suggested_secondary_units")]
+    public List<string> SuggestedSecondaryUnits { get; set; } = new();
+
+    [JsonPropertyName("highlight_ranges")]
+    public List<List<int>> HighlightRanges { get; set; } = new();
+
+    [JsonPropertyName("score")]
+    public double Score { get; set; }
+
+    [JsonPropertyName("prompt_message")]
+    public string? PromptMessage { get; set; }
+
+    [JsonPropertyName("latitude")]
+    public double? Latitude { get; set; }
+
+    [JsonPropertyName("longitude")]
+    public double? Longitude { get; set; }
+
+    [JsonPropertyName("distance_meters")]
+    public double? DistanceMeters { get; set; }
+}
+
+public sealed class AddressAutocompleteResponse
+{
+    [JsonPropertyName("count")]
+    public int Count { get; set; }
+
+    [JsonPropertyName("suggestions")]
+    public List<AutocompleteSuggestion> Suggestions { get; set; } = new();
+}
+
+public sealed class AddressComparisonResult
+{
+    [JsonPropertyName("is_match")]
+    public bool IsMatch { get; set; }
+
+    [JsonPropertyName("score")]
+    public double Score { get; set; }
+
+    [JsonPropertyName("match_type")]
+    public string MatchType { get; set; } = "";
+
+    [JsonPropertyName("address_a")]
+    public StandardizedAddress? AddressA { get; set; }
+
+    [JsonPropertyName("address_b")]
+    public StandardizedAddress? AddressB { get; set; }
+}
+
+public sealed class AddressCluster
+{
+    [JsonPropertyName("cluster_id")]
+    public int ClusterId { get; set; }
+
+    [JsonPropertyName("golden_address")]
+    public StandardizedAddress? GoldenAddress { get; set; }
+
+    [JsonPropertyName("members")]
+    public List<StandardizedAddress> Members { get; set; } = new();
+
+    [JsonPropertyName("raw_inputs")]
+    public List<object> RawInputs { get; set; } = new();
+
+    [JsonPropertyName("confidence")]
+    public double Confidence { get; set; }
+}
+
+public sealed class AddressDeduplicateResponse
+{
+    [JsonPropertyName("cluster_count")]
+    public int ClusterCount { get; set; }
+
+    [JsonPropertyName("clusters")]
+    public List<AddressCluster> Clusters { get; set; } = new();
 }
 
 public sealed class CompanyStandardizeRequest
@@ -354,6 +519,45 @@ public sealed class CompanyCompareRequest
     public string CompanyB { get; set; } = "";
 }
 
+public sealed class CompanyDeduplicateRequest
+{
+    [JsonPropertyName("companies")]
+    public List<string> Companies { get; set; } = new();
+
+    [JsonPropertyName("country")]
+    public string? Country { get; set; }
+
+    [JsonPropertyName("fuzzy_threshold")]
+    public double FuzzyThreshold { get; set; } = 0.85;
+}
+
+public sealed class CompanyCluster
+{
+    [JsonPropertyName("cluster_id")]
+    public string ClusterId { get; set; } = "";
+
+    [JsonPropertyName("golden_company")]
+    public StandardizedCompany? GoldenCompany { get; set; }
+
+    [JsonPropertyName("members")]
+    public List<StandardizedCompany> Members { get; set; } = new();
+
+    [JsonPropertyName("raw_inputs")]
+    public List<string> RawInputs { get; set; } = new();
+
+    [JsonPropertyName("match_types")]
+    public List<string> MatchTypes { get; set; } = new();
+}
+
+public sealed class CompanyDeduplicateResponse
+{
+    [JsonPropertyName("cluster_count")]
+    public int ClusterCount { get; set; }
+
+    [JsonPropertyName("clusters")]
+    public List<CompanyCluster> Clusters { get; set; } = new();
+}
+
 public sealed class PersonStandardizeRequest
 {
     [JsonPropertyName("name")]
@@ -369,6 +573,42 @@ public sealed class PersonCompareRequest
     public string PersonB { get; set; } = "";
 }
 
+public sealed class PersonDeduplicateRequest
+{
+    [JsonPropertyName("persons")]
+    public List<string> Persons { get; set; } = new();
+
+    [JsonPropertyName("fuzzy_threshold")]
+    public double FuzzyThreshold { get; set; } = 0.85;
+}
+
+public sealed class PersonCluster
+{
+    [JsonPropertyName("cluster_id")]
+    public string ClusterId { get; set; } = "";
+
+    [JsonPropertyName("golden_person")]
+    public StandardizedPerson? GoldenPerson { get; set; }
+
+    [JsonPropertyName("members")]
+    public List<StandardizedPerson> Members { get; set; } = new();
+
+    [JsonPropertyName("raw_inputs")]
+    public List<string> RawInputs { get; set; } = new();
+
+    [JsonPropertyName("match_types")]
+    public List<string> MatchTypes { get; set; } = new();
+}
+
+public sealed class PersonDeduplicateResponse
+{
+    [JsonPropertyName("cluster_count")]
+    public int ClusterCount { get; set; }
+
+    [JsonPropertyName("clusters")]
+    public List<PersonCluster> Clusters { get; set; } = new();
+}
+
 public sealed class JobTitleStandardizeRequest
 {
     [JsonPropertyName("title")]
@@ -381,10 +621,64 @@ public sealed class EmailStandardizeRequest
     public string Email { get; set; } = "";
 }
 
+public sealed class EmailCompareRequest
+{
+    [JsonPropertyName("email_a")]
+    public string EmailA { get; set; } = "";
+
+    [JsonPropertyName("email_b")]
+    public string EmailB { get; set; } = "";
+}
+
+public sealed class EmailComparisonResult
+{
+    [JsonPropertyName("is_match")]
+    public bool IsMatch { get; set; }
+
+    [JsonPropertyName("score")]
+    public double Score { get; set; }
+
+    [JsonPropertyName("match_type")]
+    public string MatchType { get; set; } = "";
+
+    [JsonPropertyName("email_a")]
+    public StandardizedEmail? EmailA { get; set; }
+
+    [JsonPropertyName("email_b")]
+    public StandardizedEmail? EmailB { get; set; }
+}
+
 public sealed class UrlStandardizeRequest
 {
     [JsonPropertyName("url")]
     public string Url { get; set; } = "";
+}
+
+public sealed class UrlCompareRequest
+{
+    [JsonPropertyName("url_a")]
+    public string UrlA { get; set; } = "";
+
+    [JsonPropertyName("url_b")]
+    public string UrlB { get; set; } = "";
+}
+
+public sealed class UrlComparisonResult
+{
+    [JsonPropertyName("is_match")]
+    public bool IsMatch { get; set; }
+
+    [JsonPropertyName("score")]
+    public double Score { get; set; }
+
+    [JsonPropertyName("match_type")]
+    public string MatchType { get; set; } = "";
+
+    [JsonPropertyName("url_a")]
+    public StandardizedUrl? UrlA { get; set; }
+
+    [JsonPropertyName("url_b")]
+    public StandardizedUrl? UrlB { get; set; }
 }
 
 public sealed class SocialStandardizeRequest
@@ -454,6 +748,63 @@ public sealed class ContactCompareRequest
 
     [JsonPropertyName("default_country")]
     public string DefaultCountry { get; set; } = "US";
+}
+
+public sealed class ContactClusterRequest
+{
+    [JsonPropertyName("records")]
+    public List<Dictionary<string, object?>> Records { get; set; } = new();
+
+    [JsonPropertyName("default_country")]
+    public string DefaultCountry { get; set; } = "US";
+}
+
+public sealed class ContactCluster
+{
+    [JsonPropertyName("cluster_id")]
+    public string ClusterId { get; set; } = "";
+
+    [JsonPropertyName("golden_phone")]
+    public StandardizedPhone? GoldenPhone { get; set; }
+
+    [JsonPropertyName("golden_address_key")]
+    public string? GoldenAddressKey { get; set; }
+
+    [JsonPropertyName("record_ids")]
+    public List<string> RecordIds { get; set; } = new();
+
+    [JsonPropertyName("records")]
+    public List<Dictionary<string, object?>> Records { get; set; } = new();
+
+    [JsonPropertyName("linkage_reasons")]
+    public List<string> LinkageReasons { get; set; } = new();
+}
+
+public sealed class ContactClusterResponse
+{
+    [JsonPropertyName("cluster_count")]
+    public int ClusterCount { get; set; }
+
+    [JsonPropertyName("clusters")]
+    public List<ContactCluster> Clusters { get; set; } = new();
+}
+
+public sealed class ContactBatchRequest
+{
+    [JsonPropertyName("contacts")]
+    public List<Dictionary<string, object?>> Contacts { get; set; } = new();
+
+    [JsonPropertyName("default_country")]
+    public string DefaultCountry { get; set; } = "US";
+}
+
+public sealed class ContactBatchResponse
+{
+    [JsonPropertyName("count")]
+    public int Count { get; set; }
+
+    [JsonPropertyName("results")]
+    public List<StandardizedContact> Results { get; set; } = new();
 }
 
 public sealed class StandardizedAddress
@@ -808,6 +1159,9 @@ public sealed class StandardizedContact
 
     [JsonPropertyName("person")]
     public StandardizedPerson? Person { get; set; }
+
+    [JsonPropertyName("additional_persons")]
+    public List<StandardizedPerson> AdditionalPersons { get; set; } = new();
 
     [JsonPropertyName("job_title")]
     public StandardizedJobTitle? JobTitle { get; set; }
