@@ -58,19 +58,13 @@ from entity_standardizer.address._patterns import (
 logger = logging.getLogger(__name__)
 
 from entity_standardizer.address.normalization import (  # noqa: E402
-    num_to_ordinal,  # noqa: F401
-    get_state_from_zip3,  # noqa: F401
-    _clean_token,  # noqa: F401
-    normalize_country_code,  # noqa: F401
-    normalize_country,  # noqa: F401
-    normalize_us_state,  # noqa: F401
-    normalize_us_postal_code,  # noqa: F401
-    is_registered_agent_hub_address,  # noqa: F401
+    _clean_token,
+    get_state_from_zip3,
+    num_to_ordinal,
 )
 from entity_standardizer.address.secondary_units import (  # noqa: E402
-    _pre_normalize_address_string,  # noqa: F401
-    _standardize_secondary_unit,  # noqa: F401
-    _split_international_secondary_unit,  # noqa: F401
+    _pre_normalize_address_string,
+    _standardize_secondary_unit,
     _words_to_number,
 )
 

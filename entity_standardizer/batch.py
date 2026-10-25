@@ -4,12 +4,55 @@ from __future__ import annotations
 
 import csv
 import json
-from collections.abc import Iterable
+from collections.abc import Generator, Iterable, Iterator
 from pathlib import Path
 from typing import Any
 
 from entity_standardizer.models import StandardizedPhone
 from entity_standardizer.standardizer import standardize_phone
+
+# Spreadsheet applications evaluate cells that start with these characters as formulas.
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_safe_cell(value: Any) -> Any:
+    """Neutralize CSV/formula injection in a text cell by prefixing a single quote."""
+    if isinstance(value, str) and value.startswith(_FORMULA_PREFIXES):
+        return "'" + value
+    return value
+
+
+def buffered_chunk_generator(
+    reader: Iterator[dict[str, Any]],
+    chunk_size: int = 5000,
+) -> Generator[list[dict[str, Any]], None, None]:
+    """Yield rows from reader in fixed-size chunks using pre-allocated buffer arrays.
+
+    Ensures O(chunk_size) memory footprint regardless of file size.
+    """
+    if chunk_size < 1:
+        raise ValueError("chunk_size must be at least 1")
+    buffer: list[dict[str, Any] | None] = [None] * chunk_size
+    count = 0
+    for row in reader:
+        buffer[count] = row
+        count += 1
+        if count == chunk_size:
+            yield list(buffer)  # type: ignore[arg-type]
+            count = 0
+    if count > 0:
+        yield buffer[:count]  # type: ignore[return-value]
+
+
+def chunk_generator(
+    reader: Iterator[dict[str, Any]],
+    chunk_size: int = 5000,
+) -> Generator[list[dict[str, Any]], None, None]:
+    """Yield rows from reader in fixed-size chunks to bound memory utilization.
+
+    Delegates to buffered_chunk_generator for pre-allocated buffer efficiency.
+    """
+    yield from buffered_chunk_generator(reader, chunk_size=chunk_size)
 
 
 def batch_standardize_phones(

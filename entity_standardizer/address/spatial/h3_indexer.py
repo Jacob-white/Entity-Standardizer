@@ -10,9 +10,19 @@ that merely *looks* like H3 would silently disagree with every other H3 system.
 
 import math
 import re
-from typing import List
+from typing import Any, List
 
-import h3 as _h3
+_h3_mod: Any = None
+
+
+def _get_h3() -> Any:
+    global _h3_mod
+    if _h3_mod is None:
+        import h3
+
+        _h3_mod = h3
+    return _h3_mod
+
 
 H3_HEX_PATTERN = re.compile(r"^[0-9a-f]{15}$")
 
@@ -34,7 +44,7 @@ def lat_lng_to_h3(lat: float, lng: float, resolution: int = 10) -> str:
     Raises ``ValueError`` for non-finite or out-of-range input (nothing is clamped or wrapped).
     """
     _validate_lat_lng(lat, lng, resolution)
-    return str(_h3.latlng_to_cell(lat, lng, resolution)).lower()
+    return str(_get_h3().latlng_to_cell(lat, lng, resolution)).lower()
 
 
 def is_valid_h3(h3_index: str) -> bool:
@@ -42,7 +52,7 @@ def is_valid_h3(h3_index: str) -> bool:
     if not isinstance(h3_index, str):
         return False
     clean = h3_index.strip().lower()
-    return bool(H3_HEX_PATTERN.match(clean)) and bool(_h3.is_valid_cell(clean))
+    return bool(H3_HEX_PATTERN.match(clean)) and bool(_get_h3().is_valid_cell(clean))
 
 
 def h3_to_int(h3_index: str) -> int:
@@ -67,7 +77,7 @@ def k_ring(h3_index: str, ring_size: int = 1) -> List[str]:
         raise ValueError(f"Invalid H3 index: {h3_index}")
     if ring_size <= 0:
         return [clean]
-    return sorted(str(c).lower() for c in _h3.grid_disk(clean, ring_size))
+    return sorted(str(c).lower() for c in _get_h3().grid_disk(clean, ring_size))
 
 
 def h3_distance(origin: str, destination: str) -> int:
@@ -83,7 +93,7 @@ def h3_distance(origin: str, destination: str) -> int:
     if orig == dest:
         return 0
     try:
-        return int(_h3.grid_distance(orig, dest))
+        return int(_get_h3().grid_distance(orig, dest))
     except Exception as exc:  # h3 raises its own error types
         raise ValueError(f"H3 grid distance undefined for {origin} -> {destination}: {exc}") from exc
 
@@ -95,7 +105,7 @@ def h3_to_parent(h3_index: str, parent_res: int) -> str:
         raise ValueError(f"Invalid H3 index: {h3_index}")
     if parent_res < 0:
         raise ValueError(f"Parent resolution {parent_res} cannot be negative")
-    current = _h3.get_resolution(clean)
+    current = _get_h3().get_resolution(clean)
     if parent_res > current:
         raise ValueError(f"Parent resolution {parent_res} cannot be finer than current {current}")
-    return str(_h3.cell_to_parent(clean, parent_res)).lower()
+    return str(_get_h3().cell_to_parent(clean, parent_res)).lower()

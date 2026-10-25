@@ -297,9 +297,13 @@ def _pure_normalize_tokens(text: str, actions: list[str] | None = None) -> list[
     return collapsed
 
 
-def _normalize_tokens(text: str, actions: list[str] | None = None) -> list[str]:
+def _normalize_tokens(
+    text: str,
+    actions: list[str] | None = None,
+    precomputed: tuple[list[str], bool, bool] | None = None,
+) -> list[str]:
     """Normalize punctuation, ampersands, and spaced/dotted initialisms into uppercase tokens."""
-    native_res = normalize_company_tokens_dispatch(text)
+    native_res = precomputed if precomputed is not None else normalize_company_tokens_dispatch(text)
     if native_res is not None:
         tokens, amp_norm, init_col = native_res
         if actions is not None:
@@ -369,6 +373,7 @@ def standardize_company(
     raw_input: str | None,
     *,
     country: str | None = None,
+    _precomputed_tokens: dict[str, tuple[list[str], bool, bool]] | None = None,
 ) -> StandardizedCompany:
     """Standardize an organization or company name into canonical components and keys."""
     if raw_input is None:
@@ -456,7 +461,8 @@ def standardize_company(
                 actions.append("DBA_EXTRACTED")
 
     # 4. Normalize tokens and extract legal suffix
-    tokens = _normalize_tokens(working, actions)
+    pre_tok = _precomputed_tokens.get(working) if _precomputed_tokens else None
+    tokens = _normalize_tokens(working, actions, pre_tok)
     if not tokens:
         return StandardizedCompany(raw_input=str(raw_input))
 
@@ -651,7 +657,19 @@ def batch_standardize_companies(
     country: str | None = None,
 ) -> list[StandardizedCompany]:
     """Batch-standardize a sequence of organization or company names."""
-    return [standardize_company(item, country=country) for item in inputs]
+    from entity_standardizer._native_dispatch import normalize_batch_company_tokens_dispatch
+
+    clean_texts = [
+        re.sub(r"\s+", " ", str(x).strip())
+        for x in inputs
+        if x is not None and str(x).strip()
+    ]
+    batch_tokens = normalize_batch_company_tokens_dispatch(clean_texts) if clean_texts else None
+    precomputed = dict(zip(clean_texts, batch_tokens)) if batch_tokens is not None else None
+    return [
+        standardize_company(item, country=country, _precomputed_tokens=precomputed)
+        for item in inputs
+    ]
 
 
 batch_standardize_organizations = batch_standardize_companies

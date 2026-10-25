@@ -4,26 +4,11 @@ import re
 import unicodedata
 from typing import Dict, Optional
 
+from entity_standardizer.normalization import LATIN_LIGATURE_AND_STROKE_MAP
+
 _RE_GREEK = re.compile(r"[Ͱ-Ͽἀ-῿]")
 
-LIGATURE_MAP: Dict[str, str] = {
-    "ß": "SS",
-    "ẞ": "SS",
-    "æ": "AE",
-    "Æ": "AE",
-    "œ": "OE",
-    "Œ": "OE",
-    "ø": "O",
-    "Ø": "O",
-    "đ": "D",
-    "Đ": "D",
-    "ł": "L",
-    "Ł": "L",
-    "ð": "D",
-    "Ð": "D",
-    "þ": "TH",
-    "Þ": "TH",
-}
+LIGATURE_MAP: Dict[str, str] = {k: v.upper() for k, v in LATIN_LIGATURE_AND_STROKE_MAP.items()}
 
 CYRILLIC_GREEK_MAP: Dict[str, str] = {
     # Cyrillic uppercase

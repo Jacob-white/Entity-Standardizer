@@ -224,34 +224,43 @@ def decode_vanity_phone(text: str) -> tuple[str, str | None]:
     return replaced, raw_alias
 
 
-_DIACRITIC_STROKE_MAP = str.maketrans(
-    {
-        "ø": "o",
-        "Ø": "O",
-        "ł": "l",
-        "Ł": "L",
-        "ß": "ss",
-        "ẞ": "SS",
-        "æ": "ae",
-        "Æ": "AE",
-        "œ": "oe",
-        "Œ": "OE",
-        "ð": "d",
-        "Ð": "D",
-        "þ": "th",
-        "Þ": "TH",
-    }
-)
+LATIN_LIGATURE_AND_STROKE_MAP: dict[str, str] = {
+    "ø": "o",
+    "Ø": "O",
+    "ł": "l",
+    "Ł": "L",
+    "đ": "d",
+    "Đ": "D",
+    "ħ": "h",
+    "Ħ": "H",
+    "ß": "ss",
+    "ẞ": "SS",
+    "æ": "ae",
+    "Æ": "AE",
+    "œ": "oe",
+    "Œ": "OE",
+    "ð": "d",
+    "Ð": "D",
+    "þ": "th",
+    "Þ": "TH",
+}
+
+_DIACRITIC_STROKE_MAP = str.maketrans(LATIN_LIGATURE_AND_STROKE_MAP)
 
 
-def fold_latin_diacritics(text: str) -> str:
-    """Fold Latin diacritics and stroked characters (ø, ł) to ASCII letters."""
+def _fold_latin_diacritics_py(text: str) -> str:
+    """Pure-Python implementation of Latin diacritic and stroke folding."""
     translated = text.translate(_DIACRITIC_STROKE_MAP)
     return "".join(
         ch
         for ch in unicodedata.normalize("NFKD", translated)
         if not unicodedata.combining(ch)
     )
+
+
+def fold_latin_diacritics(text: str) -> str:
+    """Fold Latin diacritics and stroked characters (ø, ł, đ, ħ) to ASCII letters."""
+    return _fold_latin_diacritics_py(text)
 
 
 

@@ -16,7 +16,7 @@ import threading
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
-from entity_standardizer.address.offline_seed_data import SEED_ROOFTOP_RECORDS, SEED_STREET_RANGES  # noqa: F401
+from entity_standardizer.address.offline_seed_data import SEED_ROOFTOP_RECORDS, SEED_STREET_RANGES
 
 
 @dataclass

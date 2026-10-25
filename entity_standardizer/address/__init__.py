@@ -6,11 +6,13 @@ and cross-border corporate entity resolution platform.
 Adheres to USPS Publication 28, Universal Postal Union (UPU) S42, and ISO 19160-4 standards.
 """
 
+from typing import Any
+
 __version__ = "2.1.0"
 
+from entity_standardizer._native_dispatch import is_native_available
 from entity_standardizer.address._native_dispatch import (
     get_engine_info,
-    is_native_available,
     is_using_native,
     standardize_batch_dispatch,
 )
@@ -84,7 +86,7 @@ from entity_standardizer.address.international import (
     format_upu_address,
     validate_postal_code,
 )
-from entity_standardizer.address.models import StandardizedAddress
+from entity_standardizer.address.models import SpatialResolutionResult, StandardizedAddress
 from entity_standardizer.address.offline_index import (
     OfflineReferenceIndex,
     ParcelValidationResult,
@@ -113,13 +115,6 @@ from entity_standardizer.address.registry import (
     can_safely_merge_corporate_entities,
     evaluate_corporate_risk,
     lookup_corporate_registry,
-)
-from entity_standardizer.address.spatial import (
-    SpatialEngine,
-    SpatialResolutionResult,
-    get_default_spatial_engine,
-    lat_lng_to_h3,
-    resolve_spatial_coordinates,
 )
 from entity_standardizer.address.standardizer import (
     AddressValidationResult,
@@ -236,3 +231,24 @@ __all__ = [
     "validate_parcel_offline",
     "validate_postal_code",
 ]
+
+_LAZY_SPATIAL_EXPORTS = {
+    "SpatialEngine",
+    "get_default_spatial_engine",
+    "lat_lng_to_h3",
+    "resolve_spatial_coordinates",
+}
+
+
+def __getattr__(name: str) -> Any:
+    if name in _LAZY_SPATIAL_EXPORTS:
+        from entity_standardizer.address import spatial as _spatial
+
+        val = getattr(_spatial, name)
+        globals()[name] = val
+        return val
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def __dir__() -> list[str]:
+    return sorted(list(globals().keys()) + list(_LAZY_SPATIAL_EXPORTS))
