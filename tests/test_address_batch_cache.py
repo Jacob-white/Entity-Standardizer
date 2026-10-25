@@ -209,3 +209,128 @@ def test_multitier_cache_and_pluggable_backends(tmp_path: Path) -> None:
     clear_cache()
     assert get_default_cache().is_enabled() is True
     assert "l1" in get_cache_stats()
+
+
+def test_batch_worker_geocoding_and_error_branches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import entity_standardizer.address.batch as addr_batch
+
+    # Empty chunk & 8-tuple / 9-tuple worker unpacking
+    assert addr_batch._worker_process_chunk(([], "street1", "street2", "city", "state", "postal_code", "country", False)) == ([], [])
+    rows_8, _ = addr_batch._worker_process_chunk(
+        ([{"street1": "100 Main St", "city": "Boston", "state": "MA", "postal_code": "02110"}], "street1", "street2", "city", "state", "postal_code", "country", True)
+    )
+    assert rows_8[0]["std_street1"] == "100 MAIN ST"
+    rows_9, _ = addr_batch._worker_process_chunk(
+        ([{"street1": "100 Main St", "city": "Boston", "state": "MA", "postal_code": "02110"}], "street1", "street2", "city", "state", "postal_code", "country", True, True)
+    )
+    assert rows_9[0]["std_country_iso3"] == "USA"
+
+    # Mocked standardize_address path in _worker_process_chunk with duplicate row memoization
+    orig_std = addr_batch.standardize_address
+
+    def _mock_std(**kw: object) -> object:
+        res = orig_std(**kw)
+        mock_aud = MagicMock()
+        mock_aud.as_dict.return_value = {"audit_id": "test-aud-1"}
+        res.audit_record = mock_aud
+        return res
+
+    monkeypatch.setattr(addr_batch, "standardize_address", _mock_std)
+    dup_chunk = [
+        {"street1": "100 Main St", "city": "Boston", "state": "MA", "postal_code": "02110"},
+        {"street1": "100 Main St", "city": "Boston", "state": "MA", "postal_code": "02110"},
+    ]
+    rows_mocked, audits_mocked = addr_batch._worker_process_chunk(
+        (dup_chunk, "street1", "street2", "city", "state", "postal_code", "country", True, True, "USA")
+    )
+    assert len(rows_mocked) == 2 and len(audits_mocked) == 2
+    monkeypatch.setattr(addr_batch, "standardize_address", orig_std)
+
+    # Mock CensusGeocoder for geocode=True in CSV, JSONL, and JSON streamers
+    mock_geocoder = MagicMock()
+    mock_geocoder.geocode_batch.return_value = {
+        "0": {"latitude": "42.3601", "longitude": "-71.0589", "precision": "ROOFTOP"}
+    }
+
+    csv_in = tmp_path / "geo_in.csv"
+    csv_out = tmp_path / "geo_out.csv"
+    csv_in.write_text(
+        "street1,city,state,postal_code,country\n"
+        "100 Main St,Boston,MA,02110,USA\n"
+        "200 Oak Ave,Boston,MA,02110,USA\n",
+        encoding="utf-8",
+    )
+    n_csv = stream_standardize_csv(
+        str(csv_in),
+        str(csv_out),
+        max_workers=1,
+        geocode=True,
+        geocoder=mock_geocoder,
+        correct_state_from_zip=True,
+    )
+    assert n_csv == 2
+
+    # Multiprocessing branch (max_workers=2) on CSV
+    csv_mp_out = tmp_path / "mp_out.csv"
+    n_mp = stream_standardize_csv(str(csv_in), str(csv_mp_out), chunk_size=1, max_workers=2)
+    assert n_mp == 2
+
+    # JSONL with geocode=True and error branches
+    jsonl_in = tmp_path / "geo_in.jsonl"
+    jsonl_out = tmp_path / "geo_out.jsonl"
+    jsonl_in.write_text(
+        "\n"
+        + json.dumps({"street1": "100 Main St", "city": "Boston", "state": "MA", "postal_code": "02110", "country": "USA"})
+        + "\n"
+        + json.dumps({"street1": "10 Downing St", "city": "London", "postal_code": "SW1A 2AA", "country": "GBR"})
+        + "\n",
+        encoding="utf-8",
+    )
+    assert stream_standardize_jsonl(str(jsonl_in), str(jsonl_out), max_workers=1, geocode=True, geocoder=mock_geocoder) == 2
+
+    bad_jsonl = tmp_path / "bad.jsonl"
+    bad_jsonl.write_text("{not valid json}\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="not valid JSON"):
+        stream_standardize_jsonl(str(bad_jsonl), str(tmp_path / "unused1.jsonl"), max_workers=1)
+
+    non_obj_jsonl = tmp_path / "non_obj.jsonl"
+    non_obj_jsonl.write_text("[1, 2, 3]\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="must be a JSON object"):
+        stream_standardize_jsonl(str(non_obj_jsonl), str(tmp_path / "unused2.jsonl"), max_workers=1)
+
+    # JSON with geocode=True and error branches
+    json_in = tmp_path / "geo_in.json"
+    json_out = tmp_path / "geo_out.json"
+    json_in.write_text(
+        json.dumps([
+            {"street1": "100 Main St", "city": "Boston", "state": "MA", "postal_code": "02110", "country": "USA"},
+            {"street1": "200 Oak Ave", "city": "Boston", "state": "MA", "postal_code": "02110", "country": "USA"},
+        ]),
+        encoding="utf-8",
+    )
+    assert stream_standardize_json(str(json_in), str(json_out), max_workers=1, geocode=True, geocoder=mock_geocoder) == 2
+
+    bad_json = tmp_path / "bad.json"
+    bad_json.write_text("[123]\n", encoding="utf-8")
+    with pytest.raises(ValueError, match="must be a JSON object"):
+        stream_standardize_json(str(bad_json), str(tmp_path / "unused3.json"), max_workers=1)
+
+    # batch_standardize with correct_state_from_zip generator hold, use_cache+batch_size=1, vacant dict, and non-str item
+    batch_res = list(
+        batch_standardize(
+            [
+                "100 Wall St, New York, NY 10005",
+                {"address": "200 Broadway", "suite": "Ste 10", "city": "New York", "province": "CA", "zip": "10005", "vacant": True},
+                12345,
+            ],
+            correct_state_from_zip=True,
+            use_cache=True,
+            batch_size=1,
+        )
+    )
+    assert len(batch_res) == 3
+    assert batch_res[1].state == "NY"
+    assert batch_res[1].vacant is True
+

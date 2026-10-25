@@ -47,6 +47,7 @@ SAMPLE_COMPANIES = [
     "Novo Nordisk A/S",
     "KKR Opportunities III S.à r.l.",
     "Đorđe & Łódź Holdings GmbH",
+    "Brașov & Constanța Logistics S.A.",
     "Booking.com B.V.",
 ]
 
@@ -55,6 +56,7 @@ SAMPLE_PERSONS = [
     "Prof. Đorđe Kovačević III",
     "María José Carreño Quiñones",
     "Sören Ørsted-Lindqvist",
+    "Nguyễn Thị Minh Khai",
 ]
 
 SAMPLE_WEB = [
@@ -136,8 +138,12 @@ def run_benchmarks() -> dict:
     pillars_report: dict[str, dict] = {}
 
     try:
-        # Native mode runs
+        # Warm up one-time reference/offline index singletons before timing
         _set_pure_mode(False, saved_nd_mod, saved_addr_flag)
+        batch_standardize(SAMPLE_ADDRESSES[:1], max_workers=1)
+        batch_standardize_contacts(SAMPLE_CONTACTS[:1])
+
+        # Native mode runs
         clear_cache()
         t0 = time.perf_counter()
         nat_phones = [p.to_dict() for p in batch_standardize_phones(phone_batch, default_country="US")]

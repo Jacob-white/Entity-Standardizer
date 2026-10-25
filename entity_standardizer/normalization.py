@@ -250,17 +250,16 @@ _DIACRITIC_STROKE_MAP = str.maketrans(LATIN_LIGATURE_AND_STROKE_MAP)
 
 def _fold_latin_diacritics_py(text: str) -> str:
     """Pure-Python implementation of Latin diacritic and stroke folding."""
-    translated = text.translate(_DIACRITIC_STROKE_MAP)
-    return "".join(
+    decomposed = "".join(
         ch
-        for ch in unicodedata.normalize("NFKD", translated)
+        for ch in unicodedata.normalize("NFKD", text)
         if not unicodedata.combining(ch)
     )
+    return decomposed.translate(_DIACRITIC_STROKE_MAP)
 
 
 def fold_latin_diacritics(text: str) -> str:
     """Fold Latin diacritics and stroked characters (ø, ł, đ, ħ) to ASCII letters."""
-    return _fold_latin_diacritics_py(text)
+    from entity_standardizer._native_dispatch import fold_latin_diacritics_dispatch
 
-
-
+    return fold_latin_diacritics_dispatch(text)

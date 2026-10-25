@@ -229,3 +229,82 @@ def test_explain_validation_and_autocomplete() -> None:
         import entity_standardizer.address as addr_pkg
 
         _ = addr_pkg.NON_EXISTENT_ATTRIBUTE_XYZ
+
+
+def test_us_street_parser_and_native_dispatch_branches(monkeypatch: pytest.MonkeyPatch) -> None:
+    import entity_standardizer.address._native_dispatch as addr_nd
+    import entity_standardizer.address.us_street_parser as usp
+
+    # Direct _rule_based_us_street_parse branches
+    assert usp._rule_based_us_street_parse("RR 2 Box 14")[0] == "RR 2 BOX 14"
+    assert usp._rule_based_us_street_parse("HC 1 Box 9")[0] == "HC 1 BOX 9"
+    assert usp._rule_based_us_street_parse("PSC 2 BOX 100")[0] == "PSC 2 BOX 100"
+    assert usp._rule_based_us_street_parse("100 Main St PO Box 50") == ("100 MAIN ST", "PO BOX 50", True)
+    assert usp._rule_based_us_street_parse("PO Box 50") == ("PO BOX 50", "", True)
+    assert usp._rule_based_us_street_parse("100 Main St PMB 42 #3B") == ("100 MAIN ST", "PMB 42 STE 3B", True)
+    assert usp._rule_based_us_street_parse("100 Main St Penthouse") == ("100 MAIN ST", "PH", True)
+    assert usp._rule_based_us_street_parse("Ste 100") == ("", "STE 100", True)
+    assert usp._rule_based_us_street_parse("100 1/2 Main St")[0] == "100 1/2 MAIN ST"
+    assert usp._rule_based_us_street_parse("123-45 82nd Ave")[0] == "123-45 82ND AVE"
+    assert usp._rule_based_us_street_parse("100 South St")[0] == "100 SOUTH ST"
+    assert usp._rule_based_us_street_parse("100 North East St")[0] == "100 NORTH EAST ST"
+    assert usp._rule_based_us_street_parse("100 Twenty First St")[0] == "100 21ST ST"
+    assert usp._rule_based_us_street_parse("100 First Ave")[0] == "100 1ST AVE"
+    assert usp._rule_based_us_street_parse("100 State Route 9")[0] == "100 STATE RTE 9"
+    assert usp._rule_based_us_street_parse("100 5 Ave")[0] == "100 5TH AVE"
+    assert usp._rule_based_us_street_parse("100 Main Steret")[0] == "100 MAIN ST"
+    assert usp._rule_based_us_street_parse("100 Nroth Main St")[0] == "100 N MAIN ST"
+    assert usp._rule_based_us_street_parse("100 Main St", enable_fuzzy=False)[0] == "100 MAIN ST"
+
+    # _unswap_state_city & _move_trailing_house_number
+    assert usp._unswap_state_city("100 Main St, IL, Chicago 60614") == "100 Main St, Chicago, IL 60614"
+    assert usp._unswap_state_city("100 Main St, Chicago, IL 60614") == "100 Main St, Chicago, IL 60614"
+    assert usp._move_trailing_house_number("St. Louis Ave 100") == "100 St. Louis Ave"
+    assert usp._move_trailing_house_number("AVENIDA ESMERALDA #5, SECOND FLOOR") == "5 AVENIDA ESMERALDA, SECOND FLOOR"
+    assert usp._move_trailing_house_number("County Road 12") == "County Road 12"
+    assert usp._move_trailing_house_number("St 100") == "St 100"
+
+    # _parse_us_address_components branches
+    assert usp._parse_us_address_components("Urb Las Flores", "Apt 5")[:2] == ("URB LAS FLORES", "APT 5")
+    assert usp._parse_us_address_components("Urb Las Flores", "123 Calle Luna")[0].startswith("URB LAS FLORES")
+    assert usp._parse_us_address_components("100 Main St", "PO Box 400")[:2] == ("100 MAIN ST", "PO BOX 400")
+    assert usp._parse_us_address_components("100 Main St", "200 Oak Ave")[:2] == ("100 MAIN ST", "200 OAK AVE")
+    assert usp._parse_us_address_components("PR #2 KM 82 HM. 2", "")[0] == "PR-2 KM 82.2"
+    assert usp._parse_us_address_components("", "")[:3] == ("", "", False)
+
+    # _parse_us_street_tokens when usaddress is None (reverse-anchor fallback parser)
+    monkeypatch.setattr(usp, "usaddress", None)
+    r1 = usp._parse_us_street_tokens("100 Main St, New York, NY 10005")
+    assert r1[0] == "100 MAIN ST" and r1[4] == "NY" and r1[5] == "10005"
+    r2 = usp._parse_us_street_tokens("PO Box 100 Chicago, IL 60601")
+    assert r2[0] == "PO BOX 100" and r2[3].upper() == "CHICAGO"
+    r3 = usp._parse_us_street_tokens("100 Main St N Ste 200 Chicago 60601")
+    assert r3[0] == "100 MAIN ST N" and r3[1] == "STE 200"
+    r4 = usp._parse_us_street_tokens("New York 10005")
+    assert r4[0] == "" and r4[3].upper() == "NEW YORK" and r4[5] == "10005"
+
+    # address._native_dispatch branches
+    try:
+        addr_nd.force_pure_python(True)
+        assert addr_nd.is_using_native() is False
+        assert addr_nd.get_active_engine().__name__.endswith("_pure_python_core")
+        assert addr_nd.get_engine_info()["engine"] == "PurePythonCore"
+        assert addr_nd.try_native("levenshtein_distance", "a", "b") == (False, None)
+
+        class BrokenNative:
+            def broken_fn(self) -> None:
+                raise RuntimeError("boom")
+
+            def get_capabilities(self) -> dict[str, object]:
+                raise RuntimeError("caps error")
+
+        addr_nd.force_pure_python(False)
+        addr_nd.override_engine_for_testing(BrokenNative())
+        assert addr_nd.is_native_available() is True
+        assert addr_nd.try_native("missing_fn") == (False, None)
+        assert addr_nd.try_native("broken_fn") == (False, None)
+        assert addr_nd.get_capabilities()["engine"] == "Rust_PyO3"
+    finally:
+        addr_nd.override_engine_for_testing(None)
+        addr_nd.force_pure_python(False)
+

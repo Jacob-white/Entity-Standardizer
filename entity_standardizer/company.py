@@ -659,11 +659,13 @@ def batch_standardize_companies(
     """Batch-standardize a sequence of organization or company names."""
     from entity_standardizer._native_dispatch import normalize_batch_company_tokens_dispatch
 
-    clean_texts = [
-        re.sub(r"\s+", " ", str(x).strip())
-        for x in inputs
-        if x is not None and str(x).strip()
-    ]
+    clean_texts = list(
+        dict.fromkeys(
+            re.sub(r"\s+", " ", str(x).strip())
+            for x in inputs
+            if x is not None and str(x).strip()
+        )
+    )
     batch_tokens = normalize_batch_company_tokens_dispatch(clean_texts) if clean_texts else None
     precomputed = dict(zip(clean_texts, batch_tokens)) if batch_tokens is not None else None
     return [
