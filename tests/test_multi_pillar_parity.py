@@ -361,6 +361,27 @@ def test_compound_person_splitting_in_standardize_contact() -> None:
     assert org_contact.organization is not None
     assert "ORGANIZATION_RESCUED_FROM_PERSON_FIELD" in org_contact.cross_healing_actions
 
+    # compare_contacts matches across additional_persons from compound person split
+    from entity_standardizer import compare_contacts
+
+    cmp_compound = compare_contacts(
+        {"organization": "Acme Corp", "person_name": "John & Jane Smith"},
+        {"organization": "Acme Corp", "person_name": "Jane Smith"},
+    )
+    assert cmp_compound.is_match
+    assert "person" in cmp_compound.matched_pillars
+
+    # cluster_contact_records links compound person across (company_key, person_root_key)
+    compound_clusters = cluster_contact_records(
+        [
+            {"id": "c1", "organization": "Acme Corp", "person_name": "John & Jane Smith"},
+            {"id": "c2", "organization": "Acme Corp", "person_name": "Jane Smith"},
+            {"id": "c3", "organization": "Acme Corp", "person_name": "N/A"},
+        ]
+    )
+    assert len(compound_clusters) == 2
+    assert "SHARED_PERSON_AND_COMPANY_KEY" in compound_clusters[0].linkage_reasons
+
 
 def test_deduplicate_companies_and_persons_fuzzy_threshold() -> None:
     comp_clusters = deduplicate_companies(["Acme Corp", "Acme Corporation"], fuzzy_threshold=0.80)

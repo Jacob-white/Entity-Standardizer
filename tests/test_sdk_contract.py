@@ -50,7 +50,7 @@ def _dotnet_class_fields(class_name: str) -> set[str]:
 
 
 def test_sdk_models_match_python_contracts() -> None:
-    from entity_standardizer.address import AutocompleteSuggestion, standardize_address
+    from entity_standardizer.address import autocomplete_address, standardize_address
     from entity_standardizer.company import (
         CompanyCluster,
         CompanyComparisonResult,
@@ -109,7 +109,7 @@ def test_sdk_models_match_python_contracts() -> None:
     expected_cluster_fields = {f.name for f in dataclasses.fields(PhoneCluster)}
     expected_addr_cmp_fields = {f.name for f in dataclasses.fields(AddressComparisonResult)}
     expected_addr_cluster_fields = {f.name for f in dataclasses.fields(AddressCluster)}
-    expected_auto_sug_fields = {f.name for f in dataclasses.fields(AutocompleteSuggestion)}
+    expected_auto_sug_fields = set(autocomplete_address("100 WALL")[0].to_dict().keys())
     expected_company_fields = {f.name for f in dataclasses.fields(StandardizedCompany)}
     expected_company_cmp_fields = {f.name for f in dataclasses.fields(CompanyComparisonResult)}
     expected_company_cluster_fields = {f.name for f in dataclasses.fields(CompanyCluster)}

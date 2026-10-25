@@ -198,6 +198,7 @@ type AutocompleteSuggestion struct {
 	Text                    string   `json:"text"`
 	Street1                 string   `json:"street1"`
 	Street2                 string   `json:"street2"`
+	StreetLine              string   `json:"street_line"`
 	City                    string   `json:"city"`
 	State                   string   `json:"state"`
 	PostalCode              string   `json:"postal_code"`

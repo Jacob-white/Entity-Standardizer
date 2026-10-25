@@ -912,17 +912,15 @@ def compare_contacts(
         if org_cmp.is_match:
             matched_pillars.append("organization")
 
-    if (
-        ca.person is not None
-        and cb.person is not None
-        and ca.person.is_valid
-        and cb.person.is_valid
-    ):
-        per_cmp = compare_persons(ca.person, cb.person)
+    persons_a = [p for p in (ca.person, *ca.additional_persons) if p is not None and p.is_valid]
+    persons_b = [p for p in (cb.person, *cb.additional_persons) if p is not None and p.is_valid]
+    if persons_a and persons_b:
+        per_cmps = [compare_persons(pa, pb) for pa in persons_a for pb in persons_b]
+        per_cmp = max(per_cmps, key=lambda c: (1 if c.is_match else 0, c.score))
         pillar_scores["person"] = per_cmp.score
         if per_cmp.is_match:
             matched_pillars.append("person")
-        elif per_cmp.match_type == "GENERATIONAL_SUFFIX_CONFLICT":
+        elif any(c.match_type == "GENERATIONAL_SUFFIX_CONFLICT" for c in per_cmps):
             person_conflict = True
 
     if ca.phone.is_valid and cb.phone.is_valid:

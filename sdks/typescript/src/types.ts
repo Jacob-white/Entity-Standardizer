@@ -86,6 +86,7 @@ export interface AutocompleteSuggestion {
   text: string;
   street1: string;
   street2: string;
+  street_line: string;
   city: string;
   state: string;
   postal_code: string;

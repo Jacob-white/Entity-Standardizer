@@ -410,6 +410,9 @@ public sealed class AutocompleteSuggestion
     [JsonPropertyName("street2")]
     public string Street2 { get; set; } = "";
 
+    [JsonPropertyName("street_line")]
+    public string StreetLine { get; set; } = "";
+
     [JsonPropertyName("city")]
     public string City { get; set; } = "";
 

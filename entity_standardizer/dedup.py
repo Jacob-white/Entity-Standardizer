@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass
 import re
 from typing import Any
 
+from entity_standardizer.address.models import StandardizedAddress
 from entity_standardizer.models import StandardizedPhone
 from entity_standardizer.standardizer import standardize_phone
 
@@ -524,7 +525,7 @@ def cluster_contact_records(
 
     from entity_standardizer.address.standardizer import standardize_address
     from entity_standardizer.company import standardize_company
-    from entity_standardizer.person import standardize_person
+    from entity_standardizer.person import split_compound_persons
     from entity_standardizer.web import standardize_email
 
     n = len(records)
@@ -578,10 +579,11 @@ def cluster_contact_records(
         raw_per = rec.get("person_name") or rec.get("name")
         if raw_org and raw_per:
             comp = standardize_company(str(raw_org))
-            per = standardize_person(str(raw_per))
-            if comp.is_valid and comp.company_key and per.is_valid and per.person_root_key:
-                po_key = f"{comp.company_key}||{per.person_root_key}"
-                person_org_buckets.setdefault(po_key, []).append(idx)
+            if comp.is_valid and comp.company_key:
+                for per in split_compound_persons(str(raw_per)):
+                    if per.is_valid and per.person_root_key:
+                        po_key = f"{comp.company_key}||{per.person_root_key}"
+                        person_org_buckets.setdefault(po_key, []).append(idx)
 
     dsu = DisjointSet(range(n))
 
@@ -664,8 +666,8 @@ class AddressComparisonResult:
     is_match: bool
     score: float
     match_type: str
-    address_a: Any
-    address_b: Any
+    address_a: StandardizedAddress
+    address_b: StandardizedAddress
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize address comparison result to a JSON-compatible dictionary."""
@@ -683,8 +685,8 @@ class AddressCluster:
     """A deduplicated cluster of physical/mailing addresses resolved to a single Golden Address Record."""
 
     cluster_id: int
-    golden_address: Any
-    members: tuple[Any, ...]
+    golden_address: StandardizedAddress
+    members: tuple[StandardizedAddress, ...]
     raw_inputs: tuple[Any, ...]
     confidence: float
 
@@ -700,10 +702,9 @@ class AddressCluster:
 
 
 def _coerce_address(
-    val: str | dict[str, Any] | Any | None,
+    val: str | dict[str, Any] | StandardizedAddress | None,
     country: str = "US",
-) -> Any:
-    from entity_standardizer.address.models import StandardizedAddress
+) -> StandardizedAddress:
     from entity_standardizer.address.standardizer import standardize_address
 
     if isinstance(val, StandardizedAddress):
@@ -722,8 +723,8 @@ def _coerce_address(
 
 
 def compare_addresses(
-    address_a: str | dict[str, Any] | Any | None,
-    address_b: str | dict[str, Any] | Any | None,
+    address_a: str | dict[str, Any] | StandardizedAddress | None,
+    address_b: str | dict[str, Any] | StandardizedAddress | None,
     country: str = "US",
     fuzzy_threshold: float = 0.85,
 ) -> AddressComparisonResult:
@@ -763,7 +764,7 @@ def compare_addresses(
     return AddressComparisonResult(False, sim, "NO_MATCH", a, b)
 
 
-def _address_survivorship_rank(addr: Any) -> tuple[int, float, int, int, int]:
+def _address_survivorship_rank(addr: StandardizedAddress) -> tuple[int, float, int, int, int]:
     return (
         1 if addr.address_status == "standardized" else 0,
         float(addr.confidence_score or 0.0),
@@ -774,7 +775,7 @@ def _address_survivorship_rank(addr: Any) -> tuple[int, float, int, int, int]:
 
 
 def deduplicate_addresses(
-    addresses: Sequence[str | dict[str, Any] | Any],
+    addresses: Sequence[str | dict[str, Any] | StandardizedAddress],
     country: str = "US",
     fuzzy_threshold: float = 0.85,
 ) -> list[AddressCluster]:
