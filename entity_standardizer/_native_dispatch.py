@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import importlib.machinery
 import importlib.util
+import os
 from pathlib import Path
 import re
 from typing import Any
 
 from entity_standardizer.normalization import (
     _TIME_RANGE_RE,
+    _fold_latin_diacritics_py,
     _fold_unicode_digits_py,
     _fold_vanity_digits_py,
     decode_vanity_phone,
@@ -18,9 +20,19 @@ from entity_standardizer.normalization import (
 )
 
 
+def _env_forces_pure() -> bool:
+    """Return True if operator environment variables request pure-Python execution."""
+    for key in ("ENTITY_STANDARDIZER_FORCE_PURE", "ADDRESS_STANDARDIZER_FORCE_PURE"):
+        if os.environ.get(key, "").strip().lower() in ("1", "true", "yes", "on"):
+            return True
+    return False
+
+
 def _load_native_module(release_dir: Path | None = None) -> Any:
     """Import _entity_standardizer_rs or load it from cargo's target/release directory."""
     if release_dir is None:
+        if _env_forces_pure():
+            return None
         try:
             import _entity_standardizer_rs as mod  # type: ignore[import-not-found]
         except ImportError:
@@ -66,6 +78,13 @@ def get_engine_info() -> dict[str, Any]:
         "engine": "rust_pyo3" if is_native_available() else "pure_python",
         "native_available": is_native_available(),
     }
+
+
+def fold_latin_diacritics_dispatch(text: str) -> str:
+    """Fold Latin diacritics and stroked characters using Rust if available, else Python."""
+    if _native_mod is not None and hasattr(_native_mod, "fold_latin_diacritics_rs"):
+        return str(_native_mod.fold_latin_diacritics_rs(text))
+    return _fold_latin_diacritics_py(text)
 
 
 def fold_vanity_digits_dispatch(text: str) -> str:

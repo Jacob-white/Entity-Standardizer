@@ -236,7 +236,28 @@ def clear_cache() -> None:
 
 
 def get_cache_stats() -> dict[str, Any]:
-    """Return hit/miss/size metrics from the active global cache."""
-    return _DEFAULT_CACHE.stats()
+    """Return hit/miss/size metrics from active global caches across phone and address."""
+    phone_stats = _DEFAULT_CACHE.stats()
+    stats: dict[str, Any] = {
+        "l1": phone_stats["l1"],
+        "l2_enabled": phone_stats["l2_enabled"],
+        "l2_hits": phone_stats["l2_hits"],
+        "l2_misses": phone_stats["l2_misses"],
+        "phone": phone_stats,
+    }
+    from entity_standardizer.address import cache as _addr_cache
+
+    if _addr_cache._DEFAULT_CACHE is not None:
+        stats["address"] = _addr_cache._DEFAULT_CACHE.get_stats()
+    else:
+        stats["address"] = {
+            "enabled": True,
+            "l1": {"size": 0, "hits": 0, "misses": 0, "evictions": 0, "hit_rate": 0.0},
+            "l2": {"size": 0, "hits": 0, "misses": 0, "evictions": 0, "hit_rate": 0.0},
+            "total_lookups": 0,
+            "total_hits": 0,
+            "overall_hit_rate": 0.0,
+        }
+    return stats
 
 

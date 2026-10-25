@@ -12,25 +12,20 @@ import inspect
 import json
 import multiprocessing
 import os
-from typing import Any, Dict, Generator, Iterable, Iterator, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple, Union
 
 from entity_standardizer.address._native_dispatch import standardize_batch_dispatch
 from entity_standardizer.address.geocoder import CensusGeocoder
 from entity_standardizer.address.models import StandardizedAddress
 from entity_standardizer.address.standardizer import standardize_address
 from entity_standardizer.address.cache import get_default_cache
+from entity_standardizer.batch import (
+    _csv_safe_cell,
+    buffered_chunk_generator as buffered_chunk_generator,
+    chunk_generator,
+)
 
 _ORIGINAL_STANDARDIZE_ADDRESS = standardize_address
-
-# Spreadsheet applications evaluate cells that start with these characters as formulas.
-_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
-
-
-def _csv_safe_cell(value: Any) -> Any:
-    """Neutralize CSV/formula injection in a text cell by prefixing a single quote."""
-    if isinstance(value, str) and value.startswith(_FORMULA_PREFIXES):
-        return "'" + value
-    return value
 
 
 def _csv_safe_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -127,39 +122,6 @@ def resolve_column_mappings(
         canon_map["postal_code"],
         canon_map["country"],
     )
-
-
-def buffered_chunk_generator(
-    reader: Iterator[Dict[str, Any]],
-    chunk_size: int = 5000,
-) -> Generator[List[Dict[str, Any]], None, None]:
-    """
-    Yields rows from reader in fixed-size chunks using pre-allocated buffer arrays.
-    Ensures O(chunk_size) memory footprint regardless of file size.
-    """
-    if chunk_size < 1:
-        raise ValueError("chunk_size must be at least 1")
-    buffer: List[Optional[Dict[str, Any]]] = [None] * chunk_size
-    count = 0
-    for row in reader:
-        buffer[count] = row
-        count += 1
-        if count == chunk_size:
-            yield list(buffer)  # type: ignore[arg-type]
-            count = 0
-    if count > 0:
-        yield buffer[:count]  # type: ignore[return-value]
-
-
-def chunk_generator(
-    reader: Iterator[Dict[str, Any]],
-    chunk_size: int = 5000,
-) -> Generator[List[Dict[str, Any]], None, None]:
-    """
-    Yields rows from reader in fixed-size chunks to bound memory utilization.
-    Delegates to buffered_chunk_generator for pre-allocated buffer efficiency.
-    """
-    yield from buffered_chunk_generator(reader, chunk_size=chunk_size)
 
 
 def _safe_str(val: Any, default: str = "") -> str:

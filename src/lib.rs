@@ -702,72 +702,120 @@ fn fold_latin_diacritics_to_chars(input: &str) -> Vec<char> {
     let mut out = Vec::with_capacity(input.len() + 8);
     for ch in input.chars() {
         match ch {
-            'ß' => {
-                out.push('s');
-                out.push('s');
+            'ß' => out.extend_from_slice(&['s', 's']),
+            'ẞ' => out.extend_from_slice(&['S', 'S']),
+            'æ' | 'ǣ' | 'ǽ' => out.extend_from_slice(&['a', 'e']),
+            'Æ' | 'Ǣ' | 'Ǽ' => out.extend_from_slice(&['A', 'E']),
+            'œ' => out.extend_from_slice(&['o', 'e']),
+            'Œ' => out.extend_from_slice(&['O', 'E']),
+            'þ' => out.extend_from_slice(&['t', 'h']),
+            'Þ' => out.extend_from_slice(&['T', 'H']),
+            'Ǆ' | 'Ǳ' => out.extend_from_slice(&['D', 'Z']),
+            'ǅ' | 'ǲ' => out.extend_from_slice(&['D', 'z']),
+            'ǆ' | 'ǳ' => out.extend_from_slice(&['d', 'z']),
+            'Ĳ' => out.extend_from_slice(&['I', 'J']),
+            'ĳ' => out.extend_from_slice(&['i', 'j']),
+            'Ǉ' => out.extend_from_slice(&['L', 'J']),
+            'ǈ' => out.extend_from_slice(&['L', 'j']),
+            'ǉ' => out.extend_from_slice(&['l', 'j']),
+            'Ǌ' => out.extend_from_slice(&['N', 'J']),
+            'ǋ' => out.extend_from_slice(&['N', 'j']),
+            'ǌ' => out.extend_from_slice(&['n', 'j']),
+            'Ŀ' => out.extend_from_slice(&['L', '\u{00b7}']),
+            'ŀ' => out.extend_from_slice(&['l', '\u{00b7}']),
+            'ẚ' => out.extend_from_slice(&['a', '\u{02be}']),
+            'ŉ' => out.extend_from_slice(&['\u{02bc}', 'n']),
+            'à' | 'á' | 'â' | 'ã' | 'ä' | 'å' | 'ā' | 'ă' | 'ą' | 'ǎ' | 'ǟ' | 'ǡ' | 'ǻ'
+            | 'ȁ' | 'ȃ' | 'ȧ' | 'ḁ' | 'ạ' | 'ả' | 'ấ' | 'ầ' | 'ẩ' | 'ẫ' | 'ậ' | 'ắ' | 'ằ'
+            | 'ẳ' | 'ẵ' | 'ặ' => out.push('a'),
+            'À' | 'Á' | 'Â' | 'Ã' | 'Ä' | 'Å' | 'Ā' | 'Ă' | 'Ą' | 'Ǎ' | 'Ǟ' | 'Ǡ' | 'Ǻ'
+            | 'Ȁ' | 'Ȃ' | 'Ȧ' | 'Ḁ' | 'Ạ' | 'Ả' | 'Ấ' | 'Ầ' | 'Ẩ' | 'Ẫ' | 'Ậ' | 'Ắ' | 'Ằ'
+            | 'Ẳ' | 'Ẵ' | 'Ặ' => out.push('A'),
+            'ḃ' | 'ḅ' | 'ḇ' => out.push('b'),
+            'Ḃ' | 'Ḅ' | 'Ḇ' => out.push('B'),
+            'ç' | 'ć' | 'č' | 'ĉ' | 'ċ' | 'ḉ' => out.push('c'),
+            'Ç' | 'Ć' | 'Č' | 'Ĉ' | 'Ċ' | 'Ḉ' => out.push('C'),
+            'đ' | 'ð' | 'ď' | 'ḋ' | 'ḍ' | 'ḏ' | 'ḑ' | 'ḓ' => out.push('d'),
+            'Đ' | 'Ð' | 'Ď' | 'Ḋ' | 'Ḍ' | 'Ḏ' | 'Ḑ' | 'Ḓ' => out.push('D'),
+            'è' | 'é' | 'ê' | 'ë' | 'ē' | 'ĕ' | 'ė' | 'ę' | 'ě' | 'ȅ' | 'ȇ' | 'ȩ' | 'ḕ'
+            | 'ḗ' | 'ḙ' | 'ḛ' | 'ḝ' | 'ẹ' | 'ẻ' | 'ẽ' | 'ế' | 'ề' | 'ể' | 'ễ' | 'ệ' => {
+                out.push('e')
             }
-            'ẞ' => {
-                out.push('S');
-                out.push('S');
+            'È' | 'É' | 'Ê' | 'Ë' | 'Ē' | 'Ĕ' | 'Ė' | 'Ę' | 'Ě' | 'Ȅ' | 'Ȇ' | 'Ȩ' | 'Ḕ'
+            | 'Ḗ' | 'Ḙ' | 'Ḛ' | 'Ḝ' | 'Ẹ' | 'Ẻ' | 'Ẽ' | 'Ế' | 'Ề' | 'Ể' | 'Ễ' | 'Ệ' => {
+                out.push('E')
             }
-            'æ' => {
-                out.push('a');
-                out.push('e');
+            'ḟ' => out.push('f'),
+            'Ḟ' => out.push('F'),
+            'ğ' | 'ĝ' | 'ġ' | 'ģ' | 'ǧ' | 'ǵ' | 'ḡ' => out.push('g'),
+            'Ğ' | 'Ĝ' | 'Ġ' | 'Ģ' | 'Ǧ' | 'Ǵ' | 'Ḡ' => out.push('G'),
+            'ħ' | 'ĥ' | 'ȟ' | 'ḣ' | 'ḥ' | 'ḧ' | 'ḩ' | 'ḫ' | 'ẖ' => out.push('h'),
+            'Ħ' | 'Ĥ' | 'Ȟ' | 'Ḣ' | 'Ḥ' | 'Ḧ' | 'Ḩ' | 'Ḫ' => out.push('H'),
+            'ì' | 'í' | 'î' | 'ï' | 'ĩ' | 'ī' | 'ĭ' | 'į' | 'ǐ' | 'ȉ' | 'ȋ' | 'ḭ' | 'ḯ'
+            | 'ỉ' | 'ị' => out.push('i'),
+            'Ì' | 'Í' | 'Î' | 'Ï' | 'Ĩ' | 'Ī' | 'Ĭ' | 'Į' | 'İ' | 'Ǐ' | 'Ȉ' | 'Ȋ' | 'Ḭ'
+            | 'Ḯ' | 'Ỉ' | 'Ị' => out.push('I'),
+            'ĵ' | 'ǰ' => out.push('j'),
+            'Ĵ' => out.push('J'),
+            'ķ' | 'ǩ' | 'ḱ' | 'ḳ' | 'ḵ' => out.push('k'),
+            'Ķ' | 'Ǩ' | 'Ḱ' | 'Ḳ' | 'Ḵ' => out.push('K'),
+            'ł' | 'ľ' | 'ĺ' | 'ļ' | 'ḷ' | 'ḹ' | 'ḻ' | 'ḽ' => out.push('l'),
+            'Ł' | 'Ľ' | 'Ĺ' | 'Ļ' | 'Ḷ' | 'Ḹ' | 'Ḻ' | 'Ḽ' => out.push('L'),
+            'ḿ' | 'ṁ' | 'ṃ' => out.push('m'),
+            'Ḿ' | 'Ṁ' | 'Ṃ' => out.push('M'),
+            'ñ' | 'ń' | 'ň' | 'ņ' | 'ǹ' | 'ṅ' | 'ṇ' | 'ṉ' | 'ṋ' => out.push('n'),
+            'Ñ' | 'Ń' | 'Ň' | 'Ņ' | 'Ǹ' | 'Ṅ' | 'Ṇ' | 'Ṉ' | 'Ṋ' => out.push('N'),
+            'ò' | 'ó' | 'ô' | 'õ' | 'ö' | 'ø' | 'ǿ' | 'ō' | 'ŏ' | 'ő' | 'ơ' | 'ǒ' | 'ǫ'
+            | 'ǭ' | 'ȍ' | 'ȏ' | 'ȫ' | 'ȭ' | 'ȯ' | 'ȱ' | 'ṍ' | 'ṏ' | 'ṑ' | 'ṓ' | 'ọ' | 'ỏ'
+            | 'ố' | 'ồ' | 'ổ' | 'ỗ' | 'ộ' | 'ớ' | 'ờ' | 'ở' | 'ỡ' | 'ợ' => out.push('o'),
+            'Ò' | 'Ó' | 'Ô' | 'Õ' | 'Ö' | 'Ø' | 'Ǿ' | 'Ō' | 'Ŏ' | 'Ő' | 'Ơ' | 'Ǒ' | 'Ǫ'
+            | 'Ǭ' | 'Ȍ' | 'Ȏ' | 'Ȫ' | 'Ȭ' | 'Ȯ' | 'Ȱ' | 'Ṍ' | 'Ṏ' | 'Ṑ' | 'Ṓ' | 'Ọ' | 'Ỏ'
+            | 'Ố' | 'Ồ' | 'Ổ' | 'Ỗ' | 'Ộ' | 'Ớ' | 'Ờ' | 'Ở' | 'Ỡ' | 'Ợ' => out.push('O'),
+            'ṕ' | 'ṗ' => out.push('p'),
+            'Ṕ' | 'Ṗ' => out.push('P'),
+            'ř' | 'ŕ' | 'ŗ' | 'ȑ' | 'ȓ' | 'ṙ' | 'ṛ' | 'ṝ' | 'ṟ' => out.push('r'),
+            'Ř' | 'Ŕ' | 'Ŗ' | 'Ȑ' | 'Ȓ' | 'Ṙ' | 'Ṛ' | 'Ṝ' | 'Ṟ' => out.push('R'),
+            'š' | 'ś' | 'ŝ' | 'ş' | 'ș' | 'ſ' | 'ṡ' | 'ṣ' | 'ṥ' | 'ṧ' | 'ṩ' | 'ẛ' => {
+                out.push('s')
             }
-            'Æ' => {
-                out.push('A');
-                out.push('E');
-            }
-            'œ' => {
-                out.push('o');
-                out.push('e');
-            }
-            'Œ' => {
-                out.push('O');
-                out.push('E');
-            }
-            'þ' => {
-                out.push('t');
-                out.push('h');
-            }
-            'Þ' => {
-                out.push('T');
-                out.push('H');
-            }
-            'à' | 'á' | 'â' | 'ã' | 'ä' | 'å' | 'ā' | 'ă' | 'ą' => out.push('a'),
-            'À' | 'Á' | 'Â' | 'Ã' | 'Ä' | 'Å' | 'Ā' | 'Ă' | 'Ą' => out.push('A'),
-            'è' | 'é' | 'ê' | 'ë' | 'ē' | 'ĕ' | 'ė' | 'ę' | 'ě' => out.push('e'),
-            'È' | 'É' | 'Ê' | 'Ë' | 'Ē' | 'Ĕ' | 'Ė' | 'Ę' | 'Ě' => out.push('E'),
-            'ì' | 'í' | 'î' | 'ï' | 'ĩ' | 'ī' | 'ĭ' | 'į' => out.push('i'),
-            'Ì' | 'Í' | 'Î' | 'Ï' | 'Ĩ' | 'Ī' | 'Ĭ' | 'Į' => out.push('I'),
-            'ò' | 'ó' | 'ô' | 'õ' | 'ö' | 'ø' | 'ō' | 'ŏ' | 'ő' => out.push('o'),
-            'Ò' | 'Ó' | 'Ô' | 'Õ' | 'Ö' | 'Ø' | 'Ō' | 'Ŏ' | 'Ő' => out.push('O'),
-            'ù' | 'ú' | 'û' | 'ü' | 'ũ' | 'ū' | 'ŭ' | 'ů' | 'ű' | 'ų' => out.push('u'),
-            'Ù' | 'Ú' | 'Û' | 'Ü' | 'Ũ' | 'Ū' | 'Ŭ' | 'Ů' | 'Ű' | 'Ų' => out.push('U'),
-            'ç' | 'ć' | 'č' | 'ĉ' | 'ċ' => out.push('c'),
-            'Ç' | 'Ć' | 'Č' | 'Ĉ' | 'Ċ' => out.push('C'),
-            'ñ' | 'ń' | 'ň' | 'ņ' => out.push('n'),
-            'Ñ' | 'Ń' | 'Ň' | 'Ņ' => out.push('N'),
-            'ý' | 'ÿ' | 'ŷ' => out.push('y'),
-            'Ý' | 'Ÿ' | 'Ŷ' => out.push('Y'),
-            'ž' | 'ź' | 'ż' => out.push('z'),
-            'Ž' | 'Ź' | 'Ż' => out.push('Z'),
-            'š' | 'ś' | 'ŝ' | 'ş' => out.push('s'),
-            'Š' | 'Ś' | 'Ŝ' | 'Ş' => out.push('S'),
-            'ł' | 'ľ' | 'ĺ' | 'ļ' => out.push('l'),
-            'Ł' | 'Ľ' | 'Ĺ' | 'Ļ' => out.push('L'),
-            'đ' | 'ð' | 'ď' => out.push('d'),
-            'Đ' | 'Ð' | 'Ď' => out.push('D'),
-            'ř' | 'ŕ' => out.push('r'),
-            'Ř' | 'Ŕ' => out.push('R'),
-            'ť' | 'ţ' => out.push('t'),
-            'Ť' | 'Ţ' => out.push('T'),
-            'ğ' | 'ĝ' | 'ġ' | 'ģ' => out.push('g'),
-            'Ğ' | 'Ĝ' | 'Ġ' | 'Ģ' => out.push('G'),
+            'Š' | 'Ś' | 'Ŝ' | 'Ş' | 'Ș' | 'Ṡ' | 'Ṣ' | 'Ṥ' | 'Ṧ' | 'Ṩ' => out.push('S'),
+            'ť' | 'ţ' | 'ț' | 'ṫ' | 'ṭ' | 'ṯ' | 'ṱ' | 'ẗ' => out.push('t'),
+            'Ť' | 'Ţ' | 'Ț' | 'Ṫ' | 'Ṭ' | 'Ṯ' | 'Ṱ' => out.push('T'),
+            'ù' | 'ú' | 'û' | 'ü' | 'ũ' | 'ū' | 'ŭ' | 'ů' | 'ű' | 'ų' | 'ư' | 'ǔ' | 'ǖ'
+            | 'ǘ' | 'ǚ' | 'ǜ' | 'ȕ' | 'ȗ' | 'ṳ' | 'ṵ' | 'ṷ' | 'ṹ' | 'ṻ' | 'ụ' | 'ủ' | 'ứ'
+            | 'ừ' | 'ử' | 'ữ' | 'ự' => out.push('u'),
+            'Ù' | 'Ú' | 'Û' | 'Ü' | 'Ũ' | 'Ū' | 'Ŭ' | 'Ů' | 'Ű' | 'Ų' | 'Ư' | 'Ǔ' | 'Ǖ'
+            | 'Ǘ' | 'Ǚ' | 'Ǜ' | 'Ȕ' | 'Ȗ' | 'Ṳ' | 'Ṵ' | 'Ṷ' | 'Ṹ' | 'Ṻ' | 'Ụ' | 'Ủ' | 'Ứ'
+            | 'Ừ' | 'Ử' | 'Ữ' | 'Ự' => out.push('U'),
+            'ṽ' | 'ṿ' => out.push('v'),
+            'Ṽ' | 'Ṿ' => out.push('V'),
+            'ŵ' | 'ẁ' | 'ẃ' | 'ẅ' | 'ẇ' | 'ẉ' | 'ẘ' => out.push('w'),
+            'Ŵ' | 'Ẁ' | 'Ẃ' | 'Ẅ' | 'Ẇ' | 'Ẉ' => out.push('W'),
+            'ẋ' | 'ẍ' => out.push('x'),
+            'Ẋ' | 'Ẍ' => out.push('X'),
+            'ý' | 'ÿ' | 'ŷ' | 'ȳ' | 'ẏ' | 'ẙ' | 'ỳ' | 'ỵ' | 'ỷ' | 'ỹ' => out.push('y'),
+            'Ý' | 'Ÿ' | 'Ŷ' | 'Ȳ' | 'Ẏ' | 'Ỳ' | 'Ỵ' | 'Ỷ' | 'Ỹ' => out.push('Y'),
+            'ž' | 'ź' | 'ż' | 'ẑ' | 'ẓ' | 'ẕ' => out.push('z'),
+            'Ž' | 'Ź' | 'Ż' | 'Ẑ' | 'Ẓ' | 'Ẕ' => out.push('Z'),
+            'Ǯ' => out.push('Ʒ'),
+            'ǯ' => out.push('ʒ'),
+            '\u{0300}'..='\u{036F}'
+            | '\u{1AB0}'..='\u{1AFF}'
+            | '\u{1DC0}'..='\u{1DFF}'
+            | '\u{20D0}'..='\u{20FF}'
+            | '\u{FE20}'..='\u{FE2F}' => {}
             _ => out.push(ch),
         }
     }
     out
+}
+
+#[pyfunction]
+pub fn fold_latin_diacritics_rs(input: &str) -> String {
+    if input.is_ascii() {
+        return input.to_string();
+    }
+    fold_latin_diacritics_to_chars(input).into_iter().collect()
 }
 
 #[pyfunction]
@@ -934,6 +982,7 @@ pub fn get_capabilities(py: Python<'_>) -> PyResult<Bound<'_, PyDict>> {
         vec![
             "compute_soundex",
             "damerau_levenshtein_distance_rs",
+            "fold_latin_diacritics_rs",
             "normalize_company_tokens_rs",
             "normalize_batch_company_tokens_rs",
             "fold_vanity_digits_rs",
@@ -954,6 +1003,7 @@ fn register_all_functions(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(standardize_batch_e164_rs, m)?)?;
     m.add_function(wrap_pyfunction!(standardize_batch_with_country_rs, m)?)?;
     m.add_function(wrap_pyfunction!(compute_soundex, m)?)?;
+    m.add_function(wrap_pyfunction!(fold_latin_diacritics_rs, m)?)?;
     m.add_function(wrap_pyfunction!(normalize_company_tokens_rs, m)?)?;
     m.add_function(wrap_pyfunction!(normalize_batch_company_tokens_rs, m)?)?;
     m.add_function(wrap_pyfunction!(get_capabilities, m)?)?;
@@ -1186,6 +1236,20 @@ mod tests {
         assert!(batch[2].2);
         assert_eq!(batch[3].0, vec!["SOCIETE", "GENERALE", "SA"]);
     }
+
+    #[test]
+    fn test_fold_latin_diacritics_rs() {
+        assert_eq!(fold_latin_diacritics_rs("Plain ASCII 123"), "Plain ASCII 123");
+        assert_eq!(fold_latin_diacritics_rs("Đorđe & Łódź"), "Dorde & Lodz");
+        assert_eq!(fold_latin_diacritics_rs("Ħal Qormi"), "Hal Qormi");
+        assert_eq!(fold_latin_diacritics_rs("Mu\u{0308}nchen ß Æ Œ Þ"), "Munchen ss AE OE TH");
+        assert_eq!(
+            fold_latin_diacritics_rs("Brașov, Constanța — Hồ Chí Minh — ḑ"),
+            "Brasov, Constanta — Ho Chi Minh — d"
+        );
+        assert_eq!(
+            fold_latin_diacritics_rs("Ǿ ǿ Ǽ ǽ Ĳ ĳ Ǉ ǉ Ǌ ǌ Ǆ ǆ"),
+            "O o AE ae IJ ij LJ lj NJ nj DZ dz"
+        );
+    }
 }
-
-

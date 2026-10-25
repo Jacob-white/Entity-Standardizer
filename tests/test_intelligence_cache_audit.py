@@ -159,15 +159,19 @@ def test_multi_tier_cache_l1_and_l2(tmp_path: Path) -> None:
         assert sql_c.get(key1) is None
     sql_c.close()
 
-    # Test clear_cache() when address _DEFAULT_CACHE is None vs initialized
+    # Test clear_cache() and get_cache_stats() when address _DEFAULT_CACHE is None vs initialized
     from entity_standardizer.address import cache as _addr_cache
 
     _addr_cache.get_default_cache()
     assert _addr_cache._DEFAULT_CACHE is not None
+    stats_with_addr = get_cache_stats()
+    assert "address" in stats_with_addr and "phone" in stats_with_addr
     clear_cache()
     saved_addr_cache = _addr_cache._DEFAULT_CACHE
     try:
         _addr_cache._DEFAULT_CACHE = None
+        stats_without_addr = get_cache_stats()
+        assert "address" in stats_without_addr and stats_without_addr["address"]["l1"]["size"] == 0
         clear_cache()
     finally:
         _addr_cache._DEFAULT_CACHE = saved_addr_cache
