@@ -494,4 +494,66 @@ def test_version_and_openapi_docs_sync() -> None:
     for rel_md in nav_md_files:
         assert (repo_root / "docs" / rel_md).is_file(), f"Missing docs/{rel_md} referenced in mkdocs.yml"
 
+    import inspect
+    import entity_standardizer.arrow as arrow_mod
+    from entity_standardizer.cli import build_parser
+
+    live_paths = [
+        r.path
+        for r in app.routes
+        if hasattr(r, "methods") and (r.path.startswith("/v1/") or r.path in ("/health", "/ready"))
+    ]
+    assert len(live_paths) == 29
+    live_v1_paths = [p for p in live_paths if p.startswith("/v1/")]
+    assert len(live_v1_paths) == 27
+
+    mcp_tools_resp = handle_mcp_request({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
+    assert mcp_tools_resp is not None
+    live_mcp_tools = [t["name"] for t in mcp_tools_resp["result"]["tools"]]
+    assert len(live_mcp_tools) == 25
+
+    parser = build_parser()
+    subparsers = [a for a in parser._actions if hasattr(a, "choices") and isinstance(a.choices, dict)][0]
+    live_cli_cmds = list(subparsers.choices.keys())
+    assert len(live_cli_cmds) == 23
+
+    arrow_funcs = [
+        name
+        for name in dir(arrow_mod)
+        if name.startswith("standardize_") and (name.endswith("_arrow") or name.endswith("_polars"))
+    ]
+    assert len(arrow_funcs) == 16
+
+    udf_names = re.findall(r'create_function\(\s*"([^"]+)"', inspect.getsource(arrow_mod.register_duckdb_udfs))
+    assert len(udf_names) == 15
+
+    readme_text = (repo_root / "README.md").read_text(encoding="utf-8")
+    llms_text = (repo_root / "llms.txt").read_text(encoding="utf-8")
+    llms_full_text = (repo_root / "llms-full.txt").read_text(encoding="utf-8")
+    sdks_readme_text = (SDKS_DIR / "README.md").read_text(encoding="utf-8")
+    api_ref_text = (repo_root / "docs" / "api_reference.md").read_text(encoding="utf-8")
+    agent_guide_text = (repo_root / "docs" / "ai_agent_guide.md").read_text(encoding="utf-8")
+
+    for doc_text in (readme_text, llms_text, llms_full_text, api_ref_text):
+        assert "compare_addresses" in doc_text
+        assert "deduplicate_addresses" in doc_text
+        assert "standardize_socials_arrow" in doc_text
+
+    for path in live_paths:
+        assert path in llms_full_text
+        assert path in sdks_readme_text
+        assert path in api_ref_text
+
+    for tool_name in live_mcp_tools:
+        assert tool_name in llms_full_text
+        assert tool_name in api_ref_text
+        assert tool_name in agent_guide_text
+
+    for cli_cmd in live_cli_cmds:
+        assert f"`{cli_cmd}`" in llms_full_text
+
+    for udf_name in udf_names:
+        assert udf_name in llms_full_text
+        assert udf_name in api_ref_text
+
 

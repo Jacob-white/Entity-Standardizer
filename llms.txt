@@ -7,12 +7,12 @@
 - [Full Single-File LLM Context (`llms-full.txt`)](llms-full.txt): Complete self-contained context pack with all schemas, healing action codes, endpoints, MCP tools, DuckDB UDFs, and SDK methods.
 - [README](README.md): Overview, highlights, quickstart, CLI, FastAPI, and MCP server usage.
 - [5-Minute Quickstart](docs/quickstart.md): Copy-pasteable examples for all 6 standardization and comparison pillars.
-- [Complete API Reference](docs/api_reference.md): Dataclasses, functions, `CrossHealingAction` enums, 20 FastAPI routes, 17 MCP tools, and 13 DuckDB SQL UDFs.
+- [Complete API Reference](docs/api_reference.md): Dataclasses, functions, `CrossHealingAction` enums, 23 CLI commands, 29 FastAPI routes (27 `/v1/*` endpoints + `GET /health` + `GET /ready`), 25 MCP tools, 16 Arrow/Polars functions, and 15 DuckDB SQL UDFs.
 - [HTTP Endpoints & OpenAPI 3.1 Spec](docs/api_endpoints.md): Detailed HTTP endpoint reference (`GET /health`, `GET /ready`, `/v1/*`) and [`docs/openapi.json`](docs/openapi.json).
-- [AI Agent & MCP Guide](docs/ai_agent_guide.md): MCP server setup, tool selection decision tree, and autonomous agent workflows.
+- [AI Agent & MCP Guide](docs/ai_agent_guide.md): MCP server setup, 25-tool catalog, tool selection decision tree, and autonomous agent workflows.
 - [Developer Cookbook](docs/developer_cookbook.md): Production ETL, CRM hygiene, entity resolution, Arrow/Polars/DuckDB, and anti-fraud recipes.
 - [Operations & Deployment Guide](docs/operations.md): Production deployment, `ENTITY_STANDARDIZER_API_KEYS` authentication, and cache/audit configuration.
-- [Multi-Platform SDKs](sdks/README.md): TypeScript/React, Go, and .NET client libraries (`v2.1.0`).
+- [Multi-Platform SDKs](sdks/README.md): TypeScript/React, Go, and .NET client libraries (`v2.1.0`, 29 methods across all 27 `/v1/*` endpoints + `/health` + `/ready`).
 - [Security Policy](SECURITY.md): ReDoS immunity, IRSF toll-fraud detection, sentinel domain rejection, and PII masking.
 
 ## Canonical Python Imports (`entity_standardizer`)
@@ -67,15 +67,19 @@ from entity_standardizer import (
     UrlComparisonResult,
     StandardizedSocial,
 
-    # 5. Physical Address (USPS Pub 28 / UPU S42 / Rooftop & H3 Keys)
+    # 5. Physical Address (USPS Pub 28 / UPU S42 / Rooftop & H3 Keys / Comparison & Deduplication)
     standardize_address,
     validate_address,
     batch_standardize,
+    compare_addresses,
+    deduplicate_addresses,
     autocomplete_address,
     generate_normalized_address_key,
     generate_building_key,
     generate_phonetic_address_key,
     StandardizedAddress,
+    AddressComparisonResult,
+    AddressCluster,
 
     # 6. Telephone (ITU-T E.164 / E.123 / RFC 3966 / NANP / IRSF Guardrails)
     standardize_phone,
@@ -93,17 +97,23 @@ from entity_standardizer import (
     PhoneComparisonResult,
     PhoneCluster,
 
-    # 7. Columnar Apache Arrow & Polars Helpers
+    # 7. Columnar Apache Arrow, Polars & DuckDB Helpers (16 functions + 15 DuckDB SQL UDFs)
+    standardize_arrow,
+    standardize_polars,
     standardize_addresses_arrow,
     standardize_addresses_polars,
     standardize_companies_arrow,
     standardize_companies_polars,
     standardize_persons_arrow,
     standardize_persons_polars,
-)
-from entity_standardizer.arrow import (
-    standardize_arrow,
-    standardize_polars,
+    standardize_emails_arrow,
+    standardize_emails_polars,
+    standardize_urls_arrow,
+    standardize_urls_polars,
+    standardize_socials_arrow,
+    standardize_socials_polars,
+    standardize_contacts_arrow,
+    standardize_contacts_polars,
     register_duckdb_udfs,
 )
 ```
@@ -111,7 +121,7 @@ from entity_standardizer.arrow import (
 ## Key Agent Rules & Invariants
 
 1. **Prefer `standardize_contact()` when multiple entity fields exist**: It rescues phones/emails/URLs misplaced in street lines, rescues corporate names misplaced in `person_name` (`ORGANIZATION_RESCUED_FROM_PERSON_FIELD`), rescues person names from `C/O` or email display names, and infers missing countries/states across pillars.
-2. **Use `compare_contacts()`, `compare_companies()`, and `compare_persons()` for entity resolution**: Never compare raw strings directly. `compare_persons()` protects against `GENERATIONAL_SUFFIX_CONFLICT` (`Jr.` vs `Sr.`), and `compare_companies()` resolves DBA/acronym aliases (`Pacific Investment Management Company (PIMCO)` == `PIMCO LLC`).
+2. **Use `compare_contacts()`, `compare_companies()`, `compare_persons()`, and `compare_addresses()` for entity resolution**: Never compare raw strings directly. `compare_persons()` protects against `GENERATIONAL_SUFFIX_CONFLICT` (`Jr.` vs `Sr.`), `compare_companies()` resolves DBA/acronym aliases (`Pacific Investment Management Company (PIMCO)` == `PIMCO LLC`), and `compare_addresses()` / `deduplicate_addresses()` handle secondary unit and registered-agent hub distinctions.
 3. **Check `is_valid`, `routing_tier`, and `risk_flags`**:
    - Phone `routing_tier`: `"AUTO_PASS"`, `"FUZZY_REVIEW"`, `"MANUAL_STEWARDSHIP"`.
    - Block outbound SMS/Voice OTP if `"PREMIUM_RATE_IRSF_RISK"` or `"FICTITIOUS_RANGE"` is in `phone.risk_flags`.

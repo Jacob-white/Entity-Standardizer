@@ -38,6 +38,8 @@ from entity_standardizer.arrow import (
     standardize_persons_arrow,
     standardize_persons_polars,
     standardize_polars,
+    standardize_socials_arrow,
+    standardize_socials_polars,
     standardize_urls_arrow,
     standardize_urls_polars,
 )
@@ -322,6 +324,8 @@ __all__ = [
     "standardize_phone",
     "standardize_polars",
     "standardize_social",
+    "standardize_socials_arrow",
+    "standardize_socials_polars",
     "standardize_url",
     "standardize_urls_arrow",
     "standardize_urls_polars",

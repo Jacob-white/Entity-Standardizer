@@ -28,6 +28,16 @@ from entity_standardizer.batch import (
 _ORIGINAL_STANDARDIZE_ADDRESS = standardize_address
 
 
+def _get_worker_pool(processes: int):
+    """Create a multiprocessing worker pool using the fork-safe 'spawn' start method.
+
+    Using 'spawn' avoids os.fork() in multi-threaded processes (e.g., when Rayon,
+    PyArrow, DuckDB, or FastAPI thread pools are active) while ensuring each pool
+    inherits current environment variables such as ADDRESS_STANDARDIZER_CORRECT_STATE_FROM_ZIP.
+    """
+    return multiprocessing.get_context("spawn").Pool(processes=processes)
+
+
 def _csv_safe_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     """Sanitize the text produced by the standardizer (std_*, keys, rooftop) before it is written to CSV.
 
@@ -616,7 +626,7 @@ def stream_standardize_csv(
                         (chunk, street_col, street2_col, city_col, state_col, zip_col, country_col, include_confidence, include_intl, country)
                         for chunk in chunk_generator(reader, chunk_size)
                     )
-                    with multiprocessing.Pool(processes=effective_workers) as pool:
+                    with _get_worker_pool(effective_workers) as pool:
                         for processed_chunk, chunk_audits in pool.imap(_worker_process_chunk, chunk_args_gen):
                             _handle_chunk_audits(chunk_audits)
                             if geocode:
@@ -801,7 +811,7 @@ def stream_standardize_jsonl(
                     (chunk, street_col, street2_col, city_col, state_col, zip_col, country_col, include_confidence, include_intl, country)
                     for chunk in chunk_generator(reader, chunk_size)
                 )
-                with multiprocessing.Pool(processes=effective_workers) as pool:
+                with _get_worker_pool(effective_workers) as pool:
                     for processed_chunk, chunk_audits in pool.imap(_worker_process_chunk, chunk_args_gen):
                         _handle_chunk_audits(chunk_audits)
                         if geocode:
@@ -977,7 +987,7 @@ def stream_standardize_json(
                 (chunk, street_col, street2_col, city_col, state_col, zip_col, country_col, include_confidence, include_intl, country)
                 for chunk in chunk_generator(iter(raw_items), chunk_size)
             )
-            with multiprocessing.Pool(processes=effective_workers) as pool:
+            with _get_worker_pool(effective_workers) as pool:
                 for processed_chunk, chunk_audits in pool.imap(_worker_process_chunk, chunk_args_gen):
                     _handle_chunk_audits(chunk_audits)
                     if geocode:

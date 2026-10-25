@@ -49,11 +49,21 @@ the full surface, the CLI, the HTTP service, and the MCP server.
 
 ::: entity_standardizer.web.compare_urls
 
-## Address Standardization
+## Address Standardization, Comparison & Deduplication
 
 ::: entity_standardizer.address.standardize_address
 
 ::: entity_standardizer.address.StandardizedAddress
+
+::: entity_standardizer.dedup.compare_addresses
+
+::: entity_standardizer.dedup.AddressComparisonResult
+
+::: entity_standardizer.dedup.deduplicate_addresses
+
+::: entity_standardizer.dedup.AddressCluster
+
+::: entity_standardizer.address.autocomplete_address
 
 ::: entity_standardizer.address.generate_normalized_address_key
 
@@ -74,3 +84,24 @@ the full surface, the CLI, the HTTP service, and the MCP server.
 ::: entity_standardizer.dedup.deduplicate_phones
 
 ::: entity_standardizer.dedup.cluster_contact_records
+
+## Columnar Apache Arrow, Polars & DuckDB SQL UDFs
+
+::: entity_standardizer.arrow.standardize_arrow
+
+::: entity_standardizer.arrow.standardize_addresses_arrow
+
+::: entity_standardizer.arrow.standardize_companies_arrow
+
+::: entity_standardizer.arrow.standardize_persons_arrow
+
+::: entity_standardizer.arrow.standardize_emails_arrow
+
+::: entity_standardizer.arrow.standardize_urls_arrow
+
+::: entity_standardizer.arrow.standardize_socials_arrow
+
+::: entity_standardizer.arrow.standardize_contacts_arrow
+
+::: entity_standardizer.arrow.register_duckdb_udfs
+

@@ -17,12 +17,12 @@ A unified multi-national **Entity, Organization, Person, Web, Address, and Telep
 | `entity_standardizer/joint.py` | `StandardizedContact`, `ContactComparisonResult`, `CrossHealingAction`, `standardize_contact`, `batch_standardize_contacts`, `compare_contacts` |
 | `entity_standardizer/models.py`, `standardizer.py` | `StandardizedPhone`, `CountryDialPlan`, `standardize_phone`, `validate_phone`, `format_*`, `mask_phone` |
 | `entity_standardizer/registry.py`, `registry_data.py`, `nanp.py` | Universal 249 ISO-3166-1 country & ITU calling code registry and NANP (`+1`) 25-country / 50-state NPA resolver |
-| `entity_standardizer/dedup.py` | `compare_phones`, `deduplicate_phones`, `generate_phone_blocking_keys`, and 5-pillar `cluster_contact_records` |
-| `entity_standardizer/arrow.py` | Lazy-loaded Apache Arrow (`standardize_arrow`, `standardize_companies_arrow`, `standardize_persons_arrow`), Polars, and DuckDB SQL UDFs (`register_duckdb_udfs`) |
-| `entity_standardizer/cli.py`, `server.py`, `mcp/` | CLI, 19-route FastAPI HTTP microservice, and 17-tool MCP JSON-RPC stdio server |
+| `entity_standardizer/dedup.py` | `compare_phones`, `deduplicate_phones`, `compare_addresses`, `deduplicate_addresses`, `generate_phone_blocking_keys`, and 6-pillar `cluster_contact_records` |
+| `entity_standardizer/arrow.py` | Lazy-loaded 6-pillar Apache Arrow & Polars (16 functions: `standardize_arrow`/`polars`, `standardize_addresses_arrow`/`polars`, `standardize_companies_arrow`/`polars`, `standardize_persons_arrow`/`polars`, `standardize_emails_arrow`/`polars`, `standardize_urls_arrow`/`polars`, `standardize_socials_arrow`/`polars`, `standardize_contacts_arrow`/`polars`) and 15 DuckDB SQL UDFs (`register_duckdb_udfs`) |
+| `entity_standardizer/cli.py`, `server.py`, `mcp/` | 23-subcommand CLI, 29-route FastAPI HTTP microservice (27 `/v1/*` endpoints + `/health` + `/ready`), and 25-tool MCP JSON-RPC stdio server |
 | `entity_standardizer/address/` | USPS Pub 28 / UPU S42 address parser, offline rooftop geocoder, H3 spatial indexer, and delivery intelligence |
 | `src/lib.rs`, `entity_standardizer/_native_dispatch.py` | Native Rust PyO3 extension (`_entity_standardizer_rs`) and pure-Python fallback dispatcher |
-| `sdks/` | Parity-tested TypeScript/React (`sdks/typescript`), Go (`sdks/go`), and .NET (`sdks/dotnet`) client SDKs |
+| `sdks/` | Parity-tested TypeScript/React (`sdks/typescript`), Go (`sdks/go`), and .NET (`sdks/dotnet`) client SDKs (29 methods across all 27 `/v1/*` endpoints + `/health` + `/ready`) |
 | `tests/` | Full unit, contract, and regression test suite enforcing 100% line & branch coverage |
 
 ## Commands

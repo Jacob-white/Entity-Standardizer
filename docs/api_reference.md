@@ -135,9 +135,10 @@ This document specifies the public Python API, dataclasses, CLI subcommands, Fas
 
 ---
 
-### 1.5 Address & Telephone Models (`entity_standardizer.address.models`, `entity_standardizer.models`)
+### 1.5 Address & Telephone Models (`entity_standardizer.address.models`, `entity_standardizer.models`, `entity_standardizer.dedup`)
 
 - `StandardizedAddress`: `street1`, `street2`, `city`, `state`, `postal_code`, `country`, `country_iso3`, `normalized_address_key`, `building_key`, `phonetic_key`, `address_status`, `is_us`, `is_private_residence`, `is_registered_agent_hub`, `deliverability`, `latitude`, `longitude`, `precision`, `confidence_score`, `routing_tier`, `rdi`, `cmra`, `vacant`, `dpv_footnotes`, `care_of`, `failure_reason_codes`, `warning_codes`.
+- `AddressComparisonResult` & `AddressCluster`: Pairwise comparison (`compare_addresses`) and disjoint-set clustering (`deduplicate_addresses`) across exact `normalized_address_key`, `building_key`, `phonetic_key`, and rooftop Damerau-Levenshtein similarity.
 - `StandardizedPhone`: `raw_input`, `e164`, `national`, `international`, `rfc3966`, `country_calling_code`, `country_iso2`, `country_iso3`, `country_name`, `national_significant_number`, `area_code`, `subscriber_number`, `extension`, `vanity_alias`, `region_code`, `line_type`, `is_valid`, `is_possible`, `phone_key`, `phone_ext_key`, `confidence`, `routing_tier`, `risk_flags`, `healing_actions`.
 
 ---
@@ -150,28 +151,38 @@ This document specifies the public Python API, dataclasses, CLI subcommands, Fas
 | **Organization / Company** | `standardize_company` (`standardize_organization`), `batch_standardize_companies` (`batch_standardize_organizations`), `compare_companies` (`compare_organizations`), `deduplicate_companies` (`deduplicate_organizations`) |
 | **Person & Job Title** | `standardize_person`, `batch_standardize_persons`, `split_compound_persons`, `is_organization_name`, `compare_persons`, `deduplicate_persons`, `standardize_job_title`, `batch_standardize_job_titles` |
 | **Web (Email, URL, Social)** | `standardize_email`, `batch_standardize_emails`, `compare_emails`, `standardize_url` (`standardize_website`), `batch_standardize_urls` (`batch_standardize_websites`), `compare_urls` (`compare_websites`), `standardize_social`, `batch_standardize_socials` |
-| **Physical Address** | `standardize_address`, `validate_address`, `batch_standardize`, `autocomplete_address`, `generate_normalized_address_key`, `generate_building_key`, `generate_phonetic_address_key` |
+| **Physical Address** | `standardize_address`, `validate_address`, `batch_standardize`, `compare_addresses`, `deduplicate_addresses`, `autocomplete_address`, `generate_normalized_address_key`, `generate_building_key`, `generate_phonetic_address_key` |
 | **Telephone** | `standardize_phone`, `validate_phone`, `format_e164`, `format_national`, `format_international`, `format_rfc3966`, `mask_phone`, `explain_phone`, `compare_phones`, `deduplicate_phones`, `batch_standardize_phones` |
-| **Arrow, Polars & DuckDB** | `standardize_arrow`, `standardize_polars`, `standardize_companies_arrow`, `standardize_companies_polars`, `standardize_persons_arrow`, `standardize_persons_polars`, `register_duckdb_udfs` |
+| **Arrow, Polars & DuckDB (16 Functions + 15 UDFs)** | `standardize_arrow`, `standardize_polars`, `standardize_addresses_arrow`, `standardize_addresses_polars`, `standardize_companies_arrow`, `standardize_companies_polars`, `standardize_persons_arrow`, `standardize_persons_polars`, `standardize_emails_arrow`, `standardize_emails_polars`, `standardize_urls_arrow`, `standardize_urls_polars`, `standardize_socials_arrow`, `standardize_socials_polars`, `standardize_contacts_arrow`, `standardize_contacts_polars`, `register_duckdb_udfs` |
 
 ---
 
-## 3. FastAPI HTTP Microservice Endpoints (`entity_standardizer.server:app`)
+## 3. FastAPI HTTP Microservice Endpoints (`entity_standardizer.server:app` — 29 Routes: 27 `/v1/*` + `/health` + `/ready`)
 
 | Method & Path | Request Model | Description |
 | :--- | :--- | :--- |
 | `GET /health` | — | Health and version status probe |
+| `GET /ready` | — | Readiness and native Rust PyO3 acceleration status probe |
 | `POST /v1/contact` | `ContactStandardizeRequest` | Joint 6-pillar contact standardization and cross-healing |
 | `POST /v1/contact/compare` | `ContactCompareRequest` | Multi-pillar contact comparison across org, person, phone, email, URL, and address |
+| `POST /v1/contact/cluster` | `ContactClusterRequest` | Multi-pillar contact record clustering into Golden Contact Clusters |
+| `POST /v1/contact/batch` | `ContactBatchRequest` | Batch 6-pillar contact standardization |
 | `POST /v1/company` | `CompanyStandardizeRequest` | ISO 20275 company/organization standardization |
 | `POST /v1/company/compare` | `CompanyCompareRequest` | Pairwise company entity resolution comparison |
+| `POST /v1/company/deduplicate` | `CompanyDeduplicateRequest` | Company list clustering into Golden Company Records |
 | `POST /v1/person` | `PersonStandardizeRequest` | Person full-name standardization and root-name resolution |
 | `POST /v1/person/compare` | `PersonCompareRequest` | Pairwise person entity resolution comparison |
+| `POST /v1/person/deduplicate` | `PersonDeduplicateRequest` | Person list clustering into Golden Person Records |
 | `POST /v1/job-title` | `JobTitleStandardizeRequest` | Job title expansion, seniority, department, and executive classification |
 | `POST /v1/email` | `EmailStandardizeRequest` | RFC 5321/5322 email standardization and typo/sentinel detection |
+| `POST /v1/email/compare` | `EmailCompareRequest` | Pairwise email comparison |
 | `POST /v1/url` | `UrlStandardizeRequest` | Website URL canonicalization and eTLD+1 domain extraction |
+| `POST /v1/url/compare` | `UrlCompareRequest` | Pairwise URL and domain comparison |
 | `POST /v1/social` | `SocialStandardizeRequest` | Social profile handle and URL canonicalization |
 | `POST /v1/address` | `AddressStandardizeRequest` | USPS Pub 28 / UPU S42 physical address standardization |
+| `POST /v1/address/compare` | `AddressCompareRequest` | Pairwise physical address comparison |
+| `POST /v1/address/deduplicate` | `AddressDeduplicateRequest` | Physical address clustering into Golden Address Records |
+| `POST /v1/address/autocomplete` | `AddressAutocompleteRequest` | Real-time street address typeahead autocomplete |
 | `POST /v1/standardize` | `PhoneStandardizeRequest` | Single telephone number standardization |
 | `POST /v1/explain` | `PhoneStandardizeRequest` | Telephony geographic, timezone, carrier, and TCPA diagnostic report |
 | `POST /v1/compare` | `PhoneCompareRequest` | Pairwise telephone fuzzy comparison |
@@ -183,30 +194,38 @@ This document specifies the public Python API, dataclasses, CLI subcommands, Fas
 
 ## 4. Model Context Protocol (MCP) Tools (`entity-standardizer-mcp`)
 
-The stdio JSON-RPC 2.0 MCP server (`entity_standardizer.mcp.server`) exposes **17 tools**:
+The stdio JSON-RPC 2.0 MCP server (`entity_standardizer.mcp.server`) exposes **25 tools**:
 1. `standardize_contact`
 2. `compare_contacts`
-3. `standardize_company`
-4. `compare_companies`
-5. `standardize_person`
-6. `compare_persons`
-7. `standardize_job_title`
-8. `standardize_email`
-9. `standardize_url`
-10. `standardize_social`
-11. `standardize_address`
-12. `standardize_phone`
-13. `explain_phone`
-14. `compare_phones`
-15. `deduplicate_phones`
-16. `mask_phone`
-17. `lookup_country_dial_plan`
+3. `cluster_contact_records`
+4. `standardize_company`
+5. `compare_companies`
+6. `deduplicate_companies`
+7. `standardize_person`
+8. `compare_persons`
+9. `deduplicate_persons`
+10. `standardize_job_title`
+11. `standardize_email`
+12. `compare_emails`
+13. `standardize_url`
+14. `compare_urls`
+15. `standardize_social`
+16. `standardize_address`
+17. `compare_addresses`
+18. `deduplicate_addresses`
+19. `autocomplete_address`
+20. `standardize_phone`
+21. `explain_phone`
+22. `compare_phones`
+23. `deduplicate_phones`
+24. `mask_phone`
+25. `lookup_country_dial_plan`
 
 ---
 
 ## 5. DuckDB SQL Scalar UDFs (`register_duckdb_udfs`)
 
-Calling `register_duckdb_udfs(con, default_country="US")` registers **12 SQL scalar functions**:
+Calling `register_duckdb_udfs(con, default_country="US")` registers **15 SQL scalar functions**:
 - `standardize_phone_e164(VARCHAR) -> VARCHAR`
 - `standardize_phone_national(VARCHAR) -> VARCHAR`
 - `standardize_phone_international(VARCHAR) -> VARCHAR`
@@ -219,3 +238,7 @@ Calling `register_duckdb_udfs(con, default_country="US")` registers **12 SQL sca
 - `person_entity_key(VARCHAR) -> VARCHAR`
 - `standardize_email_udf(VARCHAR) -> VARCHAR`
 - `standardize_url_domain(VARCHAR) -> VARCHAR`
+- `es_standardize_address(VARCHAR, VARCHAR) -> VARCHAR`
+- `es_standardize_social(VARCHAR, VARCHAR) -> VARCHAR`
+- `es_standardize_contact_key(VARCHAR, VARCHAR, VARCHAR, VARCHAR, VARCHAR) -> VARCHAR`
+

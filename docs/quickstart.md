@@ -152,15 +152,27 @@ print(compare_urls("https://stripe.com/docs", "https://dashboard.stripe.com").is
 
 ---
 
-## 6. Domestic & International Address and Phone Standardization
+## 6. Domestic & International Address and Phone Standardization, Comparison & Deduplication
 
 ```python
-from entity_standardizer import mask_phone, standardize_address, standardize_phone
+from entity_standardizer import (
+    compare_addresses,
+    deduplicate_addresses,
+    mask_phone,
+    standardize_address,
+    standardize_phone,
+)
 
-# 1. USPS Pub 28 / UPU S42 Address Standardization
+# 1. USPS Pub 28 / UPU S42 Address Standardization, Comparison & Deduplication
 addr = standardize_address("1600 Pennsylvania Ave NW", city="Washington", state="DC", postal_code="20500")
 print(addr.street1)                 # "1600 PENNSYLVANIA AVE NW"
 print(addr.normalized_address_key)  # Deterministic rooftop key
+
+cmp_addr = compare_addresses("100 Main St, Boston, MA 02110", "100 Main Street, Boston, MA 02110")
+print(cmp_addr.is_match, cmp_addr.match_type)  # True, "EXACT_ADDRESS_KEY"
+
+addr_clusters = deduplicate_addresses(["100 Main St, Boston, MA 02110", "100 Main Street, Boston, MA 02110"])
+print(len(addr_clusters), addr_clusters[0].golden_address.street1)  # 1, "100 MAIN ST"
 
 # 2. Messy US Phone Number with Vanity Letters & Extension
 res = standardize_phone("Call 1-800-FLOWERS ext. 402!")
@@ -182,12 +194,11 @@ print(mask_phone("+1 (415) 555-2671", strategy="partial"))  # "+1******2671"
 
 ---
 
-## 7. Multi-Pillar Entity Resolution & Columnar Arrow / Polars / DuckDB
+## 7. Multi-Pillar Entity Resolution & Columnar Arrow / Polars / DuckDB (16 Functions + 15 SQL UDFs)
 
 ```python
 import duckdb
-from entity_standardizer import cluster_contact_records, compare_contacts
-from entity_standardizer.arrow import register_duckdb_udfs
+from entity_standardizer import cluster_contact_records, compare_contacts, register_duckdb_udfs
 
 # 1. Pairwise Multi-Pillar Contact Comparison
 cmp_c = compare_contacts(
@@ -196,14 +207,14 @@ cmp_c = compare_contacts(
 )
 print(cmp_c.is_match, cmp_c.matched_pillars)  # True, ['organization', 'person', 'phone']
 
-# 2. Multi-Record 5-Pillar Contact Clustering
+# 2. Multi-Record 6-Pillar Contact Clustering
 clusters = cluster_contact_records([
     {"organization": "Acme LLC", "email": "info@acme.com", "phone": "(415) 555-2671"},
     {"organization": "The Acme L.L.C.", "website": "https://www.acme.com"},
 ])
 print(len(clusters), clusters[0].match_reasons)
 
-# 3. Embedded DuckDB SQL UDFs
+# 3. Embedded DuckDB SQL UDFs (15 scalar functions across all 6 pillars)
 con = duckdb.connect(":memory:")
 register_duckdb_udfs(con)
 print(con.execute("SELECT standardize_company_name('KKR Opportunities III S.à r.l.')").fetchone()[0])
@@ -212,27 +223,36 @@ print(con.execute("SELECT standardize_company_name('KKR Opportunities III S.à r
 
 ---
 
-## 8. Command Line Interface (CLI), FastAPI Server & MCP Server
+## 8. Command Line Interface (23 Subcommands), FastAPI Server (29 Routes) & MCP Server (25 Tools)
 
 ```bash
-# Joint contact standardization
+# Joint contact standardization & clustering
 entity-standardizer contact --street1 "350 Fifth Ave" --city "New York" --postal-code "10118" --phone "555-2368" --organization "The Acme Inc."
+entity-standardizer cluster-contacts '[{"organization":"Acme Inc","phone":"212-555-2368"},{"organization":"ACME INC.","email":"info@acme.com"}]'
 
-# Single-pillar CLI commands & pairwise comparisons
+# Single-pillar CLI commands, pairwise comparisons & deduplication
 entity-standardizer company "KKR Opportunities III S.à r.l."
 entity-standardizer compare-companies "BlackRock, Inc." "BLACKROCK INCORPORATED /DE/"
+entity-standardizer dedup-companies "BlackRock, Inc." "BLACKROCK INCORPORATED /DE/" "BlackRock LLC"
 entity-standardizer person "Smith, Dr. Robert J., Jr."
 entity-standardizer compare-persons "Bob Smith" "Robert Smith"
+entity-standardizer dedup-persons "Dr. Robert J. Smith" "Bob J. Smith"
 entity-standardizer title '["Executive Officer", "Director"]'
 entity-standardizer email "Jane.Doe+tag@gmial.com"
+entity-standardizer compare-emails "jdoe@acme.com" "jdoe@acme.co.uk"
 entity-standardizer url "https://www.blackrock.com/?utm_source=x"
+entity-standardizer compare-urls "https://blackrock.com/us" "https://www.blackrock.com"
 entity-standardizer social "@openai" --platform X
 entity-standardizer address "350 Fifth Ave" --city "New York" --state "NY" --postal-code "10118"
+entity-standardizer compare-addresses "100 Main St, Boston, MA 02110" "100 Main Street, Boston, MA 02110"
+entity-standardizer dedup-addresses "100 Main St, Boston, MA 02110" "100 Main Street, Boston, MA 02110"
+entity-standardizer autocomplete "100 WALL"
 entity-standardizer parse "+44 (0) 20 7946 0912 ext 15"
 
-# Start FastAPI HTTP Microservice
+# Start FastAPI HTTP Microservice (29 routes: 27 /v1/* endpoints + GET /health + GET /ready)
 uvicorn entity_standardizer.server:app --host 0.0.0.0 --port 8000
 
-# Start Model Context Protocol (MCP) Server
+# Start Model Context Protocol (MCP) Server (25 tools)
 entity-standardizer-mcp
 ```
+

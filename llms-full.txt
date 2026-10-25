@@ -13,8 +13,8 @@ Owned and maintained by **HobbyHabbit LLC** under the **MIT License**.
 - **`_entity_standardizer_rs` / `entity_standardizer._native_dispatch`**: Optional native Rust PyO3 extension (`src/lib.rs`) accelerating phone digit extraction, Unicode digit folding, vanity translation, Damerau-Levenshtein distance, company token normalization, and batch E.164 standardization with 100% pure-Python fallback parity.
 
 ### CLI Entry Points (`pyproject.toml`)
-- `entity-standardizer` — Unified CLI (`parse`, `country`, `batch`, `compare`, `dedup`, `address`, `company`, `person`, `compare-companies`, `compare-persons`, `title`, `email`, `url`, `social`, `contact`).
-- `entity-standardizer-mcp` — Model Context Protocol (MCP) stdio JSON-RPC 2.0 server exposing 17 tools.
+- `entity-standardizer` — Unified CLI with 23 subcommands (`parse`, `country`, `batch`, `compare`, `dedup`, `address`, `compare-addresses`, `dedup-addresses`, `autocomplete`, `company`, `person`, `compare-companies`, `dedup-companies`, `compare-persons`, `dedup-persons`, `title`, `email`, `compare-emails`, `url`, `compare-urls`, `social`, `contact`, `cluster-contacts`).
+- `entity-standardizer-mcp` — Model Context Protocol (MCP) stdio JSON-RPC 2.0 server exposing 25 tools.
 
 ---
 
@@ -70,15 +70,19 @@ from entity_standardizer import (
     UrlComparisonResult,
     StandardizedSocial,
 
-    # 5. Physical Address (USPS Pub 28 / UPU S42 / Rooftop & H3 Keys)
+    # 5. Physical Address (USPS Pub 28 / UPU S42 / Rooftop & H3 Keys / Comparison & Deduplication)
     standardize_address,
     validate_address,
     batch_standardize,
+    compare_addresses,
+    deduplicate_addresses,
     autocomplete_address,
     generate_normalized_address_key,
     generate_building_key,
     generate_phonetic_address_key,
     StandardizedAddress,
+    AddressComparisonResult,
+    AddressCluster,
 
     # 6. Telephone (ITU-T E.164 / E.123 / RFC 3966 / NANP / IRSF Guardrails)
     standardize_phone,
@@ -96,17 +100,23 @@ from entity_standardizer import (
     PhoneComparisonResult,
     PhoneCluster,
 
-    # 7. Columnar Apache Arrow & Polars Helpers
+    # 7. Columnar Apache Arrow, Polars & DuckDB Helpers (16 functions + 15 DuckDB SQL UDFs)
+    standardize_arrow,
+    standardize_polars,
     standardize_addresses_arrow,
     standardize_addresses_polars,
     standardize_companies_arrow,
     standardize_companies_polars,
     standardize_persons_arrow,
     standardize_persons_polars,
-)
-from entity_standardizer.arrow import (
-    standardize_arrow,
-    standardize_polars,
+    standardize_emails_arrow,
+    standardize_emails_polars,
+    standardize_urls_arrow,
+    standardize_urls_polars,
+    standardize_socials_arrow,
+    standardize_socials_polars,
+    standardize_contacts_arrow,
+    standardize_contacts_polars,
     register_duckdb_udfs,
 )
 ```
@@ -122,6 +132,7 @@ Returned by `standardize_contact(...)`:
 - `fax: StandardizedPhone | None`
 - `organization: StandardizedCompany | None`
 - `person: StandardizedPerson | None`
+- `additional_persons: list[StandardizedPerson]`
 - `job_title: StandardizedJobTitle | None`
 - `email: StandardizedEmail | None`
 - `website: StandardizedUrl | None`
@@ -133,6 +144,7 @@ Returned by `standardize_contact(...)`:
   - `URL_RESCUED_FROM_FIELD`
   - `ORGANIZATION_RESCUED_FROM_PERSON_FIELD`
   - `PERSON_RESCUED_FROM_EMAIL_OR_CARE_OF`
+  - `COMPOUND_PERSON_SPLIT`
   - `ORGANIZATION_INFERRED_FROM_DOMAIN`
   - `EMAIL_WEBSITE_DOMAIN_MATCH`
   - `EMAIL_WEBSITE_DOMAIN_MISMATCH`
@@ -174,13 +186,15 @@ Returned by `standardize_contact(...)`:
 - `StandardizedUrl`: `raw_input`, `url`, `scheme`, `host`, `domain` (eTLD+1), `subdomain`, `public_suffix`, `brand_stem`, `path`, `inferred_country_iso2`, `url_key`, `is_valid`, `confidence`, `healing_actions` (`"SCHEME_ADDED"`, `"SCHEME_UPGRADED_HTTPS"`, `"IDNA_PUNYCODE_NORMALIZED"`, `"WWW_STRIPPED"`, `"TRACKING_PARAMS_STRIPPED"`).
 - `StandardizedSocial`: `raw_input`, `platform` (`"LINKEDIN"`, `"X"`, `"GITHUB"`, `"INSTAGRAM"`, `"FACEBOOK"`, `"YOUTUBE"`), `handle`, `profile_type`, `url`, `social_key`, `is_valid`, `confidence`, `healing_actions` (`"WWW_STRIPPED"`, `"TWITTER_CANONICALIZED_TO_X"`, `"HANDLE_EXPANDED_TO_URL"`).
 
-### 3.6 `StandardizedAddress` (`entity_standardizer.address.models`) & `StandardizedPhone` (`entity_standardizer.models`)
+### 3.6 `StandardizedAddress`, `AddressComparisonResult`, `AddressCluster` & `StandardizedPhone`
 - `StandardizedAddress`: `street1`, `street2`, `city`, `state`, `postal_code`, `country`, `country_iso3`, `normalized_address_key`, `building_key`, `phonetic_key`, `address_status`, `is_us`, `is_private_residence`, `is_registered_agent_hub`, `deliverability`, `latitude`, `longitude`, `precision`, `confidence_score`, `routing_tier`, `rdi`, `cmra`, `vacant`, `dpv_footnotes`, `care_of`, `failure_reason_codes`, `warning_codes`.
+- `AddressComparisonResult`: `is_match`, `score`, `match_type` (`"EXACT_ADDRESS_KEY"`, `"SAME_BUILDING_UNIT_VARIANT"`, `"BUILDING_KEY_MATCH"`, `"PHONETIC_KEY_MATCH"`, `"ROOFTOP_FUZZY_MATCH"`, `"SECONDARY_UNIT_CONFLICT"`, `"NO_MATCH"`, `"INVALID_INPUT"`), `address_a`, `address_b`.
+- `AddressCluster`: `cluster_id`, `golden_address`, `members`, `raw_inputs`, `match_types`.
 - `StandardizedPhone`: `raw_input`, `e164`, `national`, `international`, `rfc3966`, `country_calling_code`, `country_iso2`, `country_iso3`, `country_name`, `national_significant_number`, `area_code`, `subscriber_number`, `extension`, `vanity_alias`, `region_code`, `line_type`, `is_valid`, `is_possible`, `phone_key`, `phone_ext_key`, `confidence`, `routing_tier` (`"AUTO_PASS"`, `"FUZZY_REVIEW"`, `"MANUAL_STEWARDSHIP"`), `risk_flags` (`"PREMIUM_RATE_IRSF_RISK"`, `"FICTITIOUS_RANGE"`, `"REPEATED_DIGITS"`, `"SEQUENTIAL_DIGITS"`, `"INVALID_NANP_NPA"`), `healing_actions`.
 
 ---
 
-## 4. FastAPI HTTP Microservice Endpoints (`entity_standardizer.server:app`)
+## 4. FastAPI HTTP Microservice Endpoints (`entity_standardizer.server:app` — 29 Routes: 27 `/v1/*` + `/health` + `/ready`)
 
 When `ENTITY_STANDARDIZER_API_KEYS` is set (comma-separated keys), all `/v1/*` routes require `X-API-Key: <key>` or `Authorization: Bearer <key>` (`GET /health` and `GET /ready` remain unauthenticated).
 
@@ -188,40 +202,49 @@ When `ENTITY_STANDARDIZER_API_KEYS` is set (comma-separated keys), all `/v1/*` r
 2. `GET /ready` -> `{"status": "ready", "version": "2.1.0", "native_available": bool}`
 3. `POST /v1/contact` (`ContactStandardizeRequest`) -> `StandardizedContact`
 4. `POST /v1/contact/compare` (`ContactCompareRequest`) -> `ContactComparisonResult`
-5. `POST /v1/company` (`CompanyStandardizeRequest`) -> `StandardizedCompany`
-6. `POST /v1/company/compare` (`CompanyCompareRequest`) -> `CompanyComparisonResult`
-7. `POST /v1/person` (`PersonStandardizeRequest`) -> `StandardizedPerson`
-8. `POST /v1/person/compare` (`PersonCompareRequest`) -> `PersonComparisonResult`
-9. `POST /v1/job-title` (`JobTitleStandardizeRequest`) -> `StandardizedJobTitle`
-10. `POST /v1/email` (`EmailStandardizeRequest`) -> `StandardizedEmail`
-11. `POST /v1/url` (`UrlStandardizeRequest`) -> `StandardizedUrl`
-12. `POST /v1/social` (`SocialStandardizeRequest`) -> `StandardizedSocial`
-13. `POST /v1/address` (`AddressStandardizeRequest`) -> `StandardizedAddress`
-14. `POST /v1/standardize` (`PhoneStandardizeRequest`) -> `StandardizedPhone`
-15. `POST /v1/explain` (`PhoneStandardizeRequest`) -> `{"record": StandardizedPhone, "intelligence": dict, "explanation": dict}`
-16. `POST /v1/compare` (`PhoneCompareRequest`) -> `PhoneComparisonResult`
-17. `POST /v1/deduplicate` (`PhoneDeduplicateRequest`) -> `{"cluster_count": int, "clusters": list[PhoneCluster]}`
-18. `POST /v1/batch` (`PhoneBatchRequest`) -> `{"count": int, "results": list[StandardizedPhone]}`
-19. `GET /v1/countries` -> `{"count": 249, "countries": list[CountryDialPlan]}`
-20. `GET /v1/countries/{identifier}` -> `CountryDialPlan`
+5. `POST /v1/contact/cluster` (`ContactClusterRequest`) -> `{"cluster_count": int, "clusters": list[ContactCluster]}`
+6. `POST /v1/contact/batch` (`ContactBatchRequest`) -> `{"count": int, "results": list[StandardizedContact]}`
+7. `POST /v1/company` (`CompanyStandardizeRequest`) -> `StandardizedCompany`
+8. `POST /v1/company/compare` (`CompanyCompareRequest`) -> `CompanyComparisonResult`
+9. `POST /v1/company/deduplicate` (`CompanyDeduplicateRequest`) -> `{"cluster_count": int, "clusters": list[CompanyCluster]}`
+10. `POST /v1/person` (`PersonStandardizeRequest`) -> `StandardizedPerson`
+11. `POST /v1/person/compare` (`PersonCompareRequest`) -> `PersonComparisonResult`
+12. `POST /v1/person/deduplicate` (`PersonDeduplicateRequest`) -> `{"cluster_count": int, "clusters": list[PersonCluster]}`
+13. `POST /v1/job-title` (`JobTitleStandardizeRequest`) -> `StandardizedJobTitle`
+14. `POST /v1/email` (`EmailStandardizeRequest`) -> `StandardizedEmail`
+15. `POST /v1/email/compare` (`EmailCompareRequest`) -> `EmailComparisonResult`
+16. `POST /v1/url` (`UrlStandardizeRequest`) -> `StandardizedUrl`
+17. `POST /v1/url/compare` (`UrlCompareRequest`) -> `UrlComparisonResult`
+18. `POST /v1/social` (`SocialStandardizeRequest`) -> `StandardizedSocial`
+19. `POST /v1/address` (`AddressStandardizeRequest`) -> `StandardizedAddress`
+20. `POST /v1/address/compare` (`AddressCompareRequest`) -> `AddressComparisonResult`
+21. `POST /v1/address/deduplicate` (`AddressDeduplicateRequest`) -> `{"cluster_count": int, "clusters": list[AddressCluster]}`
+22. `POST /v1/address/autocomplete` (`AddressAutocompleteRequest`) -> `{"count": int, "suggestions": list[AutocompleteSuggestion]}`
+23. `POST /v1/standardize` (`PhoneStandardizeRequest`) -> `StandardizedPhone`
+24. `POST /v1/explain` (`PhoneStandardizeRequest`) -> `{"record": StandardizedPhone, "intelligence": dict, "explanation": dict}`
+25. `POST /v1/compare` (`PhoneCompareRequest`) -> `PhoneComparisonResult`
+26. `POST /v1/deduplicate` (`PhoneDeduplicateRequest`) -> `{"cluster_count": int, "clusters": list[PhoneCluster]}`
+27. `POST /v1/batch` (`PhoneBatchRequest`) -> `{"count": int, "results": list[StandardizedPhone]}`
+28. `GET /v1/countries` -> `{"count": 249, "countries": list[CountryDialPlan]}`
+29. `GET /v1/countries/{identifier}` -> `CountryDialPlan`
 
 ---
 
 ## 5. Model Context Protocol (MCP) Server (`entity-standardizer-mcp`)
 
-Run via `entity-standardizer-mcp` or `python -m entity_standardizer.mcp.server`. Exposes **17 tools**:
-- `standardize_contact`, `compare_contacts`
-- `standardize_company`, `compare_companies`
-- `standardize_person`, `compare_persons`, `standardize_job_title`
-- `standardize_email`, `standardize_url`, `standardize_social`
-- `standardize_address`
+Run via `entity-standardizer-mcp` or `python -m entity_standardizer.mcp.server`. Exposes **25 tools**:
+- `standardize_contact`, `compare_contacts`, `cluster_contact_records`
+- `standardize_company`, `compare_companies`, `deduplicate_companies`
+- `standardize_person`, `compare_persons`, `deduplicate_persons`, `standardize_job_title`
+- `standardize_email`, `compare_emails`, `standardize_url`, `compare_urls`, `standardize_social`
+- `standardize_address`, `compare_addresses`, `deduplicate_addresses`, `autocomplete_address`
 - `standardize_phone`, `explain_phone`, `compare_phones`, `deduplicate_phones`, `mask_phone`, `lookup_country_dial_plan`
 
 ---
 
 ## 6. DuckDB SQL Scalar UDFs (`register_duckdb_udfs`)
 
-Calling `register_duckdb_udfs(con, default_country="US")` registers **13 SQL scalar UDFs**:
+Calling `register_duckdb_udfs(con, default_country="US")` registers **15 SQL scalar UDFs**:
 - `standardize_phone_e164(VARCHAR) -> VARCHAR`
 - `standardize_phone_national(VARCHAR) -> VARCHAR`
 - `standardize_phone_international(VARCHAR) -> VARCHAR`
@@ -235,9 +258,12 @@ Calling `register_duckdb_udfs(con, default_country="US")` registers **13 SQL sca
 - `standardize_email_udf(VARCHAR) -> VARCHAR`
 - `standardize_url_domain(VARCHAR) -> VARCHAR`
 - `es_standardize_address(VARCHAR, VARCHAR) -> VARCHAR`
+- `es_standardize_social(VARCHAR, VARCHAR) -> VARCHAR`
+- `es_standardize_contact_key(VARCHAR, VARCHAR, VARCHAR, VARCHAR, VARCHAR) -> VARCHAR`
 
 ---
 
 ## 7. Multi-Platform Client SDKs (`v2.1.0`)
 
-All 3 official client SDKs (`sdks/typescript`, `sdks/go`, `sdks/dotnet`) expose `EntityStandardizerClient` (with `PhoneStandardizerClient` backwards-compatible alias) and provide 100% model and method parity across all HTTP operations (`health`, `standardizeContact`, `compareContacts`, `standardizeCompany`, `compareCompanies`, `standardizePerson`, `comparePersons`, `standardizeJobTitle`, `standardizeEmail`, `standardizeUrl`, `standardizeSocial`, `standardizeAddress`, `standardize`, `explain`, `compare`, `deduplicate`, `batch`, `listCountries`, `getCountry`) verified on every test run via `tests/test_sdk_contract.py`.
+All 3 official client SDKs (`sdks/typescript`, `sdks/go`, `sdks/dotnet`) expose `EntityStandardizerClient` (with `PhoneStandardizerClient` backwards-compatible alias) and provide 100% model and method parity across all **29 HTTP operations** (`health`, `ready`, `standardizeContact`, `compareContacts`, `clusterContacts`, `batchStandardizeContacts`, `standardizeCompany`, `compareCompanies`, `deduplicateCompanies`, `standardizePerson`, `comparePersons`, `deduplicatePersons`, `standardizeJobTitle`, `standardizeEmail`, `compareEmails`, `standardizeUrl`, `compareUrls`, `standardizeSocial`, `standardizeAddress`, `compareAddresses`, `deduplicateAddresses`, `autocompleteAddress`, `standardize`, `explain`, `compare`, `deduplicate`, `batch`, `listCountries`, `getCountry` — 27 `/v1/*` methods + `health` + `ready`) verified on every test run via `tests/test_sdk_contract.py`.
+

@@ -14,12 +14,12 @@ A unified, high-performance multi-national **Entity, Organization, Person, Web, 
 ## 📚 Documentation & Quickstarts
 
 - **[5-Minute Quickstart Guide](docs/quickstart.md)** — Step-by-step onboarding for joint contact cross-healing, company/person/web standardization, address & phone parsing, multi-pillar comparison & deduplication, Arrow/Polars/DuckDB SQL UDFs, CLI, and HTTP service.
-- **[Complete API Reference](docs/api_reference.md)** — Full reference for all Python dataclasses, functions, cross-healing enums, CLI commands, 20 HTTP routes (18 `/v1/*` endpoints + `GET /health` + `GET /ready`), 17 MCP tools, and columnar/SQL UDFs.
+- **[Complete API Reference](docs/api_reference.md)** — Full reference for all Python dataclasses, functions, cross-healing enums, 23 CLI commands, 29 HTTP routes (27 `/v1/*` endpoints + `GET /health` + `GET /ready`), 25 MCP tools, 16 Arrow/Polars functions, and 15 DuckDB SQL UDFs.
 - **[HTTP Endpoints & OpenAPI 3.1 Spec](docs/api_endpoints.md)** — Detailed HTTP endpoint reference and [`docs/openapi.json`](docs/openapi.json).
-- **[AI Agent & MCP Integration Guide](docs/ai_agent_guide.md)** & **[`llms.txt`](llms.txt)** — Model Context Protocol (MCP) setup, 17-tool catalog, autonomous agent decision tree, and token-efficient LLM context index.
+- **[AI Agent & MCP Integration Guide](docs/ai_agent_guide.md)** & **[`llms.txt`](llms.txt)** — Model Context Protocol (MCP) setup, 25-tool catalog, autonomous agent decision tree, and token-efficient LLM context index.
 - **[Developer Cookbook & Production Recipes](docs/developer_cookbook.md)** — Copy-pasteable recipes for SEC/Form ADV hygiene, couple splitting, multi-pillar deduplication, Polars/Arrow/DuckDB ETL, and TCPA/IRSF anti-fraud guardrails.
 - **[Operations & Deployment Guide](docs/operations.md)** — Production deployment, `ENTITY_STANDARDIZER_API_KEYS` authentication, health/readiness probes, and cache/audit configuration.
-- **[Multi-Platform Client SDKs](sdks/README.md)** — Client library specifications and examples for TypeScript/React, .NET, and Go.
+- **[Multi-Platform Client SDKs](sdks/README.md)** — Client library specifications and examples for TypeScript/React, .NET, and Go (29 client methods across all 27 `/v1/*` endpoints + `/health` + `/ready`).
 - **[Security Policy & Anti-Fraud Guide](SECURITY.md)** — Threat model, ReDoS prevention, International Revenue Share Fraud (IRSF) guardrails, sentinel domain rejection, and vulnerability disclosure procedures.
 
 ---
@@ -27,7 +27,7 @@ A unified, high-performance multi-national **Entity, Organization, Person, Web, 
 ## 🌟 Highlights & Enterprise Capabilities
 
 1. **Unified Package Namespace (`entity_standardizer`)**:
-   - Import the entire multi-pillar surface from `entity_standardizer` (`standardize_contact`, `standardize_entity`, `compare_contacts`, `cluster_contact_records`, `standardize_company`, `compare_companies`, `deduplicate_companies`, `standardize_person`, `split_compound_persons`, `compare_persons`, `deduplicate_persons`, `standardize_job_title`, `standardize_email`, `compare_emails`, `standardize_url`, `compare_urls`, `standardize_social`, `standardize_address`, `standardize_phone`, `compare_phones`, `deduplicate_phones`) and dedicated address submodules from `entity_standardizer.address`.
+   - Import the entire multi-pillar surface from `entity_standardizer` (`standardize_contact`, `standardize_entity`, `batch_standardize_contacts`, `compare_contacts`, `cluster_contact_records`, `standardize_company`, `compare_companies`, `deduplicate_companies`, `standardize_person`, `split_compound_persons`, `compare_persons`, `deduplicate_persons`, `standardize_job_title`, `standardize_email`, `compare_emails`, `standardize_url`, `compare_urls`, `standardize_social`, `standardize_address`, `compare_addresses`, `deduplicate_addresses`, `autocomplete_address`, `standardize_phone`, `compare_phones`, `deduplicate_phones`) and dedicated address submodules from `entity_standardizer.address`.
 2. **Multi-Pillar Entity Cross-Healing (`standardize_contact` / `standardize_entity`)**:
    - **Phone, Email, URL & Organization Rescue from Misplaced Fields** (`PHONE_RESCUED_FROM_ADDRESS_FIELD`, `EMAIL_RESCUED_FROM_FIELD`, `URL_RESCUED_FROM_FIELD`, `ORGANIZATION_RESCUED_FROM_PERSON_FIELD`): Extracts misplaced phones, emails, URLs, and corporate entities (`"Augnition Global Investors US GP, LLC"`) from address or person fields before standardization.
    - **Person Rescue & Domain-to-Organization Attribution** (`PERSON_RESCUED_FROM_EMAIL_OR_CARE_OF`, `ORGANIZATION_INFERRED_FROM_DOMAIN`, `EMAIL_WEBSITE_DOMAIN_MATCH` / `MISMATCH`): Infers missing person names from `C/O` lines or email display names/local parts and attributes corporate domains to organization brand stems.
@@ -36,12 +36,12 @@ A unified, high-performance multi-national **Entity, Organization, Person, Web, 
    - **Company/Organization** (`standardize_company`, `compare_companies`, `deduplicate_companies`): ISO 20275 ELF legal suffix canonicalization across 30+ domestic, European, APAC, LATAM, and offshore fund forms (`LLC`, `INC`, `LP`, `LLLP`, `SARL`, `SCSP`, `SPC`, `DST`, `REIT`, `GMBH`, `KGAA`, `AG`, `SE`, `PLC`, `BV`, `NV`, `SP Z OO`, `PTE LTD`, `PVT LTD`, `SDN BHD`, `BHD`, `KFT`, `SRO`, `DOO`, `OU`, `KK`, `SA DE CV`, `LTDA`), Latin diacritic & ligature folding (`S.à r.l.` $\to$ `SARL`, `OÜ` $\to$ `OU`), SEC `/DE/` suffix stripping, trust agreement date guard (`U/A/D`, `F/B/O`), parenthesized acronym alias (`(PIMCO)`) and Series LLC / Segregated Portfolio (`Series A`, `Segregated Portfolio 1`) extraction, and deterministic `company_key` / `brand_key`.
    - **Person & Job Title** (`standardize_person`, `split_compound_persons`, `standardize_job_title`, `compare_persons`, `deduplicate_persons`): Latin diacritics & ligature folding (`José María Núñez` $\to$ `JOSE MARIA NUNEZ`, `Søren`, `Jürgen Weiß`, `Łukasz`), organization-in-person-field guard (`is_organization_name`), placeholder stripping (`N/A`, `[none]`, `---`), joint/couple person splitting (`"Mr. and Mrs. Robert J. Smith"`, `"John & Jane Smith"`), salutation/nickname/compound-surname/suffix/credential parsing, `Last, First` un-inversion, nickname-to-root resolution (`Bob` $\to$ `ROBERT`), JSON role array unpacking (`'["Executive Officer", "Director"]'`), and `seniority_level` / `department` / `is_executive` classification.
    - **Email, Website & Social** (`standardize_email`, `standardize_url`, `standardize_social`, `compare_emails`, `compare_urls`): RFC 5321/5322 normalization, IDNA/Punycode, `+subaddress` and Gmail dot canonicalization, webmail typo healing (`gmial.com` $\to$ `gmail.com`), sentinel/placeholder domain rejection (`example.com`, `none.com`, `test.com`), URL tracking parameter removal (`utm_*`, `fbclid`, `gclid`), eTLD+1 domain extraction, and canonical social handles (`LINKEDIN`, `X`, `GITHUB`, `INSTAGRAM`, `FACEBOOK`, `YOUTUBE`).
-4. **USPS Publication 28, UPU S42 & Spatial Rooftop Address Standardization**:
-   - Deterministic street suffix/directional/secondary unit normalization, typo recovery, DPV/RDI/CMRA delivery intelligence, registered-agent corporate hub detection, H3 spatial indexing, and deterministic `normalized_address_key`, `building_key`, and `phonetic_key` generation.
+4. **USPS Publication 28, UPU S42 & Spatial Rooftop Address Standardization, Comparison & Deduplication**:
+   - Deterministic street suffix/directional/secondary unit normalization, typo recovery, DPV/RDI/CMRA delivery intelligence, registered-agent corporate hub detection, H3 spatial indexing, typeahead `autocomplete_address`, pairwise `compare_addresses` (`AddressComparisonResult`), `deduplicate_addresses` (`AddressCluster`), and deterministic `normalized_address_key`, `building_key`, and `phonetic_key` generation.
 5. **Universal 249 ISO-3166-1 Country & ITU-T Dial-Plan Registry**:
    - Deterministic dial-plan metadata (`CountryDialPlan`) for every ISO-3166-1 jurisdiction, producing **ITU-T E.164**, **ITU-T E.123 National**, **ITU-T E.123 International**, and **IETF RFC 3966 URI** formats alongside NANP 25-country / 50-state attribution.
 6. **Multi-Pillar Entity Resolution & Modern Data Stack**:
-   - Compares and clusters multi-pillar records (`compare_contacts`, `cluster_contact_records`, `deduplicate_companies`, `deduplicate_persons`, `deduplicate_phones`), provides `mask_phone()` privacy redaction, lazy-loaded Apache Arrow / Polars (`standardize_arrow`, `standardize_addresses_arrow`, `standardize_companies_arrow`, `standardize_persons_arrow`) & DuckDB SQL scalar UDFs (`register_duckdb_udfs`), and parity-tested TypeScript/React, Go, and .NET SDKs.
+   - Compares and clusters multi-pillar records (`compare_contacts`, `cluster_contact_records`, `deduplicate_companies`, `deduplicate_persons`, `deduplicate_addresses`, `deduplicate_phones`), provides `mask_phone()` privacy redaction, lazy-loaded 6-pillar Apache Arrow / Polars (`standardize_arrow`, `standardize_addresses_arrow`, `standardize_companies_arrow`, `standardize_persons_arrow`, `standardize_emails_arrow`, `standardize_urls_arrow`, `standardize_socials_arrow`, `standardize_contacts_arrow` and `*_polars` counterparts — 16 functions) & 15 DuckDB SQL scalar UDFs (`register_duckdb_udfs`), and parity-tested TypeScript/React, Go, and .NET SDKs.
 
 ---
 
@@ -123,29 +123,39 @@ assert mask_phone("+1 (415) 555-2671", strategy="partial") == "+1******2671"
 ## 💻 Command Line Interface (CLI), FastAPI Microservice & MCP Tools
 
 ```bash
-# Joint multi-pillar contact standardization
+# Joint multi-pillar contact standardization & clustering
 entity-standardizer contact --street1 "350 Fifth Ave" --city "New York" --postal-code "10118" --phone "555-2368" --organization "The Acme Inc." --person-name "Smith, Bob" --email "bob@acme.com"
+entity-standardizer cluster-contacts '[{"organization":"Acme Inc","phone":"212-555-2368"},{"organization":"ACME INC.","email":"info@acme.com"}]'
 
-# Standardize or compare organization, person, job title, email, URL, or social profile
+# Standardize, compare, or deduplicate organization, person, job title, email, URL, or social profile
 entity-standardizer company "KKR Opportunities III S.à r.l."
 entity-standardizer compare-companies "BlackRock, Inc." "BLACKROCK INCORPORATED /DE/"
+entity-standardizer dedup-companies "BlackRock, Inc." "BLACKROCK INCORPORATED /DE/" "BlackRock LLC"
 entity-standardizer person "Dr. Robert (Bob) J. Smith, Jr., MD"
 entity-standardizer compare-persons "Bob J. Smith" "Robert M. Smith"
+entity-standardizer dedup-persons "Dr. Robert J. Smith" "Bob J. Smith"
 entity-standardizer title '["Executive Officer", "Director"]'
 entity-standardizer email "Jane.Doe+tag@gmial.com"
+entity-standardizer compare-emails "jdoe@acme.com" "jdoe@acme.co.uk"
 entity-standardizer url "http://www.acme.co.uk/?utm_source=newsletter"
+entity-standardizer compare-urls "https://acme.com/about" "https://www.acme.com"
 entity-standardizer social "@openai" --platform X
 
-# Standardize a physical address or phone number
+# Standardize, compare, deduplicate, or autocomplete physical addresses & phone numbers
 entity-standardizer address "350 Fifth Ave" --city "New York" --state "NY" --postal-code "10118"
+entity-standardizer compare-addresses "100 Main St, Boston, MA 02110" "100 Main Street, Boston, MA 02110"
+entity-standardizer dedup-addresses "100 Main St, Boston, MA 02110" "100 Main Street, Boston, MA 02110"
+entity-standardizer autocomplete "100 WALL"
 entity-standardizer parse "+44 (0) 20 7946 0912 ext 42"
+entity-standardizer compare "(415) 555-2671" "+1-415-555-2671"
+entity-standardizer dedup "(415) 555-2671" "+14155552671"
 entity-standardizer country JP
 entity-standardizer batch input.csv output.csv --phone-col phone --country-col country
 
-# Run the FastAPI HTTP service (20 HTTP routes across phone, address, company, person, job-title, email, url, social, contact)
+# Run the FastAPI HTTP service (29 HTTP routes: 27 /v1/* endpoints + GET /health + GET /ready)
 uvicorn entity_standardizer.server:app --host 0.0.0.0 --port 8000
 
-# Run the Model Context Protocol (MCP) server (17 tools across all entity standardization and comparison pillars)
+# Run the Model Context Protocol (MCP) server (25 tools across all entity standardization, comparison, and clustering pillars)
 entity-standardizer-mcp
 ```
 

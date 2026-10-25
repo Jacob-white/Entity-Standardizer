@@ -67,7 +67,9 @@ Deduplicate noisy company lists, person lists, or full multi-pillar contact reco
 ```python
 from entity_standardizer import (
     cluster_contact_records,
+    compare_addresses,
     compare_contacts,
+    deduplicate_addresses,
     deduplicate_companies,
     deduplicate_persons,
 )
@@ -91,7 +93,14 @@ per_clusters = deduplicate_persons([
 assert len(per_clusters) == 1
 assert per_clusters[0].golden_person.full_name == "ROBERT J SMITH"
 
-# 3. 5-Pillar Contact Record Clustering
+# 3. Compare & Deduplicate Physical Addresses
+addr_clusters = deduplicate_addresses([
+    "100 Main St, Boston, MA 02110",
+    "100 Main Street, Boston, MA 02110",
+])
+assert len(addr_clusters) == 1 and addr_clusters[0].golden_address.street1 == "100 MAIN ST"
+
+# 4. 6-Pillar Contact Record Clustering
 contact_clusters = cluster_contact_records([
     {"organization": "Pacific Investment Management Company (PIMCO)", "phone": "(949) 555-0140"},
     {"organization": "PIMCO LLC", "email": "inst@pimco.com"},
@@ -102,7 +111,7 @@ assert len(contact_clusters) == 1
 
 ---
 
-## Recipe 4: High-Throughput Columnar ETL with Polars, Apache Arrow & DuckDB
+## Recipe 4: High-Throughput Columnar ETL with Polars, Apache Arrow & DuckDB (16 Functions + 15 SQL UDFs)
 
 Process analytical tables and data lakehouse partitions without row-by-row boilerplate:
 
@@ -110,24 +119,31 @@ Process analytical tables and data lakehouse partitions without row-by-row boile
 import duckdb
 import polars as pl
 from entity_standardizer import (
+    register_duckdb_udfs,
+    standardize_addresses_polars,
     standardize_companies_polars,
     standardize_persons_polars,
+    standardize_polars,
+    standardize_socials_polars,
 )
-from entity_standardizer.arrow import register_duckdb_udfs, standardize_polars
 
-# 1. Polars DataFrame Enrichment across Phone, Company, and Person Columns
+# 1. Polars DataFrame Enrichment across Address, Phone, Company, Person, and Social Columns
 df = pl.DataFrame({
+    "address": ["350 Fifth Ave, New York, NY 10118", "1600 Amphitheatre Pkwy, Mountain View, CA 94043"],
     "company": ["BlackRock, Inc. /DE/", "KKR Opportunities III S.à r.l."],
     "person": ["Smith, Dr. Bob J.", "José María Núñez"],
     "phone": ["(212) 555-0199", "+352 26 12 34 56"],
+    "social": ["@blackrock", "@kkr"],
     "country": ["US", "LU"],
 })
+df = standardize_addresses_polars(df, column="address", country_column="country")
 df = standardize_companies_polars(df, company_col="company", country_col="country")
 df = standardize_persons_polars(df, person_col="person")
 df = standardize_polars(df, phone_col="phone", country_col="country")
-print(df.select(["company_legal_name", "person_full_name", "phone_e164"]))
+df = standardize_socials_polars(df, social_col="social", default_platform="X")
+print(df.select(["address_line_1", "company_legal_name", "person_full_name", "phone_e164", "social_url"]))
 
-# 2. DuckDB In-Engine SQL Scalar UDFs
+# 2. DuckDB In-Engine SQL Scalar UDFs (15 scalar functions)
 con = duckdb.connect(":memory:")
 register_duckdb_udfs(con, default_country="US")
 rows = con.execute("""
@@ -137,7 +153,10 @@ rows = con.execute("""
         standardize_person_name('José María Núñez')      AS person_name,
         person_entity_key('Bob J. Smith')                AS person_root_key,
         standardize_email_udf('Jane.Doe+vip@gmial.com')  AS clean_email,
-        standardize_url_domain('https://www.stripe.com/docs?utm_source=x') AS domain
+        standardize_url_domain('https://www.stripe.com/docs?utm_source=x') AS domain,
+        es_standardize_address('350 Fifth Avenue, New York, NY 10118', 'US') AS rooftop_address,
+        es_standardize_social('@openai', 'X')            AS social_url,
+        es_standardize_contact_key('350 Fifth Ave, New York, NY 10118', '(212) 555-2368', 'Acme Inc.', 'Bob Smith', 'bob@acme.com') AS contact_key
 """).fetchall()
 print(rows)
 ```
