@@ -120,7 +120,7 @@ def build_parser() -> argparse.ArgumentParser:
     contact_cmd.add_argument("--phone", default=None, help="Raw telephone number.")
     contact_cmd.add_argument("--fax", default=None, help="Raw fax number.")
     contact_cmd.add_argument("--organization", default=None, help="Raw company or organization name.")
-    contact_cmd.add_argument("--person-name", default=None, help="Raw contact person full name.")
+    contact_cmd.add_argument("--person-name", "--person", default=None, help="Raw contact person full name.")
     contact_cmd.add_argument("--job-title", default=None, help="Raw contact job title.")
     contact_cmd.add_argument("--email", default=None, help="Raw contact email address.")
     contact_cmd.add_argument("--website", default=None, help="Raw contact website URL.")

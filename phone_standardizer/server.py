@@ -150,14 +150,14 @@ class ContactCompareRequest(BaseModel):
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application instance."""
     app = FastAPI(
-        title="Phone Standardizer API",
-        version="2.0.0",
+        title="Entity Standardizer API",
+        version="2.1.0",
         description="Universal multi-national entity, address, phone, company, person, and web standardization service.",
     )
 
     @app.get("/health")
     def health() -> dict[str, str]:
-        return {"status": "ok", "version": "2.0.0"}
+        return {"status": "ok", "version": "2.1.0"}
 
     @app.post("/v1/standardize")
     def standardize_endpoint(req: PhoneStandardizeRequest) -> dict[str, Any]:

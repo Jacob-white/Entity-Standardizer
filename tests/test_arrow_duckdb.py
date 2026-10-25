@@ -113,7 +113,7 @@ def test_standardize_polars_df_and_lazy() -> None:
     assert lazy_out.collect()["phone_e164"].to_list() == ["+14155552671", "+493012345678"]
 
 
-def test_standardize_companies_and_persons_arrow_and_polars() -> None:
+def test_standardize_companies_and_persons_arrow_and_polars(monkeypatch) -> None:
     from entity_standardizer import (
         standardize_companies_arrow,
         standardize_companies_polars,
@@ -130,6 +130,7 @@ def test_standardize_companies_and_persons_arrow_and_polars() -> None:
     with pytest.raises(ValueError, match="company_col"):
         standardize_companies_arrow(comp_tbl, company_col="missing")
 
+    monkeypatch.setattr(arrow_mod, "pa", arrow_mod._UNSET)
     out_comp_tbl = standardize_companies_arrow(comp_tbl, company_col="company", country_col="country")
     assert out_comp_tbl.column("company_legal_name").to_pylist() == [
         "BLACKROCK INC",
@@ -137,6 +138,8 @@ def test_standardize_companies_and_persons_arrow_and_polars() -> None:
     ]
 
     comp_df = pl.DataFrame({"company": ["Acme Real Estate LLC - Series A"]})
+    monkeypatch.setattr(arrow_mod, "pa", arrow_mod._UNSET)
+    monkeypatch.setattr(arrow_mod, "pl", arrow_mod._UNSET)
     out_comp_df = standardize_companies_polars(comp_df, company_col="company")
     assert out_comp_df["company_legal_suffix"].to_list() == ["LLC"]
 
@@ -144,6 +147,7 @@ def test_standardize_companies_and_persons_arrow_and_polars() -> None:
     with pytest.raises(ValueError, match="person_col"):
         standardize_persons_arrow(per_tbl, person_col="missing")
 
+    monkeypatch.setattr(arrow_mod, "pa", arrow_mod._UNSET)
     out_per_tbl = standardize_persons_arrow(per_tbl, person_col="person")
     assert out_per_tbl.column("person_full_name").to_pylist() == [
         "ROBERT J SMITH JR",
@@ -151,6 +155,8 @@ def test_standardize_companies_and_persons_arrow_and_polars() -> None:
     ]
 
     per_df = pl.DataFrame({"person": ["Bob J. Smith"]})
+    monkeypatch.setattr(arrow_mod, "pa", arrow_mod._UNSET)
+    monkeypatch.setattr(arrow_mod, "pl", arrow_mod._UNSET)
     out_per_df = standardize_persons_polars(per_df, person_col="person")
     assert out_per_df["person_root_first_name"].to_list() == ["ROBERT"]
 

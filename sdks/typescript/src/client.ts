@@ -4,10 +4,17 @@
 
 import {
   AddressStandardizeRequest,
+  CompanyCompareRequest,
+  CompanyComparisonResult,
   CompanyStandardizeRequest,
+  ContactCompareRequest,
+  ContactComparisonResult,
   ContactStandardizeRequest,
   CountryDialPlan,
   EmailStandardizeRequest,
+  JobTitleStandardizeRequest,
+  PersonCompareRequest,
+  PersonComparisonResult,
   PersonStandardizeRequest,
   PhoneBatchRequest,
   PhoneCluster,
@@ -21,6 +28,7 @@ import {
   StandardizedCompany,
   StandardizedContact,
   StandardizedEmail,
+  StandardizedJobTitle,
   StandardizedPerson,
   StandardizedPhone,
   StandardizedSocial,
@@ -232,6 +240,22 @@ export class PhoneStandardizerClient {
     return (await res.json()) as StandardizedCompany;
   }
 
+  async compareCompanies(
+    req: CompanyCompareRequest,
+    options?: RequestOptions
+  ): Promise<CompanyComparisonResult> {
+    const res = await this.fetchImpl(`${this.baseUrl}/v1/company/compare`, {
+      method: "POST",
+      headers: this.headers,
+      body: JSON.stringify(req),
+      signal: options?.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Compare companies failed with status ${res.status}`);
+    }
+    return (await res.json()) as CompanyComparisonResult;
+  }
+
   async standardizePerson(
     req: PersonStandardizeRequest,
     options?: RequestOptions
@@ -246,6 +270,38 @@ export class PhoneStandardizerClient {
       throw new Error(`Standardize person failed with status ${res.status}`);
     }
     return (await res.json()) as StandardizedPerson;
+  }
+
+  async comparePersons(
+    req: PersonCompareRequest,
+    options?: RequestOptions
+  ): Promise<PersonComparisonResult> {
+    const res = await this.fetchImpl(`${this.baseUrl}/v1/person/compare`, {
+      method: "POST",
+      headers: this.headers,
+      body: JSON.stringify(req),
+      signal: options?.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Compare persons failed with status ${res.status}`);
+    }
+    return (await res.json()) as PersonComparisonResult;
+  }
+
+  async standardizeJobTitle(
+    req: JobTitleStandardizeRequest,
+    options?: RequestOptions
+  ): Promise<StandardizedJobTitle> {
+    const res = await this.fetchImpl(`${this.baseUrl}/v1/job-title`, {
+      method: "POST",
+      headers: this.headers,
+      body: JSON.stringify(req),
+      signal: options?.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Standardize job title failed with status ${res.status}`);
+    }
+    return (await res.json()) as StandardizedJobTitle;
   }
 
   async standardizeEmail(
@@ -310,5 +366,21 @@ export class PhoneStandardizerClient {
       throw new Error(`Standardize contact failed with status ${res.status}`);
     }
     return (await res.json()) as StandardizedContact;
+  }
+
+  async compareContacts(
+    req: ContactCompareRequest,
+    options?: RequestOptions
+  ): Promise<ContactComparisonResult> {
+    const res = await this.fetchImpl(`${this.baseUrl}/v1/contact/compare`, {
+      method: "POST",
+      headers: this.headers,
+      body: JSON.stringify(req),
+      signal: options?.signal,
+    });
+    if (!res.ok) {
+      throw new Error(`Compare contacts failed with status ${res.status}`);
+    }
+    return (await res.json()) as ContactComparisonResult;
   }
 }

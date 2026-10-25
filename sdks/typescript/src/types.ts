@@ -58,8 +58,22 @@ export interface CompanyStandardizeRequest {
   country?: string | null;
 }
 
+export interface CompanyCompareRequest {
+  company_a: string;
+  company_b: string;
+}
+
 export interface PersonStandardizeRequest {
   name: string;
+}
+
+export interface PersonCompareRequest {
+  person_a: string;
+  person_b: string;
+}
+
+export interface JobTitleStandardizeRequest {
+  title: string;
 }
 
 export interface EmailStandardizeRequest {
@@ -90,6 +104,12 @@ export interface ContactStandardizeRequest {
   email?: string | null;
   website?: string | null;
   social?: string | null;
+  default_country?: string;
+}
+
+export interface ContactCompareRequest {
+  contact_a: Record<string, unknown>;
+  contact_b: Record<string, unknown>;
   default_country?: string;
 }
 
@@ -128,6 +148,14 @@ export interface StandardizedCompany {
   healing_actions: string[];
 }
 
+export interface CompanyComparisonResult {
+  is_match: boolean;
+  score: number;
+  match_type: string;
+  company_a: StandardizedCompany;
+  company_b: StandardizedCompany;
+}
+
 export interface StandardizedPerson {
   raw_input: string;
   salutation: string | null;
@@ -146,6 +174,14 @@ export interface StandardizedPerson {
   is_valid: boolean;
   confidence: number;
   healing_actions: string[];
+}
+
+export interface PersonComparisonResult {
+  is_match: boolean;
+  score: number;
+  match_type: string;
+  person_a: StandardizedPerson;
+  person_b: StandardizedPerson;
 }
 
 export interface StandardizedJobTitle {
@@ -220,6 +256,16 @@ export interface StandardizedContact {
   entity_key: string | null;
   cross_healing_actions: string[];
   overall_confidence: number;
+}
+
+export interface ContactComparisonResult {
+  is_match: boolean;
+  score: number;
+  match_type: string;
+  matched_pillars: string[];
+  pillar_scores: Record<string, number>;
+  contact_a: StandardizedContact;
+  contact_b: StandardizedContact;
 }
 
 export interface StandardizedPhone {

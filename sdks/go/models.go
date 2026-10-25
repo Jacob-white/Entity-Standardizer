@@ -1,5 +1,11 @@
 package phonestandardizer
 
+// HealthResponse is the response payload for GET /health.
+type HealthResponse struct {
+	Status  string `json:"status"`
+	Version string `json:"version"`
+}
+
 // PhoneStandardizeRequest is the request payload for POST /v1/standardize and POST /v1/explain.
 type PhoneStandardizeRequest struct {
 	Phone          string `json:"phone"`
@@ -160,9 +166,26 @@ type CompanyStandardizeRequest struct {
 	Country string `json:"country,omitempty"`
 }
 
+// CompanyCompareRequest is the request payload for POST /v1/company/compare.
+type CompanyCompareRequest struct {
+	CompanyA string `json:"company_a"`
+	CompanyB string `json:"company_b"`
+}
+
 // PersonStandardizeRequest is the request payload for POST /v1/person.
 type PersonStandardizeRequest struct {
 	Name string `json:"name"`
+}
+
+// PersonCompareRequest is the request payload for POST /v1/person/compare.
+type PersonCompareRequest struct {
+	PersonA string `json:"person_a"`
+	PersonB string `json:"person_b"`
+}
+
+// JobTitleStandardizeRequest is the request payload for POST /v1/job-title.
+type JobTitleStandardizeRequest struct {
+	Title string `json:"title"`
 }
 
 // EmailStandardizeRequest is the request payload for POST /v1/email.
@@ -198,6 +221,13 @@ type ContactStandardizeRequest struct {
 	Website        string `json:"website,omitempty"`
 	Social         string `json:"social,omitempty"`
 	DefaultCountry string `json:"default_country,omitempty"`
+}
+
+// ContactCompareRequest is the request payload for POST /v1/contact/compare.
+type ContactCompareRequest struct {
+	ContactA       map[string]any `json:"contact_a"`
+	ContactB       map[string]any `json:"contact_b"`
+	DefaultCountry string         `json:"default_country,omitempty"`
 }
 
 // StandardizedAddress represents a normalized physical/postal address returned by POST /v1/address.
@@ -237,6 +267,15 @@ type StandardizedCompany struct {
 	HealingActions      []string `json:"healing_actions"`
 }
 
+// CompanyComparisonResult represents the response payload from POST /v1/company/compare.
+type CompanyComparisonResult struct {
+	IsMatch   bool                `json:"is_match"`
+	Score     float64             `json:"score"`
+	MatchType string              `json:"match_type"`
+	CompanyA  StandardizedCompany `json:"company_a"`
+	CompanyB  StandardizedCompany `json:"company_b"`
+}
+
 // StandardizedPerson represents a standardized person full name returned by POST /v1/person.
 type StandardizedPerson struct {
 	RawInput           string   `json:"raw_input"`
@@ -256,6 +295,15 @@ type StandardizedPerson struct {
 	IsValid            bool     `json:"is_valid"`
 	Confidence         float64  `json:"confidence"`
 	HealingActions     []string `json:"healing_actions"`
+}
+
+// PersonComparisonResult represents the response payload from POST /v1/person/compare.
+type PersonComparisonResult struct {
+	IsMatch   bool               `json:"is_match"`
+	Score     float64            `json:"score"`
+	MatchType string             `json:"match_type"`
+	PersonA   StandardizedPerson `json:"person_a"`
+	PersonB   StandardizedPerson `json:"person_b"`
 }
 
 // StandardizedJobTitle represents a standardized job title.
@@ -335,4 +383,15 @@ type StandardizedContact struct {
 	EntityKey           *string               `json:"entity_key"`
 	CrossHealingActions []string              `json:"cross_healing_actions"`
 	OverallConfidence   float64               `json:"overall_confidence"`
+}
+
+// ContactComparisonResult represents the response payload from POST /v1/contact/compare.
+type ContactComparisonResult struct {
+	IsMatch        bool                `json:"is_match"`
+	Score          float64             `json:"score"`
+	MatchType      string              `json:"match_type"`
+	MatchedPillars []string            `json:"matched_pillars"`
+	PillarScores   map[string]float64  `json:"pillar_scores"`
+	ContactA       StandardizedContact `json:"contact_a"`
+	ContactB       StandardizedContact `json:"contact_b"`
 }

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "entity-standardizer"
-version = "2.0.0"
+version = "2.1.0"
 description = "Unified multi-national Entity, Address (USPS Pub 28 / UPU S42), and Phone (ITU-T E.164 / E.123 / RFC 3966) standardization, bidirectional cross-healing, and entity resolution engine."
 readme = "README.md"
 requires-python = ">=3.11"

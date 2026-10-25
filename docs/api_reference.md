@@ -71,7 +71,7 @@ This document specifies the public Python API, dataclasses, CLI subcommands, Fas
 - `phonetic_key: str | None` — American Soundex phonetic key of `brand_stem`.
 - `is_valid: bool`
 - `confidence: float`
-- `healing_actions: list[str]` — `"SEC_STATE_SUFFIX_STRIPPED"`, `"DBA_EXTRACTED"`, `"FKA_EXTRACTED"`, `"BRANCH_EXTRACTED"`, `"AMPERSAND_NORMALIZED"`, `"INITIALISM_COLLAPSED"`, `"LEADING_ARTICLE_STRIPPED"`, `"LEGAL_SUFFIX_CANONICALIZED"`.
+- `healing_actions: list[str]` — `"SEC_STATE_SUFFIX_STRIPPED"`, `"DBA_EXTRACTED"`, `"FKA_EXTRACTED"`, `"BRANCH_UNIT_EXTRACTED"`, `"AMPERSAND_NORMALIZED"`, `"INITIALISM_COLLAPSED"`, `"LEADING_ARTICLE_STRIPPED"`, `"LEGAL_SUFFIX_NORMALIZED"`.
 
 #### `CompanyComparisonResult` & `CompanyCluster`
 - `CompanyComparisonResult`: `is_match: bool`, `score: float`, `match_type: str` (`"EXACT_COMPANY_KEY"`, `"BASE_NAME_MATCH"`, `"ALIAS_MATCH"`, `"BRAND_STEM_MATCH"`, `"PHONETIC_FUZZY_MATCH"`, `"NO_MATCH"`, `"INVALID_INPUT"`), `company_a: StandardizedCompany`, `company_b: StandardizedCompany`.
@@ -98,12 +98,12 @@ This document specifies the public Python API, dataclasses, CLI subcommands, Fas
 - `is_organization: bool` — `True` when a corporate/fund/trust name was detected in the person field.
 - `is_valid: bool`
 - `confidence: float`
-- `healing_actions: list[str]` — `"DIACRITICS_FOLDED"`, `"PLACEHOLDER_STRIPPED"`, `"COMPOUND_PERSON_SPLIT"`, `"ORGANIZATION_DETECTED_IN_PERSON_FIELD"`, `"NICKNAME_EXTRACTED"`, `"CREDENTIAL_EXTRACTED"`, `"LAST_FIRST_UNINVERTED"`, `"SALUTATION_EXTRACTED"`, `"GENERATIONAL_SUFFIX_EXTRACTED"`, `"DIMINUTIVE_RESOLVED_TO_ROOT"`.
+- `healing_actions: list[str]` — `"DIACRITICS_FOLDED"`, `"PLACEHOLDER_STRIPPED"`, `"COMPOUND_PERSON_SPLIT"`, `"ORGANIZATION_DETECTED_IN_PERSON_FIELD"`, `"NICKNAME_EXTRACTED"`, `"CREDENTIALS_EXTRACTED"`, `"LAST_FIRST_UNINVERTED"`, `"SALUTATION_EXTRACTED"`, `"GENERATIONAL_SUFFIX_EXTRACTED"`, `"NICKNAME_RESOLVED_TO_ROOT"`.
 
 #### `StandardizedJobTitle`
 - `raw_input: str`
 - `normalized_title: str | None` — Expanded canonical uppercase job title (`"CHIEF COMPLIANCE OFFICER"`).
-- `seniority_level: str | None` — `"C_SUITE"`, `"OWNER_PARTNER"`, `"VP"`, `"DIRECTOR"`, `"MANAGER"`, `"SENIOR_IC"`, `"ENTRY"`, or `"IC"`.
+- `seniority_level: str | None` — `"C_SUITE"`, `"OWNER_PARTNER"`, `"VP"`, `"DIRECTOR"`, `"MANAGER"`, `"SENIOR"`, `"ENTRY"`, or `"INDIVIDUAL_CONTRIBUTOR"`.
 - `department: str | None` — `"ENGINEERING"`, `"FINANCE"`, `"MARKETING"`, `"SALES"`, `"OPERATIONS"`, `"LEGAL"`, `"HR"`, `"EXECUTIVE"`, or `"GENERAL"`.
 - `is_executive: bool` — `True` for C-Suite, Owner/Partner, VP, Director, Trustee, Principal, and Executive Officer roles.
 - `is_valid: bool`
@@ -121,16 +121,16 @@ This document specifies the public Python API, dataclasses, CLI subcommands, Fas
 #### `StandardizedEmail`
 - `raw_input: str`
 - `email: str | None` — Canonical `local@domain` (subaddress stripped, Gmail dots folded, domain typo healed).
-- `local_part: str | None`, `raw_local_part: str | None`, `subaddress_tag: str | None`, `domain: str | None`, `ascii_domain: str | None`, `display_name: str | None`
-- `email_type: str` — `"CORPORATE"`, `"FREE_WEBMAIL"`, `"ROLE_ACCOUNT"`, `"DISPOSABLE"`, or `"INVALID"`.
+- `local_part: str | None`, `raw_local_part: str | None`, `subaddress: str | None`, `domain: str | None`, `display_name: str | None`
+- `email_type: str | None` — `"CORPORATE"`, `"FREE_WEBMAIL"`, `"ROLE_ACCOUNT"`, `"DISPOSABLE"`, or `None` when invalid.
 - `is_free_provider: bool`, `is_role_account: bool`, `is_disposable: bool`
 - `inferred_country_iso2: str | None`
 - `email_key: str | None`
-- `is_valid: bool`, `confidence: float`, `healing_actions: list[str]` (`"SENTINEL_DOMAIN_REJECTED"`, `"DOMAIN_TYPO_HEALED"`, `"SUBADDRESS_TAG_STRIPPED"`, `"GMAIL_DOTS_STRIPPED"`, etc.).
+- `is_valid: bool`, `confidence: float`, `healing_actions: list[str]` (`"DISPLAY_NAME_EXTRACTED"`, `"MAILTO_PREFIX_STRIPPED"`, `"IDNA_PUNYCODE_NORMALIZED"`, `"DOMAIN_TYPO_HEALED"`, `"GMAIL_DOMAIN_CANONICALIZED"`, `"SUBADDRESS_EXTRACTED"`, `"GMAIL_DOTS_CANONICALIZED"`).
 
 #### `StandardizedUrl` (alias: `StandardizedWebsite`) & `StandardizedSocial`
-- `StandardizedUrl`: `raw_input`, `url`, `scheme`, `host`, `domain` (eTLD+1), `subdomain`, `public_suffix`, `brand_stem`, `path`, `inferred_country_iso2`, `url_key`, `is_valid`, `confidence`, `healing_actions`.
-- `StandardizedSocial`: `raw_input`, `platform` (`"LINKEDIN"`, `"X"`, `"GITHUB"`, `"INSTAGRAM"`, `"FACEBOOK"`, `"YOUTUBE"`), `handle`, `profile_type`, `url`, `social_key`, `is_valid`, `confidence`, `healing_actions`.
+- `StandardizedUrl`: `raw_input`, `url`, `scheme`, `host`, `domain` (eTLD+1), `subdomain`, `public_suffix`, `brand_stem`, `path`, `inferred_country_iso2`, `url_key`, `is_valid`, `confidence`, `healing_actions` (`"SCHEME_ADDED"`, `"SCHEME_UPGRADED_HTTPS"`, `"IDNA_PUNYCODE_NORMALIZED"`, `"WWW_STRIPPED"`, `"TRACKING_PARAMS_STRIPPED"`).
+- `StandardizedSocial`: `raw_input`, `platform` (`"LINKEDIN"`, `"X"`, `"GITHUB"`, `"INSTAGRAM"`, `"FACEBOOK"`, `"YOUTUBE"`), `handle`, `profile_type`, `url`, `social_key`, `is_valid`, `confidence`, `healing_actions` (`"WWW_STRIPPED"`, `"TWITTER_CANONICALIZED_TO_X"`, `"HANDLE_EXPANDED_TO_URL"`).
 - `EmailComparisonResult` & `UrlComparisonResult`: Pairwise comparison results returned by `compare_emails()` and `compare_urls()`.
 
 ---

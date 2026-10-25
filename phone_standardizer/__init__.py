@@ -140,7 +140,7 @@ from entity_standardizer.web import (
     standardize_website,
 )
 
-__version__ = "2.0.0"
+__version__ = "2.1.0"
 
 __all__ = [
     "CallingWindowResult",

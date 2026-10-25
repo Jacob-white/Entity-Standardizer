@@ -18,6 +18,15 @@ public sealed class PhoneStandardizerClient
         _http = httpClient ?? new HttpClient();
     }
 
+    public async Task<HealthResponse?> HealthAsync(
+        CancellationToken cancellationToken = default)
+    {
+        using var resp = await _http.GetAsync($"{_baseUrl}/health", cancellationToken).ConfigureAwait(false);
+        resp.EnsureSuccessStatusCode();
+        var body = await resp.Content.ReadAsStringAsync().ConfigureAwait(false);
+        return JsonSerializer.Deserialize<HealthResponse>(body);
+    }
+
     public async Task<StandardizedPhone?> StandardizeAsync(
         PhoneStandardizeRequest request,
         CancellationToken cancellationToken = default)
@@ -87,11 +96,32 @@ public sealed class PhoneStandardizerClient
         return await PostJsonAsync<CompanyStandardizeRequest, StandardizedCompany>("/v1/company", request, cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task<CompanyComparisonResult?> CompareCompaniesAsync(
+        CompanyCompareRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        return await PostJsonAsync<CompanyCompareRequest, CompanyComparisonResult>("/v1/company/compare", request, cancellationToken).ConfigureAwait(false);
+    }
+
     public async Task<StandardizedPerson?> StandardizePersonAsync(
         PersonStandardizeRequest request,
         CancellationToken cancellationToken = default)
     {
         return await PostJsonAsync<PersonStandardizeRequest, StandardizedPerson>("/v1/person", request, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<PersonComparisonResult?> ComparePersonsAsync(
+        PersonCompareRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        return await PostJsonAsync<PersonCompareRequest, PersonComparisonResult>("/v1/person/compare", request, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<StandardizedJobTitle?> StandardizeJobTitleAsync(
+        JobTitleStandardizeRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        return await PostJsonAsync<JobTitleStandardizeRequest, StandardizedJobTitle>("/v1/job-title", request, cancellationToken).ConfigureAwait(false);
     }
 
     public async Task<StandardizedEmail?> StandardizeEmailAsync(
@@ -120,6 +150,13 @@ public sealed class PhoneStandardizerClient
         CancellationToken cancellationToken = default)
     {
         return await PostJsonAsync<ContactStandardizeRequest, StandardizedContact>("/v1/contact", request, cancellationToken).ConfigureAwait(false);
+    }
+
+    public async Task<ContactComparisonResult?> CompareContactsAsync(
+        ContactCompareRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        return await PostJsonAsync<ContactCompareRequest, ContactComparisonResult>("/v1/contact/compare", request, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task<TResponse?> PostJsonAsync<TRequest, TResponse>(

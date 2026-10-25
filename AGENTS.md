@@ -19,7 +19,7 @@ A unified multi-national **Entity, Organization, Person, Web, Address, and Telep
 | `phone_standardizer/registry.py`, `registry_data.py`, `nanp.py` | Universal 249 ISO-3166-1 country & ITU calling code registry and NANP (`+1`) 25-country / 50-state NPA resolver |
 | `phone_standardizer/dedup.py` | `compare_phones`, `deduplicate_phones`, `generate_phone_blocking_keys`, and 5-pillar `cluster_contact_records` |
 | `phone_standardizer/arrow.py` | Lazy-loaded Apache Arrow (`standardize_arrow`, `standardize_companies_arrow`, `standardize_persons_arrow`), Polars, and DuckDB SQL UDFs (`register_duckdb_udfs`) |
-| `phone_standardizer/cli.py`, `server.py`, `mcp/` | CLI, 18-endpoint FastAPI HTTP microservice, and 17-tool MCP JSON-RPC stdio server |
+| `phone_standardizer/cli.py`, `server.py`, `mcp/` | CLI, 19-route FastAPI HTTP microservice, and 17-tool MCP JSON-RPC stdio server |
 | `address_standardizer/` | USPS Pub 28 / UPU S42 address parser, offline rooftop geocoder, H3 spatial indexer, and delivery intelligence |
 | `src/lib.rs`, `phone_standardizer/_native_dispatch.py` | Native Rust PyO3 extension (`_phone_standardizer_rs`) and pure-Python fallback dispatcher |
 | `sdks/` | Parity-tested TypeScript/React (`sdks/typescript`), Go (`sdks/go`), and .NET (`sdks/dotnet`) client SDKs |
