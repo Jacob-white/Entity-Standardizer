@@ -528,21 +528,36 @@ def test_version_and_openapi_docs_sync() -> None:
     assert len(udf_names) == 15
 
     readme_text = (repo_root / "README.md").read_text(encoding="utf-8")
+    agents_text = (repo_root / "AGENTS.md").read_text(encoding="utf-8")
     llms_text = (repo_root / "llms.txt").read_text(encoding="utf-8")
     llms_full_text = (repo_root / "llms-full.txt").read_text(encoding="utf-8")
     sdks_readme_text = (SDKS_DIR / "README.md").read_text(encoding="utf-8")
+    ts_readme_text = (SDKS_DIR / "typescript" / "README.md").read_text(encoding="utf-8")
+    dotnet_readme_text = (SDKS_DIR / "dotnet" / "README.md").read_text(encoding="utf-8")
+    go_readme_text = (SDKS_DIR / "go" / "README.md").read_text(encoding="utf-8")
     api_ref_text = (repo_root / "docs" / "api_reference.md").read_text(encoding="utf-8")
+    api_endpoints_text = (repo_root / "docs" / "api_endpoints.md").read_text(encoding="utf-8")
+    operations_text = (repo_root / "docs" / "operations.md").read_text(encoding="utf-8")
+    python_api_text = (repo_root / "docs" / "python_api.md").read_text(encoding="utf-8")
     agent_guide_text = (repo_root / "docs" / "ai_agent_guide.md").read_text(encoding="utf-8")
 
-    for doc_text in (readme_text, llms_text, llms_full_text, api_ref_text):
+    for doc_text in (readme_text, agents_text, llms_text, llms_full_text, api_ref_text):
         assert "compare_addresses" in doc_text
         assert "deduplicate_addresses" in doc_text
         assert "standardize_socials_arrow" in doc_text
 
+    assert "additional_persons" in api_ref_text
+    assert "COMPOUND_PERSON_SPLIT" in api_ref_text
+
     for path in live_paths:
         assert path in llms_full_text
         assert path in sdks_readme_text
+        assert path in ts_readme_text
+        assert path in dotnet_readme_text
+        assert path in go_readme_text
         assert path in api_ref_text
+        assert path in api_endpoints_text
+        assert path in operations_text
 
     for tool_name in live_mcp_tools:
         assert tool_name in llms_full_text
@@ -551,9 +566,32 @@ def test_version_and_openapi_docs_sync() -> None:
 
     for cli_cmd in live_cli_cmds:
         assert f"`{cli_cmd}`" in llms_full_text
+        assert f"`{cli_cmd}`" in api_ref_text
+
+    for fn_name in arrow_funcs:
+        assert fn_name in llms_text
+        assert fn_name in llms_full_text
+        assert fn_name in api_ref_text
+        assert fn_name in python_api_text
 
     for udf_name in udf_names:
         assert udf_name in llms_full_text
         assert udf_name in api_ref_text
+
+    # Verify all relative markdown links in root and docs resolve to existing files
+    for md_file in [
+        repo_root / "README.md",
+        repo_root / "AGENTS.md",
+        repo_root / "llms.txt",
+        SDKS_DIR / "README.md",
+        *(repo_root / "docs").glob("*.md"),
+    ]:
+        content = md_file.read_text(encoding="utf-8")
+        for target in re.findall(r"\]\(([^)#\s]+)\)", content):
+            if target.startswith(("http://", "https://", "mailto:")):
+                continue
+            resolved = (md_file.parent / target).resolve()
+            assert resolved.exists(), f"Broken relative link {target!r} in {md_file}"
+
 
 

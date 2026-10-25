@@ -68,3 +68,36 @@ var phone = await client.StandardizeAsync(new PhoneStandardizeRequest
 });
 Console.WriteLine(phone.E164); // "+18003569377"
 ```
+
+## Available Client Methods (29 Operations)
+
+- `HealthAsync(ct)` — `GET /health`
+- `ReadyAsync(ct)` — `GET /ready`
+- `StandardizeContactAsync(req, ct)` — `POST /v1/contact`
+- `CompareContactsAsync(req, ct)` — `POST /v1/contact/compare`
+- `ClusterContactsAsync(req, ct)` — `POST /v1/contact/cluster`
+- `BatchStandardizeContactsAsync(req, ct)` — `POST /v1/contact/batch`
+- `StandardizeCompanyAsync(req, ct)` — `POST /v1/company`
+- `CompareCompaniesAsync(req, ct)` — `POST /v1/company/compare`
+- `DeduplicateCompaniesAsync(req, ct)` — `POST /v1/company/deduplicate`
+- `StandardizePersonAsync(req, ct)` — `POST /v1/person`
+- `ComparePersonsAsync(req, ct)` — `POST /v1/person/compare`
+- `DeduplicatePersonsAsync(req, ct)` — `POST /v1/person/deduplicate`
+- `StandardizeJobTitleAsync(req, ct)` — `POST /v1/job-title`
+- `StandardizeEmailAsync(req, ct)` — `POST /v1/email`
+- `CompareEmailsAsync(req, ct)` — `POST /v1/email/compare`
+- `StandardizeUrlAsync(req, ct)` — `POST /v1/url`
+- `CompareUrlsAsync(req, ct)` — `POST /v1/url/compare`
+- `StandardizeSocialAsync(req, ct)` — `POST /v1/social`
+- `StandardizeAddressAsync(req, ct)` — `POST /v1/address`
+- `CompareAddressesAsync(req, ct)` — `POST /v1/address/compare`
+- `DeduplicateAddressesAsync(req, ct)` — `POST /v1/address/deduplicate`
+- `AutocompleteAddressAsync(req, ct)` — `POST /v1/address/autocomplete`
+- `StandardizeAsync(req, ct)` — `POST /v1/standardize`
+- `ExplainAsync(req, ct)` — `POST /v1/explain`
+- `CompareAsync(req, ct)` — `POST /v1/compare`
+- `DeduplicateAsync(req, ct)` — `POST /v1/deduplicate`
+- `BatchAsync(req, ct)` — `POST /v1/batch`
+- `ListCountriesAsync(ct)` — `GET /v1/countries`
+- `GetCountryAsync(identifier, ct)` — `GET /v1/countries/{identifier}`
+

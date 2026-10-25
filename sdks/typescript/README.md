@@ -57,20 +57,30 @@ const phone = await client.standardize({ phone: "1-800-FLOWERS ext 104" });
 console.log(phone.e164); // "+18003569377"
 ```
 
-## Available Client Methods
+## Available Client Methods (29 Operations)
 
 - `health()` — `GET /health`
+- `ready()` — `GET /ready`
 - `standardizeContact(req)` — `POST /v1/contact`
 - `compareContacts(req)` — `POST /v1/contact/compare`
+- `clusterContacts(req)` — `POST /v1/contact/cluster`
+- `batchStandardizeContacts(req)` — `POST /v1/contact/batch`
 - `standardizeCompany(req)` — `POST /v1/company`
 - `compareCompanies(req)` — `POST /v1/company/compare`
+- `deduplicateCompanies(req)` — `POST /v1/company/deduplicate`
 - `standardizePerson(req)` — `POST /v1/person`
 - `comparePersons(req)` — `POST /v1/person/compare`
+- `deduplicatePersons(req)` — `POST /v1/person/deduplicate`
 - `standardizeJobTitle(req)` — `POST /v1/job-title`
 - `standardizeEmail(req)` — `POST /v1/email`
+- `compareEmails(req)` — `POST /v1/email/compare`
 - `standardizeUrl(req)` — `POST /v1/url`
+- `compareUrls(req)` — `POST /v1/url/compare`
 - `standardizeSocial(req)` — `POST /v1/social`
 - `standardizeAddress(req)` — `POST /v1/address`
+- `compareAddresses(req)` — `POST /v1/address/compare`
+- `deduplicateAddresses(req)` — `POST /v1/address/deduplicate`
+- `autocompleteAddress(req)` — `POST /v1/address/autocomplete`
 - `standardize(req)` — `POST /v1/standardize`
 - `explain(req)` — `POST /v1/explain`
 - `compare(req)` — `POST /v1/compare`
@@ -78,3 +88,4 @@ console.log(phone.e164); // "+18003569377"
 - `batch(req)` — `POST /v1/batch`
 - `listCountries()` — `GET /v1/countries`
 - `getCountry(identifier)` — `GET /v1/countries/{identifier}`
+

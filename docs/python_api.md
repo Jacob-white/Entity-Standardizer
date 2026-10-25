@@ -7,6 +7,8 @@ the full surface, the CLI, the HTTP service, and the MCP server.
 
 ::: entity_standardizer.joint.standardize_contact
 
+::: entity_standardizer.joint.batch_standardize_contacts
+
 ::: entity_standardizer.joint.StandardizedContact
 
 ::: entity_standardizer.joint.compare_contacts
@@ -89,19 +91,35 @@ the full surface, the CLI, the HTTP service, and the MCP server.
 
 ::: entity_standardizer.arrow.standardize_arrow
 
+::: entity_standardizer.arrow.standardize_polars
+
 ::: entity_standardizer.arrow.standardize_addresses_arrow
+
+::: entity_standardizer.arrow.standardize_addresses_polars
 
 ::: entity_standardizer.arrow.standardize_companies_arrow
 
+::: entity_standardizer.arrow.standardize_companies_polars
+
 ::: entity_standardizer.arrow.standardize_persons_arrow
+
+::: entity_standardizer.arrow.standardize_persons_polars
 
 ::: entity_standardizer.arrow.standardize_emails_arrow
 
+::: entity_standardizer.arrow.standardize_emails_polars
+
 ::: entity_standardizer.arrow.standardize_urls_arrow
+
+::: entity_standardizer.arrow.standardize_urls_polars
 
 ::: entity_standardizer.arrow.standardize_socials_arrow
 
+::: entity_standardizer.arrow.standardize_socials_polars
+
 ::: entity_standardizer.arrow.standardize_contacts_arrow
+
+::: entity_standardizer.arrow.standardize_contacts_polars
 
 ::: entity_standardizer.arrow.register_duckdb_udfs
 

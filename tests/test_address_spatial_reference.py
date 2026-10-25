@@ -275,3 +275,136 @@ def test_reference_providers_and_geonames(tmp_path: Path, monkeypatch: pytest.Mo
     assert env_prov is not None and env_prov.covers_country("CA") is True
     env_prov.close()
     gn_prov.close()
+
+
+def test_h3_cascade_careof_and_intl_grammar_edges() -> None:
+    from unittest.mock import MagicMock
+    from entity_standardizer.address.care_of import extract_care_of, has_care_of, strip_care_of, _looks_like_street
+    from entity_standardizer.address.international.canada import CanadaGrammar, french_unit, is_valid_canadian_postal_code, province_code
+    from entity_standardizer.address.international.singapore import SingaporeGrammar
+    from entity_standardizer.address.international.southeast_asia import SoutheastAsiaGrammar
+
+    # 1. H3 validation and error branches
+    h3_cell = lat_lng_to_h3(40.7061, -74.0060, resolution=10)
+    neighbors = k_ring(h3_cell, ring_size=1)
+    other_cell = [c for c in neighbors if c != h3_cell][0]
+    assert h3_distance(h3_cell, other_cell) == 1
+    assert k_ring(h3_cell, ring_size=0) == [h3_cell]
+    assert is_valid_h3(12345) is False  # type: ignore[arg-type]
+
+    for bad_args in (
+        (float("nan"), -74.0, 10),
+        (95.0, -74.0, 10),
+        (40.0, 195.0, 10),
+        (40.0, -74.0, True),
+        (40.0, -74.0, 20),
+    ):
+        with pytest.raises(ValueError):
+            lat_lng_to_h3(*bad_args)  # type: ignore[arg-type]
+
+    with pytest.raises(ValueError, match="Invalid H3 index"):
+        h3_to_int("not-an-h3")
+    with pytest.raises(ValueError, match="Invalid integer representation"):
+        int_to_h3(0)
+    with pytest.raises(ValueError, match="Invalid H3 index"):
+        k_ring("not-an-h3")
+    with pytest.raises(ValueError, match="Invalid H3 cell"):
+        h3_distance("not-an-h3", h3_cell)
+    far_cell = lat_lng_to_h3(-33.8688, 151.2093, resolution=10)
+    with pytest.raises(ValueError, match="H3 grid distance undefined"):
+        h3_distance(h3_cell, far_cell)
+    with pytest.raises(ValueError, match="Invalid H3 index"):
+        h3_to_parent("not-an-h3", 5)
+    with pytest.raises(ValueError, match="cannot be negative"):
+        h3_to_parent(h3_cell, -1)
+    with pytest.raises(ValueError, match="cannot be finer"):
+        h3_to_parent(h3_cell, 12)
+
+    # 2. VerificationCascade Stage 1 secondary-unit fallback, Stage 2 Census TIGER, Stage 3 4-digit ZIP & ZIP3->State, Stage 4 State
+    cascade = VerificationCascade()
+    cascade.register_rooftop("100 MAIN ST||BOSTON|MA|02110|USA", 42.358, -71.060)
+    c_unit = cascade.resolve(normalized_address_key="100 MAIN ST|STE 200|BOSTON|MA|02110|USA")
+    assert c_unit is not None and c_unit.stage == 1
+
+    mock_cg = MagicMock()
+    mock_cg.geocode_batch.return_value = {"1": {"latitude": "42.3601", "longitude": "-71.0589", "census_tract": "0101"}}
+    c_tiger = cascade.resolve(street1="500 Beacon St", city="Boston", state="MA", postal_code="02115", census_geocoder=mock_cg)
+    assert c_tiger is not None and c_tiger.stage == 2 and c_tiger.source == "CENSUS_TIGER"
+
+    mock_cg_err = MagicMock()
+    mock_cg_err.geocode_batch.side_effect = RuntimeError("timeout")
+    c_z4 = cascade.resolve(street1="500 Beacon St", postal_code="2110", census_geocoder=mock_cg_err)
+    assert c_z4 is not None and c_z4.stage in (3, 4)
+
+    c_z3_state = cascade.resolve(postal_code="59901")  # MT ZIP3 not in metro table -> STATE_CENTROID_FROM_ZIP3
+    assert c_z3_state is not None and c_z3_state.stage in (3, 4)
+
+    c_state_only = cascade.resolve(state="Wyoming")
+    assert c_state_only is not None and c_state_only.stage == 4 and c_state_only.source == "STATE_CENTROID"
+    assert cascade.resolve() is None
+
+    # 3. care_of.py branches
+    assert extract_care_of("") == ("", "")
+    assert _looks_like_street("   ") is False
+    assert _looks_like_street("BROADWAY") is True
+    assert _looks_like_street("ACME") is False
+    assert has_care_of("(C/O Acme Corp) 100 Main St") is True
+    assert strip_care_of("[Attn: Legal Dept] 200 Oak Ave") == "200 Oak Ave"
+    addr_after_suffix, co_name = extract_care_of("C/O Acme Holdings LLC, 100 Main St")
+    assert addr_after_suffix == "100 Main St" and "Acme Holdings" in co_name
+    addr_word_num, _ = extract_care_of("C/O Smith & Co LLC One World Trade Center")
+    assert "One World Trade Center" in addr_word_num
+    addr_after_suf_no_num, _ = extract_care_of("C/O Ocean Park Holdings LLC Main Street")
+    assert addr_after_suf_no_num == "Main Street"
+    addr_num_tail, _ = extract_care_of("C/O Foo Bar Baz 42 Elm")
+    assert addr_num_tail == "42 Elm"
+    addr_prefix_only, co_only = extract_care_of("100 Main St, C/O Acme Partners")
+    assert addr_prefix_only == "100 Main St" and "Acme Partners" in co_only
+    addr_comma_only, _ = extract_care_of("C/O Acme Corp, LLC, Corporate HQ")
+    assert addr_comma_only == ""
+
+    # 4. SingaporeGrammar, SoutheastAsiaGrammar, and CanadaGrammar branches
+    sg = SingaporeGrammar()
+    assert sg.normalize_postal_code("") == ""
+    assert sg.normalize_postal_code("49909") == "049909"
+    assert sg.normalize_postal_code("Singapore 018981") == "018981"
+    assert sg.extract_premise_and_thoroughfare("") == (None, None, None)
+    assert sg.extract_premise_and_thoroughfare("MARINA BAY FINANCIAL CENTRE TOWER 1 8 MARINA BOULEVARD") == (
+        "MARINA BAY FINANCIAL CENTRE TOWER 1",
+        "8",
+        "MARINA BOULEVARD",
+    )
+    assert sg.extract_premise_and_thoroughfare("MARINA BAY FINANCIAL CENTRE") == ("MARINA BAY FINANCIAL CENTRE", None, None)
+    assert sg.extract_premise_and_thoroughfare("BLK 101 TOA PAYOH LORONG 1") == (None, "BLK 101", "TOA PAYOH LORONG 1")
+    sg_lvl = sg.parse([], {"street1": "10 Collyer Quay Level 24 Singapore 049315"})
+    assert sg_lvl.unit_number == "LEVEL 24" and sg_lvl.postal_code == "049315"
+    sg_s2 = sg.parse([], {"street1": "1 Raffles Place", "street2": "Suite 10", "postal_code": "048616"})
+    assert sg_s2.unit_number is not None
+
+    se = SoutheastAsiaGrammar()
+    assert se._resolve_country_iso(None) == "IDN"
+    assert se._resolve_country_iso("MY") == "MYS"
+    assert se._resolve_country_iso("UNKNOWN") == "IDN"
+    assert se.normalize_postal_code("") == ""
+    assert se.extract_premise_and_thoroughfare("") == (None, None, None)
+    assert se.extract_premise_and_thoroughfare("12 Jalan Ampang")[1] == "12"
+    assert se.extract_premise_and_thoroughfare("Jalan Gajah Mada No. 19")[1] == "19"
+    se_4part = se.parse([], {"street1": "Jl. Sudirman No. 1, Senayan, Kebayoran Baru, Jakarta 12190, Indonesia"})
+    assert se_4part.postal_code == "12190" and se_4part.dependent_locality is not None
+    se_2part = se.parse([], {"street1": "7431 Yakal Street, Makati 1203", "country": "PHL"})
+    assert se_2part.city == "MAKATI" and se_2part.postal_code == "1203"
+    se_my = se.parse([], {"street1": "10 Jalan Ampang, Taman Tun", "city": "Kuala Lumpur", "postal_code": "50450", "country": "MYS"})
+    assert se_my.state == "KUL" and se_my.dependent_locality == "TAMAN TUN"
+
+    ca = CanadaGrammar()
+    assert is_valid_canadian_postal_code("") is False
+    assert is_valid_canadian_postal_code("12345") is False
+    assert is_valid_canadian_postal_code("M5J 2J5") is True
+    assert province_code("Québec") == "QC"
+    assert french_unit("bureau 200") == "STE 200"
+    assert ca.extract_premise_and_thoroughfare("RR 2 Site 3 Box 4")[2] == "RR 2 Site 3 Box 4"
+    ca_fr = ca.standardize("200 rue Saint-Denis, app. 4, Montréal, Québec H2X 3K8")
+    assert ca_fr.state == "QC" and ca_fr.postal_code == "H2X 3K8" and ca_fr.unit_type == "APT"
+    ca_po = ca.standardize("PO Box 123, Toronto, ON M5J 2J5", street2="Stn A")
+    assert ca_po.street_name == "PO BOX 123 STN A"
+

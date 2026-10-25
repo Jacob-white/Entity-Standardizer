@@ -66,3 +66,36 @@ func main() {
 	fmt.Println(*phone.E164) // "+18003569377"
 }
 ```
+
+## Available Client Methods (29 Operations)
+
+- `Health(ctx)` — `GET /health`
+- `Ready(ctx)` — `GET /ready`
+- `StandardizeContact(ctx, req)` — `POST /v1/contact`
+- `CompareContacts(ctx, req)` — `POST /v1/contact/compare`
+- `ClusterContacts(ctx, req)` — `POST /v1/contact/cluster`
+- `BatchStandardizeContacts(ctx, req)` — `POST /v1/contact/batch`
+- `StandardizeCompany(ctx, req)` — `POST /v1/company`
+- `CompareCompanies(ctx, req)` — `POST /v1/company/compare`
+- `DeduplicateCompanies(ctx, req)` — `POST /v1/company/deduplicate`
+- `StandardizePerson(ctx, req)` — `POST /v1/person`
+- `ComparePersons(ctx, req)` — `POST /v1/person/compare`
+- `DeduplicatePersons(ctx, req)` — `POST /v1/person/deduplicate`
+- `StandardizeJobTitle(ctx, req)` — `POST /v1/job-title`
+- `StandardizeEmail(ctx, req)` — `POST /v1/email`
+- `CompareEmails(ctx, req)` — `POST /v1/email/compare`
+- `StandardizeUrl(ctx, req)` — `POST /v1/url`
+- `CompareUrls(ctx, req)` — `POST /v1/url/compare`
+- `StandardizeSocial(ctx, req)` — `POST /v1/social`
+- `StandardizeAddress(ctx, req)` — `POST /v1/address`
+- `CompareAddresses(ctx, req)` — `POST /v1/address/compare`
+- `DeduplicateAddresses(ctx, req)` — `POST /v1/address/deduplicate`
+- `AutocompleteAddress(ctx, req)` — `POST /v1/address/autocomplete`
+- `Standardize(ctx, req)` — `POST /v1/standardize`
+- `Explain(ctx, req)` — `POST /v1/explain`
+- `Compare(ctx, req)` — `POST /v1/compare`
+- `Deduplicate(ctx, req)` — `POST /v1/deduplicate`
+- `Batch(ctx, req)` — `POST /v1/batch`
+- `ListCountries(ctx)` — `GET /v1/countries`
+- `GetCountry(ctx, identifier)` — `GET /v1/countries/{identifier}`
+
