@@ -7,19 +7,39 @@ import json
 import pytest
 
 from entity_standardizer import (
+    CompanyCluster,
+    CompanyComparisonResult,
     CrossHealingAction,
+    EmailComparisonResult,
+    PersonCluster,
+    PersonComparisonResult,
     StandardizedCompany,
     StandardizedContact,
     StandardizedEntity,
     StandardizedOrganization,
     StandardizedUrl,
     StandardizedWebsite,
+    UrlComparisonResult,
     batch_standardize_companies,
     batch_standardize_contacts,
+    batch_standardize_emails,
     batch_standardize_entities,
     batch_standardize_job_titles,
     batch_standardize_organizations,
     batch_standardize_persons,
+    batch_standardize_socials,
+    batch_standardize_urls,
+    batch_standardize_websites,
+    compare_companies,
+    compare_emails,
+    compare_organizations,
+    compare_persons,
+    compare_urls,
+    compare_websites,
+    deduplicate_companies,
+    deduplicate_organizations,
+    deduplicate_persons,
+    is_organization_name,
     standardize_company,
     standardize_contact,
     standardize_email,
@@ -710,3 +730,561 @@ def test_rust_company_tokens_pure_fallback_and_batch_helpers(
         "CHIEF STRATEGY OFFICER",
     ]
     assert all(t.seniority_level == "C_SUITE" for t in title_batch)
+
+
+def test_v2_1_company_diacritics_offshore_suffixes_sec_trusts_and_comparison() -> None:
+    # Diacritics folding in both pure-Python and native paths
+    assert _pure_normalize_tokens("KKR Opportunities III S.à r.l.", []) == [
+        "KKR",
+        "OPPORTUNITIES",
+        "III",
+        "SA",
+        "RL",
+    ]
+    c_sarl = standardize_company("KKR Opportunities III S.à r.l.")
+    assert c_sarl.legal_name == "KKR OPPORTUNITIES III SARL"
+    assert c_sarl.legal_suffix == "SARL"
+    assert c_sarl.inferred_country_iso2 == "LU"
+
+    c_fr_sarl = standardize_company("Société Générale Société à responsabilité limitée")
+    assert c_fr_sarl.legal_name == "SOCIETE GENERALE SARL"
+    assert c_fr_sarl.inferred_country_iso2 == "FR"
+
+    c_scsp = standardize_company("EQT X Special Limited Partnership")
+    assert c_scsp.legal_suffix == "SCSP"
+    assert c_scsp.inferred_country_iso2 == "LU"
+
+    c_scsp_abbr = standardize_company("Bain Capital S.C.Sp.")
+    assert c_scsp_abbr.legal_suffix == "SCSP"
+    assert c_scsp_abbr.inferred_country_iso2 == "LU"
+
+    c_spc = standardize_company("Millennium Global Segregated Portfolio Company")
+    assert c_spc.legal_suffix == "SPC"
+    assert c_spc.inferred_country_iso2 == "KY"
+
+    c_dst = standardize_company("Inland Exchange Delaware Statutory Trust")
+    assert c_dst.legal_suffix == "DST"
+    assert c_dst.inferred_country_iso2 == "US"
+
+    c_reit = standardize_company("Prologis Real Estate Investment Trust")
+    assert c_reit.legal_suffix == "REIT"
+
+    # SEC /DE/ state suffix stripping (valid US state and non-US state code)
+    c_sec_de = standardize_company("BLACKROCK INC /DE/")
+    assert c_sec_de.legal_name == "BLACKROCK INC"
+    assert c_sec_de.inferred_country_iso2 == "US"
+    assert "SEC_STATE_SUFFIX_STRIPPED" in c_sec_de.healing_actions
+
+    c_sec_xx = standardize_company("GLOBAL OFFSHORE CORP /FI/")
+    assert c_sec_xx.legal_name == "GLOBAL OFFSHORE CORP"
+    assert c_sec_xx.inferred_country_iso2 is None
+    assert "SEC_STATE_SUFFIX_STRIPPED" in c_sec_xx.healing_actions
+
+    # Trust agreement date guard (U/A/D, F/B/O, REVOCABLE TRUST) must not split as DBA
+    c_trust = standardize_company("U/A/D 01/15/2010 JOHN DOE REVOCABLE TRUST")
+    assert c_trust.dba_name is None
+    assert c_trust.legal_suffix == "TRUST"
+
+    # Parenthesized acronym alias extraction vs legal suffix inside parentheses
+    c_pimco = standardize_company("Pacific Investment Management Company (PIMCO)")
+    assert c_pimco.base_name == "PACIFIC INVESTMENT MANAGEMENT"
+    assert c_pimco.dba_name == "PIMCO"
+    assert "DBA_EXTRACTED" in c_pimco.healing_actions
+
+    c_paren_sfx = standardize_company("Acme Holdings (LLC)")
+    assert c_paren_sfx.dba_name is None
+
+    # Institutional role qualifiers in parentheses extracted as branch_unit
+    c_prog = standardize_company("Fidelity Investments (Program Manager)")
+    assert c_prog.branch_unit == "PROGRAM MANAGER"
+    assert c_prog.base_name == "FIDELITY INVESTMENTS"
+
+    # Company comparison across all match tiers
+    assert compare_organizations is compare_companies
+    cmp_inv = compare_companies(None, "BlackRock, Inc.")
+    assert cmp_inv.is_match is False and cmp_inv.match_type == "INVALID_INPUT"
+
+    cmp_exact = compare_companies("BlackRock, Inc.", "BLACKROCK INCORPORATED /DE/")
+    assert isinstance(cmp_exact, CompanyComparisonResult)
+    assert cmp_exact.is_match is True and cmp_exact.match_type == "EXACT_COMPANY_KEY"
+    assert cmp_exact.to_dict()["score"] == 1.0
+
+    cmp_base = compare_companies("Blackstone Group LLC", "Blackstone Group L.P.")
+    assert cmp_base.is_match is True and cmp_base.match_type == "BASE_NAME_MATCH"
+
+    cmp_alias = compare_companies("Pacific Investment Management Company (PIMCO)", "PIMCO LLC")
+    assert cmp_alias.is_match is True and cmp_alias.match_type == "ALIAS_MATCH"
+
+    cmp_stem = compare_companies("Apollo Global Management LLC", "Apollo Advisors LP")
+    assert cmp_stem.is_match is True and cmp_stem.match_type == "BRAND_STEM_MATCH"
+
+    cmp_phon = compare_companies("Schroder Capital LLC", "Schroeder Capital LP")
+    assert cmp_phon.is_match is True and cmp_phon.match_type == "PHONETIC_FUZZY_MATCH"
+
+    cmp_no = compare_companies("BlackRock Inc.", "Vanguard Group Inc.")
+    assert cmp_no.is_match is False and cmp_no.match_type == "NO_MATCH"
+
+
+def test_v2_1_person_org_guard_placeholders_executive_titles_and_comparison() -> None:
+    # Organization detector in person field
+    assert is_organization_name(None) is False
+    assert is_organization_name("   ") is False
+    assert is_organization_name("NexPoint Energy, L.P.") is True
+    assert is_organization_name("Augnition Global Investors US GP, LLC") is True
+    assert is_organization_name("Jane M. Doe") is False
+
+    p_org = standardize_person("Augnition Global Investors US GP, LLC")
+    assert p_org.is_valid is False
+    assert p_org.is_organization is True
+    assert "ORGANIZATION_DETECTED_IN_PERSON_FIELD" in p_org.healing_actions
+    assert p_org.to_dict()["is_organization"] is True
+
+    # Placeholders rejected vs leading placeholder stripped
+    assert standardize_person("N/A").is_valid is False
+    assert standardize_person("[none]").is_valid is False
+    assert standardize_person("---").is_valid is False
+
+    p_lead = standardize_person("- Enis Hulli")
+    assert p_lead.is_valid is True
+    assert p_lead.full_name == "ENIS HULLI"
+    assert "PLACEHOLDER_STRIPPED" in p_lead.healing_actions
+
+    p_na_lead = standardize_person("N/A Enis Hulli")
+    assert p_na_lead.is_valid is True
+    assert p_na_lead.full_name == "ENIS HULLI"
+
+    # JSON-serialized role array unpacking and executive flag
+    jt_json = standardize_job_title('["Executive Officer", "Director"]')
+    assert jt_json.is_valid is True
+    assert jt_json.normalized_title == "EXECUTIVE OFFICER AND DIRECTOR"
+    assert jt_json.is_executive is True
+    assert "JSON_ARRAY_UNPACKED" in jt_json.healing_actions
+    assert jt_json.to_dict()["is_executive"] is True
+
+    assert standardize_job_title("[]").is_valid is False
+    jt_bad_json = standardize_job_title("[Chief Compliance Officer]")
+    assert jt_bad_json.is_valid is True
+    assert jt_bad_json.normalized_title == "CHIEF COMPLIANCE OFFICER"
+
+    jt_finop = standardize_job_title("FINOP")
+    assert jt_finop.normalized_title == "FINANCIAL AND OPERATIONS PRINCIPAL"
+    assert jt_finop.is_executive is True
+
+    jt_iar = standardize_job_title("IAR")
+    assert jt_iar.normalized_title == "INVESTMENT ADVISER REPRESENTATIVE"
+    assert jt_iar.is_executive is False
+
+    # Person comparison across all match tiers
+    p_inv = compare_persons(None, "Jane Doe")
+    assert isinstance(p_inv, PersonComparisonResult)
+    assert p_inv.is_match is False and p_inv.match_type == "INVALID_INPUT"
+
+    p_gen_conflict = compare_persons("Robert J. Smith Jr.", "Robert J. Smith Sr.")
+    assert p_gen_conflict.is_match is False
+    assert p_gen_conflict.match_type == "GENERATIONAL_SUFFIX_CONFLICT"
+
+    p_exact = compare_persons("Dr. Robert J. Smith", "Smith, Robert J., M.D.")
+    assert p_exact.is_match is True and p_exact.match_type == "EXACT_PERSON_KEY"
+    assert p_exact.to_dict()["score"] == 1.0
+
+    p_root = compare_persons("Bob J. Smith", "Robert M. Smith")
+    assert p_root.is_match is True and p_root.match_type == "ROOT_NAME_MATCH"
+
+    p_init = compare_persons("R. Smith", "Robert Smith")
+    assert p_init.is_match is True and p_init.match_type == "INITIAL_AND_LAST_MATCH"
+
+    p_phon = compare_persons("Steven Jonsson", "Stephen Johnson")
+    assert p_phon.is_match is True and p_phon.match_type == "PHONETIC_FUZZY_MATCH"
+
+    p_no = compare_persons("Alice Wonderland", "Bob Builder")
+    assert p_no.is_match is False and p_no.match_type == "NO_MATCH"
+
+
+def test_v2_1_web_batch_helpers_and_joint_org_rescue() -> None:
+    assert batch_standardize_websites is batch_standardize_urls
+    emails = batch_standardize_emails(["Jane.Doe+tag@gmial.com", "invalid"])
+    assert len(emails) == 2 and emails[0].email == "janedoe@gmail.com" and not emails[1].is_valid
+
+    urls = batch_standardize_urls(["http://www.blackrock.com/?utm_source=x", ""])
+    assert len(urls) == 2 and urls[0].domain == "blackrock.com" and not urls[1].is_valid
+
+    socials = batch_standardize_socials(["@blackrock", ""], platform="X")
+    assert len(socials) == 2 and socials[0].url == "https://x.com/blackrock" and not socials[1].is_valid
+
+    # Joint contact cross-healing: rescue organization misplaced in person_name field
+    rec = standardize_contact(
+        person_name="Augnition Global Investors US GP, LLC",
+        street1="100 Main St",
+        city="New York",
+        state="NY",
+        postal_code="10001",
+    )
+    assert rec.person is None
+    assert rec.organization is not None
+    assert rec.organization.legal_name == "AUGNITION GLOBAL INVESTORS US GP LLC"
+    assert (
+        CrossHealingAction.ORGANIZATION_RESCUED_FROM_PERSON_FIELD.value
+        in rec.cross_healing_actions
+    )
+
+
+def test_v2_1_entity_deduplication_web_comparison_and_endpoints(capsys) -> None:
+    from fastapi.testclient import TestClient
+
+    from phone_standardizer.mcp import handle_mcp_request
+    from phone_standardizer.server import app
+
+    # 1. Company deduplication & clustering
+    assert deduplicate_organizations is deduplicate_companies
+    assert deduplicate_companies([]) == []
+    c_clusters = deduplicate_companies(
+        [
+            "BlackRock, Inc.",
+            "BLACKROCK INCORPORATED /DE/",
+            "BlackRock LLC",
+            "Vanguard Group, Inc.",
+        ]
+    )
+    assert len(c_clusters) == 2
+    assert isinstance(c_clusters[0], CompanyCluster)
+    assert len(c_clusters[0].members) == 3
+    assert c_clusters[0].golden_company.legal_name == "BLACKROCK INC"
+    assert c_clusters[0].to_dict()["cluster_id"] == "COMPANY-CLUSTER-0001"
+    assert c_clusters[1].match_types == ("SINGLETON",)
+
+    # 2. Person deduplication & clustering
+    assert deduplicate_persons([]) == []
+    p_clusters = deduplicate_persons(
+        [
+            "Dr. Robert J. Smith, M.D.",
+            "Bob J. Smith",
+            "Robert Smith",
+            "Alice Wonderland",
+        ]
+    )
+    assert len(p_clusters) == 2
+    assert isinstance(p_clusters[0], PersonCluster)
+    assert len(p_clusters[0].members) == 3
+    assert p_clusters[0].golden_person.full_name == "ROBERT J SMITH"
+    assert p_clusters[0].to_dict()["cluster_id"] == "PERSON-CLUSTER-0001"
+
+    # 3. Sentinel domain rejection & email/URL comparison
+    e_sent = standardize_email("user@example.com")
+    assert e_sent.is_valid is False
+    assert "SENTINEL_DOMAIN_REJECTED" in e_sent.healing_actions
+
+    u_sent = standardize_url("https://www.none.com/home")
+    assert u_sent.is_valid is False
+    assert "SENTINEL_DOMAIN_REJECTED" in u_sent.healing_actions
+
+    ec_inv = compare_emails(None, "jane@stripe.com")
+    assert isinstance(ec_inv, EmailComparisonResult)
+    assert ec_inv.is_match is False and ec_inv.match_type == "INVALID_INPUT"
+
+    ec_exact = compare_emails("Jane.Doe+vip@gmail.com", "janedoe@googlemail.com")
+    assert ec_exact.is_match is True and ec_exact.match_type == "EXACT_EMAIL_KEY"
+    assert ec_exact.to_dict()["score"] == 1.0
+
+    ec_corp = compare_emails("jdoe@blackrock.com", "jdoe@blackrock.co.uk")
+    assert ec_corp.is_match is True and ec_corp.match_type == "CORPORATE_BRAND_LOCAL_MATCH"
+
+    ec_no = compare_emails("alice@stripe.com", "bob@stripe.com")
+    assert ec_no.is_match is False and ec_no.match_type == "NO_MATCH"
+    assert compare_emails("jdoe@stripe.com", "jdoe@vanguard.com").is_match is False
+
+    assert compare_websites is compare_urls
+    uc_inv = compare_urls(None, "https://stripe.com")
+    assert isinstance(uc_inv, UrlComparisonResult)
+    assert uc_inv.is_match is False and uc_inv.match_type == "INVALID_INPUT"
+
+    uc_exact = compare_urls("http://www.stripe.com/docs/?utm_source=x", "https://stripe.com/docs")
+    assert uc_exact.is_match is True and uc_exact.match_type == "EXACT_URL_KEY"
+    assert uc_exact.to_dict()["score"] == 1.0
+
+    uc_dom = compare_urls("https://stripe.com/docs", "https://dashboard.stripe.com/login")
+    assert uc_dom.is_match is True and uc_dom.match_type == "SAME_REGISTRABLE_DOMAIN"
+
+    uc_stem = compare_urls("https://blackrock.com", "https://blackrock.co.uk")
+    assert uc_stem.is_match is True and uc_stem.match_type == "SAME_BRAND_STEM"
+
+    uc_no = compare_urls("https://stripe.com", "https://vanguard.com")
+    assert uc_no.is_match is False and uc_no.match_type == "NO_MATCH"
+
+    # 4. FastAPI, MCP, and CLI endpoints for company/person comparison and job title standardization
+    client = TestClient(app)
+    r_cc = client.post(
+        "/v1/company/compare",
+        json={"company_a": "BlackRock, Inc.", "company_b": "BLACKROCK INCORPORATED"},
+    )
+    assert r_cc.status_code == 200 and r_cc.json()["is_match"] is True
+
+    r_pc = client.post(
+        "/v1/person/compare",
+        json={"person_a": "Bob Smith", "person_b": "Robert Smith"},
+    )
+    assert r_pc.status_code == 200 and r_pc.json()["is_match"] is True
+
+    r_jt = client.post("/v1/job-title", json={"title": '["Executive Officer", "Director"]'})
+    assert r_jt.status_code == 200 and r_jt.json()["is_executive"] is True
+
+    mcp_jt = handle_mcp_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 91,
+            "method": "tools/call",
+            "params": {"name": "standardize_job_title", "arguments": {"title": "FINOP"}},
+        }
+    )
+    assert '"is_executive": true' in mcp_jt["result"]["content"][0]["text"]
+
+    mcp_cc = handle_mcp_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 92,
+            "method": "tools/call",
+            "params": {
+                "name": "compare_companies",
+                "arguments": {"company_a": "Acme LLC", "company_b": "Acme L.L.C."},
+            },
+        }
+    )
+    assert '"is_match": true' in mcp_cc["result"]["content"][0]["text"]
+
+    mcp_pc = handle_mcp_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 93,
+            "method": "tools/call",
+            "params": {
+                "name": "compare_persons",
+                "arguments": {"person_a": "Bob Smith", "person_b": "Robert Smith"},
+            },
+        }
+    )
+    assert '"is_match": true' in mcp_pc["result"]["content"][0]["text"]
+
+    assert cli_main(["compare-companies", "Acme LLC", "Acme L.L.C."]) == 0
+    assert json.loads(capsys.readouterr().out)["is_match"] is True
+
+    assert cli_main(["compare-persons", "Bob Smith", "Robert Smith"]) == 0
+    assert json.loads(capsys.readouterr().out)["is_match"] is True
+
+
+def test_v2_1_person_diacritics_compound_splitting_international_suffixes_and_contact_comparison() -> None:
+    from fastapi.testclient import TestClient
+
+    from entity_standardizer import (
+        ContactComparisonResult,
+        compare_contacts,
+        compare_entities,
+        split_compound_persons,
+    )
+    from phone_standardizer.mcp import handle_mcp_request
+    from phone_standardizer.server import app
+
+    # 1. Person Latin diacritics & ligatures folding
+    p_es = standardize_person("José María Núñez")
+    assert p_es.full_name == "JOSE MARIA NUNEZ"
+    assert p_es.first_name == "JOSE"
+    assert p_es.middle_name == "MARIA"
+    assert p_es.last_name == "NUNEZ"
+    assert "DIACRITICS_FOLDED" in p_es.healing_actions
+
+    p_nordic = standardize_person("Søren Kierkegaard")
+    assert p_nordic.full_name == "SOREN KIERKEGAARD"
+    assert "DIACRITICS_FOLDED" in p_nordic.healing_actions
+
+    p_de = standardize_person("Jürgen Weiß")
+    assert p_de.full_name == "JURGEN WEISS"
+
+    p_pl = standardize_person("Łukasz Kowalski")
+    assert p_pl.full_name == "LUKASZ KOWALSKI"
+
+    # 2. Compound / couple person splitting
+    assert split_compound_persons(None) == []
+    assert split_compound_persons("   ") == []
+
+    org_split = split_compound_persons("Johnson & Johnson LLC")
+    assert len(org_split) == 1 and org_split[0].is_organization is True
+
+    couple_prefix = split_compound_persons("Mr. and Mrs. Robert J. Smith")
+    assert len(couple_prefix) == 2
+    assert couple_prefix[0].salutation == "MR" and couple_prefix[0].full_name == "ROBERT J SMITH"
+    assert couple_prefix[1].salutation == "MRS" and couple_prefix[1].full_name == "ROBERT J SMITH"
+    assert "COMPOUND_PERSON_SPLIT" in couple_prefix[0].healing_actions
+
+    comma_couple = split_compound_persons("Smith, John & Jane")
+    assert [p.full_name for p in comma_couple] == ["JOHN SMITH", "JANE SMITH"]
+
+    comma_single = split_compound_persons("Smith, John")
+    assert len(comma_single) == 1 and comma_single[0].full_name == "JOHN SMITH"
+
+    shared_last = split_compound_persons("John & Jane Smith")
+    assert [p.full_name for p in shared_last] == ["JOHN SMITH", "JANE SMITH"]
+
+    distinct_last = split_compound_persons("John Smith & Jane Doe")
+    assert [p.full_name for p in distinct_last] == ["JOHN SMITH", "JANE DOE"]
+
+    single_plain = split_compound_persons("Alice Wonderland")
+    assert len(single_plain) == 1 and single_plain[0].full_name == "ALICE WONDERLAND"
+
+    # 3. International ISO 20275 legal suffixes & Series/Segregated Portfolio extraction
+    c_pl = standardize_company("Allegro.pl Sp. z o.o.")
+    assert c_pl.legal_suffix == "SP Z OO" and c_pl.inferred_country_iso2 == "PL"
+
+    c_kgaa = standardize_company("Henkel AG & Co. KGaA")
+    assert c_kgaa.legal_suffix == "KGAA" and c_kgaa.inferred_country_iso2 == "DE"
+
+    c_sg = standardize_company("Grab Holdings Pte. Ltd.")
+    assert c_sg.legal_suffix == "PTE LTD" and c_sg.inferred_country_iso2 == "SG"
+
+    c_in = standardize_company("Flipkart Internet Pvt. Ltd.")
+    assert c_in.legal_suffix == "PVT LTD" and c_in.inferred_country_iso2 == "IN"
+
+    c_my = standardize_company("Petronas Dagangan Sdn. Bhd.")
+    assert c_my.legal_suffix == "SDN BHD" and c_my.inferred_country_iso2 == "MY"
+
+    c_bhd = standardize_company("Maybank Berhad")
+    assert c_bhd.legal_suffix == "BHD" and c_bhd.inferred_country_iso2 == "MY"
+
+    c_se = standardize_company("Allianz Societas Europaea")
+    assert c_se.legal_suffix == "SE"
+
+    c_hu = standardize_company("OTP Bank Kft.")
+    assert c_hu.legal_suffix == "KFT" and c_hu.inferred_country_iso2 == "HU"
+
+    c_cz = standardize_company("Avast Software s.r.o.")
+    assert c_cz.legal_suffix == "SRO" and c_cz.inferred_country_iso2 == "CZ"
+
+    c_ee = standardize_company("Bolt Technology OÜ")
+    assert c_ee.legal_suffix == "OU" and c_ee.inferred_country_iso2 == "EE"
+
+    c_series = standardize_company("Acme Real Estate LLC - Series A")
+    assert c_series.legal_suffix == "LLC"
+    assert c_series.branch_unit == "SERIES A"
+    assert c_series.base_name == "ACME REAL ESTATE"
+
+    c_spc_port = standardize_company("Apex Master Fund SPC (Segregated Portfolio 1)")
+    assert c_spc_port.legal_suffix == "SPC"
+    assert c_spc_port.branch_unit == "SEGREGATED PORTFOLIO 1"
+
+    # 4. Multi-pillar contact comparison
+    assert compare_entities is compare_contacts
+    cmp_empty = compare_contacts({}, {})
+    assert isinstance(cmp_empty, ContactComparisonResult)
+    assert cmp_empty.is_match is False and cmp_empty.match_type == "INSUFFICIENT_PILLARS"
+
+    cmp_gen = compare_contacts(
+        {"person_name": "Robert J. Smith Jr.", "organization": "Acme LLC"},
+        {"person_name": "Robert J. Smith Sr.", "organization": "Acme LLC"},
+    )
+    assert cmp_gen.is_match is False and cmp_gen.match_type == "PERSON_GENERATIONAL_CONFLICT"
+
+    c1 = standardize_contact(
+        organization="BlackRock, Inc.",
+        person_name="Bob Smith",
+        phone="(212) 555-0199",
+        email="bob.smith@blackrock.com",
+        website="https://www.blackrock.com",
+        street1="50 Hudson Yards",
+        city="New York",
+        state="NY",
+        postal_code="10001",
+    )
+    c2 = standardize_contact(
+        organization="BLACKROCK INCORPORATED /DE/",
+        person_name="Robert Smith",
+        phone="+1-212-555-0199",
+        email="bob.smith+vip@blackrock.com",
+        website="http://blackrock.com/?utm_source=x",
+        street1="50 Hudson Yards",
+        city="New York",
+        state="NY",
+        postal_code="10001",
+    )
+    cmp_multi = compare_contacts(c1, c2)
+    assert cmp_multi.is_match is True
+    assert cmp_multi.match_type == "MULTI_PILLAR_MATCH"
+    assert set(cmp_multi.matched_pillars) == {
+        "organization",
+        "person",
+        "phone",
+        "email",
+        "website",
+        "address",
+    }
+    assert cmp_multi.to_dict()["score"] == 1.0
+
+    # Building key match (different suites at same building) + single pillar match + non-match
+    cmp_bldg = compare_contacts(
+        {
+            "street1": "50 Hudson Yards Suite 100",
+            "city": "New York",
+            "state": "NY",
+            "postal_code": "10001",
+        },
+        {
+            "street1": "50 Hudson Yards Suite 200",
+            "city": "New York",
+            "state": "NY",
+            "postal_code": "10001",
+        },
+    )
+    assert cmp_bldg.is_match is True
+    assert cmp_bldg.match_type == "SINGLE_PILLAR_ADDRESS_MATCH"
+    assert cmp_bldg.pillar_scores["address"] == 0.92
+
+    cmp_no = compare_contacts(
+        {
+            "organization": "BlackRock Inc.",
+            "person_name": "Alice Wonderland",
+            "phone": "(212) 555-0199",
+            "email": "alice@blackrock.com",
+            "website": "https://blackrock.com",
+            "street1": "50 Hudson Yards",
+            "city": "New York",
+            "state": "NY",
+            "postal_code": "10001",
+        },
+        {
+            "organization": "Vanguard Group Inc.",
+            "person_name": "Bob Builder",
+            "phone": "(415) 555-2671",
+            "email": "bob@vanguard.com",
+            "website": "https://vanguard.com",
+            "street1": "100 Market St",
+            "city": "San Francisco",
+            "state": "CA",
+            "postal_code": "94105",
+        },
+    )
+    assert cmp_no.is_match is False and cmp_no.match_type == "NO_MATCH"
+
+    client = TestClient(app)
+    r_cc = client.post(
+        "/v1/contact/compare",
+        json={
+            "contact_a": {"organization": "Acme LLC", "phone": "(415) 555-2671"},
+            "contact_b": {"organization": "Acme L.L.C.", "phone": "+14155552671"},
+        },
+    )
+    assert r_cc.status_code == 200 and r_cc.json()["is_match"] is True
+
+    mcp_cc = handle_mcp_request(
+        {
+            "jsonrpc": "2.0",
+            "id": 99,
+            "method": "tools/call",
+            "params": {
+                "name": "compare_contacts",
+                "arguments": {
+                    "contact_a": {"organization": "Acme LLC"},
+                    "contact_b": {"organization": "Acme L.L.C."},
+                },
+            },
+        }
+    )
+    assert '"is_match": true' in mcp_cc["result"]["content"][0]["text"]
+
+
+

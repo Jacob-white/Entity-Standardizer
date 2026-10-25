@@ -8,8 +8,12 @@ import sys
 from typing import Sequence
 
 from address_standardizer.standardizer import standardize_address
-from entity_standardizer.company import standardize_company
-from entity_standardizer.person import standardize_job_title, standardize_person
+from entity_standardizer.company import compare_companies, standardize_company
+from entity_standardizer.person import (
+    compare_persons,
+    standardize_job_title,
+    standardize_person,
+)
 from entity_standardizer.web import standardize_email, standardize_social, standardize_url
 from phone_standardizer.batch import stream_standardize_csv
 from phone_standardizer.dedup import compare_phones, deduplicate_phones
@@ -74,6 +78,16 @@ def build_parser() -> argparse.ArgumentParser:
     # person command
     person_cmd = sub.add_parser("person", help="Standardize a person full name and output JSON.")
     person_cmd.add_argument("name", help="Raw person full name.")
+
+    # compare-companies command
+    cmp_comp_cmd = sub.add_parser("compare-companies", help="Compare two company names and output JSON.")
+    cmp_comp_cmd.add_argument("company_a", help="First company name.")
+    cmp_comp_cmd.add_argument("company_b", help="Second company name.")
+
+    # compare-persons command
+    cmp_per_cmd = sub.add_parser("compare-persons", help="Compare two person names and output JSON.")
+    cmp_per_cmd.add_argument("person_a", help="First person full name.")
+    cmp_per_cmd.add_argument("person_b", help="Second person full name.")
 
     # title command
     title_cmd = sub.add_parser("title", help="Standardize a job title and classify seniority and department.")
@@ -178,6 +192,16 @@ def main(argv: Sequence[str] | None = None) -> int:
     if args.command == "person":
         per_res = standardize_person(args.name)
         sys.stdout.write(json.dumps(per_res.to_dict(), indent=2) + "\n")
+        return 0
+
+    if args.command == "compare-companies":
+        cc_res = compare_companies(args.company_a, args.company_b)
+        sys.stdout.write(json.dumps(cc_res.to_dict(), indent=2) + "\n")
+        return 0
+
+    if args.command == "compare-persons":
+        cp_res = compare_persons(args.person_a, args.person_b)
+        sys.stdout.write(json.dumps(cp_res.to_dict(), indent=2) + "\n")
         return 0
 
     if args.command == "title":

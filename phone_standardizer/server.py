@@ -8,13 +8,17 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 from address_standardizer.standardizer import standardize_address
-from entity_standardizer.company import standardize_company
-from entity_standardizer.person import standardize_person
+from entity_standardizer.company import compare_companies, standardize_company
+from entity_standardizer.person import (
+    compare_persons,
+    standardize_job_title,
+    standardize_person,
+)
 from entity_standardizer.web import standardize_email, standardize_social, standardize_url
 from phone_standardizer.audit import explain_phone
 from phone_standardizer.batch import batch_standardize_phones
 from phone_standardizer.dedup import compare_phones, deduplicate_phones
-from phone_standardizer.joint import standardize_contact
+from phone_standardizer.joint import compare_contacts, standardize_contact
 from phone_standardizer.registry import CountryDialRegistry, get_dial_plan
 from phone_standardizer.standardizer import standardize_phone
 
@@ -75,6 +79,26 @@ class PersonStandardizeRequest(BaseModel):
     name: str = Field(..., description="Raw person full name.")
 
 
+class JobTitleStandardizeRequest(BaseModel):
+    """Request payload for /v1/job-title."""
+
+    title: str = Field(..., description="Raw job title string.")
+
+
+class CompanyCompareRequest(BaseModel):
+    """Request payload for /v1/company/compare."""
+
+    company_a: str = Field(..., description="First organization or company name.")
+    company_b: str = Field(..., description="Second organization or company name.")
+
+
+class PersonCompareRequest(BaseModel):
+    """Request payload for /v1/person/compare."""
+
+    person_a: str = Field(..., description="First person full name.")
+    person_b: str = Field(..., description="Second person full name.")
+
+
 class EmailStandardizeRequest(BaseModel):
     """Request payload for /v1/email."""
 
@@ -112,6 +136,15 @@ class ContactStandardizeRequest(BaseModel):
     website: str | None = Field(default=None, description="Optional raw contact website URL.")
     social: str | None = Field(default=None, description="Optional raw contact social URL or @handle.")
     default_country: str = Field(default="US", description="Fallback ISO country code.")
+
+
+class ContactCompareRequest(BaseModel):
+    """Request payload for /v1/contact/compare."""
+
+    contact_a: dict[str, Any] = Field(..., description="First raw contact/entity dictionary.")
+    contact_b: dict[str, Any] = Field(..., description="Second raw contact/entity dictionary.")
+    default_country: str = Field(default="US", description="Fallback ISO country code.")
+
 
 
 def create_app() -> FastAPI:
@@ -205,9 +238,21 @@ def create_app() -> FastAPI:
     def company_endpoint(req: CompanyStandardizeRequest) -> dict[str, Any]:
         return standardize_company(req.name, country=req.country).to_dict()
 
+    @app.post("/v1/company/compare")
+    def company_compare_endpoint(req: CompanyCompareRequest) -> dict[str, Any]:
+        return compare_companies(req.company_a, req.company_b).to_dict()
+
     @app.post("/v1/person")
     def person_endpoint(req: PersonStandardizeRequest) -> dict[str, Any]:
         return standardize_person(req.name).to_dict()
+
+    @app.post("/v1/person/compare")
+    def person_compare_endpoint(req: PersonCompareRequest) -> dict[str, Any]:
+        return compare_persons(req.person_a, req.person_b).to_dict()
+
+    @app.post("/v1/job-title")
+    def job_title_endpoint(req: JobTitleStandardizeRequest) -> dict[str, Any]:
+        return standardize_job_title(req.title).to_dict()
 
     @app.post("/v1/email")
     def email_endpoint(req: EmailStandardizeRequest) -> dict[str, Any]:
@@ -241,6 +286,14 @@ def create_app() -> FastAPI:
             default_country=req.default_country,
         )
         return res.to_dict()
+
+    @app.post("/v1/contact/compare")
+    def contact_compare_endpoint(req: ContactCompareRequest) -> dict[str, Any]:
+        return compare_contacts(
+            req.contact_a,
+            req.contact_b,
+            default_country=req.default_country,
+        ).to_dict()
 
     return app
 

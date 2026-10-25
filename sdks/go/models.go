@@ -252,6 +252,7 @@ type StandardizedPerson struct {
 	PersonKey          *string  `json:"person_key"`
 	PersonRootKey      *string  `json:"person_root_key"`
 	PhoneticKey        *string  `json:"phonetic_key"`
+	IsOrganization     bool     `json:"is_organization"`
 	IsValid            bool     `json:"is_valid"`
 	Confidence         float64  `json:"confidence"`
 	HealingActions     []string `json:"healing_actions"`
@@ -263,6 +264,7 @@ type StandardizedJobTitle struct {
 	NormalizedTitle *string  `json:"normalized_title"`
 	SeniorityLevel  *string  `json:"seniority_level"`
 	Department      *string  `json:"department"`
+	IsExecutive     bool     `json:"is_executive"`
 	IsValid         bool     `json:"is_valid"`
 	Confidence      float64  `json:"confidence"`
 	HealingActions  []string `json:"healing_actions"`

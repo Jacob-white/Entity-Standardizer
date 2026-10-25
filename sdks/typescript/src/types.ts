@@ -142,6 +142,7 @@ export interface StandardizedPerson {
   person_key: string | null;
   person_root_key: string | null;
   phonetic_key: string | null;
+  is_organization: boolean;
   is_valid: boolean;
   confidence: number;
   healing_actions: string[];
@@ -152,6 +153,7 @@ export interface StandardizedJobTitle {
   normalized_title: string | null;
   seniority_level: string | null;
   department: string | null;
+  is_executive: boolean;
   is_valid: boolean;
   confidence: number;
   healing_actions: string[];

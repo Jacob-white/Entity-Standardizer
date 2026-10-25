@@ -7,12 +7,16 @@ import sys
 from typing import Any
 
 from address_standardizer.standardizer import standardize_address
-from entity_standardizer.company import standardize_company
-from entity_standardizer.person import standardize_person
+from entity_standardizer.company import compare_companies, standardize_company
+from entity_standardizer.person import (
+    compare_persons,
+    standardize_job_title,
+    standardize_person,
+)
 from entity_standardizer.web import standardize_email, standardize_social, standardize_url
 from phone_standardizer.audit import explain_phone
 from phone_standardizer.dedup import compare_phones, deduplicate_phones
-from phone_standardizer.joint import standardize_contact
+from phone_standardizer.joint import compare_contacts, standardize_contact
 from phone_standardizer.registry import get_dial_plan
 from phone_standardizer.standardizer import mask_phone, standardize_phone
 
@@ -137,6 +141,41 @@ MCP_TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "standardize_job_title",
+        "description": "Normalize a job title, expanding abbreviations and classifying seniority_level, department, and is_executive.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+            },
+            "required": ["title"],
+        },
+    },
+    {
+        "name": "compare_companies",
+        "description": "Compare two company names across exact company_key, base_name, DBA/FKA aliases, brand_stem, and phonetic keys.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "company_a": {"type": "string"},
+                "company_b": {"type": "string"},
+            },
+            "required": ["company_a", "company_b"],
+        },
+    },
+    {
+        "name": "compare_persons",
+        "description": "Compare two person names across exact person_key, nickname root_first_name, first initial, and phonetic keys.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "person_a": {"type": "string"},
+                "person_b": {"type": "string"},
+            },
+            "required": ["person_a", "person_b"],
+        },
+    },
+    {
         "name": "standardize_email",
         "description": "Standardize an email address (RFC 5321/5322, IDNA, subaddress, Gmail dot canonicalization, domain typo healing).",
         "inputSchema": {
@@ -192,6 +231,19 @@ MCP_TOOLS: list[dict[str, Any]] = [
                 "social": {"type": "string"},
                 "default_country": {"type": "string", "default": "US"},
             },
+        },
+    },
+    {
+        "name": "compare_contacts",
+        "description": "Compare two multi-pillar contact/entity records across organization, person, phone, email, website, and address.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "contact_a": {"type": "object"},
+                "contact_b": {"type": "object"},
+                "default_country": {"type": "string", "default": "US"},
+            },
+            "required": ["contact_a", "contact_b"],
         },
     },
 ]
@@ -324,6 +376,27 @@ def handle_mcp_request(request: dict[str, Any]) -> dict[str, Any]:
                 "id": req_id,
                 "result": {"content": [{"type": "text", "text": json.dumps(per_res.to_dict())}]},
             }
+        if tool_name == "standardize_job_title":
+            jt_res = standardize_job_title(args.get("title"))
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {"content": [{"type": "text", "text": json.dumps(jt_res.to_dict())}]},
+            }
+        if tool_name == "compare_companies":
+            cc_res = compare_companies(args.get("company_a"), args.get("company_b"))
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {"content": [{"type": "text", "text": json.dumps(cc_res.to_dict())}]},
+            }
+        if tool_name == "compare_persons":
+            cp_res = compare_persons(args.get("person_a"), args.get("person_b"))
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {"content": [{"type": "text", "text": json.dumps(cp_res.to_dict())}]},
+            }
         if tool_name == "standardize_email":
             email_res = standardize_email(args.get("email"))
             return {
@@ -368,6 +441,19 @@ def handle_mcp_request(request: dict[str, Any]) -> dict[str, Any]:
                 "id": req_id,
                 "result": {
                     "content": [{"type": "text", "text": json.dumps(contact_res.to_dict())}]
+                },
+            }
+        if tool_name == "compare_contacts":
+            cmp_contact_res = compare_contacts(
+                args.get("contact_a") or {},
+                args.get("contact_b") or {},
+                default_country=args.get("default_country", "US"),
+            )
+            return {
+                "jsonrpc": "2.0",
+                "id": req_id,
+                "result": {
+                    "content": [{"type": "text", "text": json.dumps(cmp_contact_res.to_dict())}]
                 },
             }
         return {

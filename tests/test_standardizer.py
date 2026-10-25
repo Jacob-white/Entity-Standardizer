@@ -613,7 +613,7 @@ def test_mcp_server_requests() -> None:
     assert init_resp["result"]["serverInfo"]["name"] == "phone-standardizer-mcp"
 
     list_resp = handle_mcp_request({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
-    assert len(list_resp["result"]["tools"]) == 13
+    assert len(list_resp["result"]["tools"]) == 17
 
     call_std = handle_mcp_request(
         {

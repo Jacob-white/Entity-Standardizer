@@ -6,24 +6,43 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 import re
 from typing import Any
+import unicodedata
 
 # Multi-token and single-token legal entity forms (ISO 20275 ELF)
 # Mapped to (canonical_suffix, unambiguous_country_iso2)
 _MULTI_TOKEN_LEGAL_SUFFIXES: tuple[tuple[tuple[str, ...], str, str | None], ...] = (
     (("SOCIEDAD", "ANONIMA", "DE", "CAPITAL", "VARIABLE"), "SA DE CV", "MX"),
+    (("SPOLKA", "Z", "OGRANICZONA", "ODPOWIEDZIALNOSCIA"), "SP Z OO", "PL"),
+    (("SOCIETE", "A", "RESPONSABILITE", "LIMITEE"), "SARL", "FR"),
     (("LIMITED", "LIABILITY", "LIMITED", "PARTNERSHIP"), "LLLP", None),
     (("SA", "DE", "CV"), "SA DE CV", "MX"),
     (("S", "A", "DE", "C", "V"), "SA DE CV", "MX"),
     (("PROFESSIONAL", "LIMITED", "LIABILITY", "COMPANY"), "PLLC", None),
+    (("KOMMANDITGESELLSCHAFT", "AUF", "AKTIEN"), "KGAA", "DE"),
+    (("REAL", "ESTATE", "INVESTMENT", "TRUST"), "REIT", None),
     (("LIMITED", "LIABILITY", "COMPANY"), "LLC", None),
     (("LIMITED", "LIABILITY", "PARTNERSHIP"), "LLP", None),
+    (("SPECIAL", "LIMITED", "PARTNERSHIP"), "SCSP", "LU"),
+    (("SEGREGATED", "PORTFOLIO", "COMPANY"), "SPC", "KY"),
+    (("DELAWARE", "STATUTORY", "TRUST"), "DST", "US"),
     (("UNLIMITED", "LIABILITY", "COMPANY"), "ULC", "CA"),
     (("PUBLIC", "LIMITED", "COMPANY"), "PLC", "GB"),
     (("FEDERAL", "SAVINGS", "BANK"), "FSB", "US"),
+    (("SP", "Z", "O", "O"), "SP Z OO", "PL"),
+    (("SP", "Z", "OO"), "SP Z OO", "PL"),
     (("PROPRIETARY", "LIMITED"), "PTY LTD", "AU"),
     (("PROPRIETARY", "LTD"), "PTY LTD", "AU"),
     (("PTY", "LIMITED"), "PTY LTD", "AU"),
     (("PTY", "LTD"), "PTY LTD", "AU"),
+    (("PRIVATE", "LIMITED"), "PTE LTD", "SG"),
+    (("PRIVATE", "LTD"), "PTE LTD", "SG"),
+    (("PTE", "LIMITED"), "PTE LTD", "SG"),
+    (("PTE", "LTD"), "PTE LTD", "SG"),
+    (("PVT", "LIMITED"), "PVT LTD", "IN"),
+    (("PVT", "LTD"), "PVT LTD", "IN"),
+    (("SENDIRIAN", "BERHAD"), "SDN BHD", "MY"),
+    (("SDN", "BHD"), "SDN BHD", "MY"),
+    (("SOCIETAS", "EUROPAEA"), "SE", None),
     (("GMBH", "AND", "CO", "KG"), "GMBH", "DE"),
     (("KABUSHIKI", "KAISHA"), "KK", "JP"),
     (("KABUSHIKI", "GAISHA"), "KK", "JP"),
@@ -34,6 +53,8 @@ _MULTI_TOKEN_LEGAL_SUFFIXES: tuple[tuple[tuple[str, ...], str, str | None], ...]
     (("BUSINESS", "TRUST"), "TRUST", None),
     (("SOCIEDAD", "ANONIMA"), "SA", None),
     (("SOCIETE", "ANONYME"), "SA", None),
+    (("SA", "RL"), "SARL", "LU"),
+    (("SC", "SP"), "SCSP", "LU"),
 )
 
 _SINGLE_TOKEN_LEGAL_SUFFIXES: dict[str, tuple[str, str | None]] = {
@@ -60,6 +81,12 @@ _SINGLE_TOKEN_LEGAL_SUFFIXES: dict[str, tuple[str, str | None]] = {
     "AKTIENGESELLSCHAFT": ("AG", None),
     "SA": ("SA", None),
     "SARL": ("SARL", "FR"),
+    "SCSP": ("SCSP", "LU"),
+    "SCA": ("SCA", "LU"),
+    "SPC": ("SPC", "KY"),
+    "DST": ("DST", "US"),
+    "REIT": ("REIT", None),
+    "TRUST": ("TRUST", None),
     "SAS": ("SAS", "FR"),
     "SRL": ("SRL", "IT"),
     "SPA": ("SPA", "IT"),
@@ -74,6 +101,14 @@ _SINGLE_TOKEN_LEGAL_SUFFIXES: dict[str, tuple[str, str | None]] = {
     "AS": ("AS", None),
     "ASA": ("AS", "NO"),
     "APS": ("APS", "DK"),
+    "SE": ("SE", None),
+    "KGAA": ("KGAA", "DE"),
+    "KFT": ("KFT", "HU"),
+    "SRO": ("SRO", "CZ"),
+    "DOO": ("DOO", None),
+    "OU": ("OU", "EE"),
+    "BHD": ("BHD", "MY"),
+    "BERHAD": ("BHD", "MY"),
 }
 
 _GENERIC_BRAND_TAIL_WORDS: frozenset[str] = frozenset(
@@ -96,6 +131,12 @@ _GENERIC_BRAND_TAIL_WORDS: frozenset[str] = frozenset(
         "VENTURES",
         "CAPITAL",
         "MANAGEMENT",
+        "ADVISORS",
+        "ADVISERS",
+        "INVESTMENTS",
+        "INVESTORS",
+        "SECURITIES",
+        "ASSOCIATES",
         "SERVICES",
         "CORPORATION",
         "CORP",
@@ -105,7 +146,7 @@ _GENERIC_BRAND_TAIL_WORDS: frozenset[str] = frozenset(
 )
 
 _BRANCH_KEYWORDS_RE = re.compile(
-    r"\b(?:DIVISION|DIV|BRANCH|UNIT|DEPARTMENT|DEPT|OFFICE|REGION|STORE|PLANT|FACILITY|HEADQUARTERS|HQ|OPERATIONS)\b",
+    r"\b(?:DIVISION|DIV|BRANCH|UNIT|DEPARTMENT|DEPT|OFFICE|REGION|STORE|PLANT|FACILITY|HEADQUARTERS|HQ|OPERATIONS|PROGRAM\s+MANAGER|PLAN\s+SPONSOR|GENERAL\s+PARTNER|MANAGING\s+MEMBER|SERIES|PORTFOLIO|TRANCHE|SUB[\-\s]?FUND)\b",
     re.IGNORECASE,
 )
 
@@ -115,6 +156,39 @@ _TRAILING_HYPHEN_BRANCH_RE = re.compile(
 
 _PAREN_BRANCH_RE = re.compile(
     r"\s*\(([^()]{2,60})\)\s*$"
+)
+
+_PAREN_ACRONYM_RE = re.compile(
+    r"\s*\(\s*([A-Z]{2,8})\s*\)\s*$"
+)
+
+_SEC_STATE_SUFFIX_RE = re.compile(
+    r"\s+/\s*(AL|AK|AZ|AR|CA|CO|CT|DE|DC|FL|GA|HI|ID|IL|IN|IA|KS|KY|LA|ME|MD|MA|MI|MN|MS|MO|MT|NE|NV|NH|NJ|NM|NY|NC|ND|OH|OK|OR|PA|PR|RI|SC|SD|TN|TX|UT|VT|VA|WA|WV|WI|WY|FI|BD|TA|ADV)\s*/?\s*$",
+    re.IGNORECASE,
+)
+
+_TRUST_AGREEMENT_GUARD_RE = re.compile(
+    r"\b(?:U\s*/\s*A(?:\s*/\s*D)?|U\s*/\s*D\s*/\s*T|F\s*/\s*B\s*/\s*O|REVOCABLE\s+TRUST|IRREVOCABLE\s+TRUST|LIVING\s+TRUST|FAMILY\s+TRUST|TRUST\s+DATED|DATED\s+\d{1,2}/\d{1,2}/\d{2,4})\b",
+    re.IGNORECASE,
+)
+
+_DIACRITIC_STROKE_MAP = str.maketrans(
+    {
+        "ø": "o",
+        "Ø": "O",
+        "ł": "l",
+        "Ł": "L",
+        "ß": "ss",
+        "ẞ": "SS",
+        "æ": "ae",
+        "Æ": "AE",
+        "œ": "oe",
+        "Œ": "OE",
+        "ð": "d",
+        "Ð": "D",
+        "þ": "th",
+        "Þ": "TH",
+    }
 )
 
 _PAREN_DBA_RE = re.compile(
@@ -189,9 +263,19 @@ class StandardizedCompany:
 StandardizedOrganization = StandardizedCompany
 
 
+def _fold_latin_diacritics(text: str) -> str:
+    """Fold Latin diacritics and stroked characters (ø, ł) to ASCII letters."""
+    translated = text.translate(_DIACRITIC_STROKE_MAP)
+    return "".join(
+        ch
+        for ch in unicodedata.normalize("NFKD", translated)
+        if not unicodedata.combining(ch)
+    )
+
+
 def _pure_normalize_tokens(text: str, actions: list[str] | None = None) -> list[str]:
     """Pure-Python normalization of punctuation, ampersands, and spaced/dotted initialisms into uppercase tokens."""
-    working = _AS_SLASH_RE.sub(" AS ", text)
+    working = _AS_SLASH_RE.sub(" AS ", _fold_latin_diacritics(text))
 
     if "&" in working or "+" in working:
         working = re.sub(r"\s*[&+]\s*", " AND ", working)
@@ -322,6 +406,16 @@ def standardize_company(
     actions: list[str] = []
     working = re.sub(r"\s+", " ", cleaned_raw)
 
+    # 0. Strip trailing SEC /XX or /XX/ state-of-incorporation or filing suffixes
+    sec_country: str | None = None
+    m_sec = _SEC_STATE_SUFFIX_RE.search(working)
+    if m_sec and working[: m_sec.start()].strip():
+        sec_code = m_sec.group(1).upper()
+        working = working[: m_sec.start()].strip(" ,;-")
+        actions.append("SEC_STATE_SUFFIX_STRIPPED")
+        if sec_code not in ("FI", "BD", "TA", "ADV"):
+            sec_country = "US"
+
     # 1. Extract parenthesized DBA / FKA clauses
     dba_raw: str | None = None
     fka_raw: str | None = None
@@ -339,12 +433,13 @@ def standardize_company(
         working = (working[: m_p_fka.start()] + " " + working[m_p_fka.end() :]).strip()
         actions.append("FKA_EXTRACTED")
 
-    # 2. Split inline FKA and DBA clauses
+    # 2. Split inline FKA and DBA clauses (guarded against trust agreement U/A/D or T/A date clauses)
+    is_trust_clause = bool(_TRUST_AGREEMENT_GUARD_RE.search(working))
     m_fka = _FKA_SPLIT_RE.search(working)
     if m_fka:
         before_fka = working[: m_fka.start()].strip(" ,;-")
         after_fka = working[m_fka.end() :].strip(" ,;-")
-        m_dba_in_after = _DBA_SPLIT_RE.search(after_fka)
+        m_dba_in_after = None if is_trust_clause else _DBA_SPLIT_RE.search(after_fka)
         if m_dba_in_after:
             fka_raw = after_fka[: m_dba_in_after.start()].strip(" ,;-")
             dba_raw = after_fka[m_dba_in_after.end() :].strip(" ,;-")
@@ -354,7 +449,7 @@ def standardize_company(
         working = before_fka
         actions.append("FKA_EXTRACTED")
 
-    m_dba = _DBA_SPLIT_RE.search(working)
+    m_dba = None if is_trust_clause else _DBA_SPLIT_RE.search(working)
     if m_dba:
         before_dba = working[: m_dba.start()].strip(" ,;-")
         after_dba = working[m_dba.end() :].strip(" ,;-")
@@ -369,6 +464,21 @@ def standardize_company(
         fka_raw, branch_raw = _pop_trailing_branch(fka_raw, actions)
     if branch_raw is None:
         working, branch_raw = _pop_trailing_branch(working, actions)
+
+    # 3b. Extract trailing parenthesized uppercase acronym alias (e.g., "Pacific Investment Management Company (PIMCO)")
+    if dba_raw is None:
+        m_acr = _PAREN_ACRONYM_RE.search(working)
+        if m_acr:
+            cand_acr = m_acr.group(1).strip()
+            prefix_str = working[: m_acr.start()].strip()
+            if (
+                cand_acr not in _SINGLE_TOKEN_LEGAL_SUFFIXES
+                and not _BRANCH_KEYWORDS_RE.search(cand_acr)
+                and len(prefix_str.split()) >= 2
+            ):
+                dba_raw = cand_acr
+                working = prefix_str
+                actions.append("DBA_EXTRACTED")
 
     # 4. Normalize tokens and extract legal suffix
     tokens = _normalize_tokens(working, actions)
@@ -423,7 +533,7 @@ def standardize_company(
     from phone_standardizer.registry import normalize_country_iso2
 
     explicit_country = normalize_country_iso2(country) if country else None
-    inferred_country_iso2 = explicit_country or suffix_country
+    inferred_country_iso2 = explicit_country or suffix_country or sec_country
 
     company_key = f"{base_name}|{legal_suffix}" if legal_suffix else base_name
     brand_key = brand_stem
@@ -455,6 +565,111 @@ def standardize_company(
 standardize_organization = standardize_company
 
 
+@dataclass(slots=True)
+class CompanyComparisonResult:
+    """Result of comparing two organization/company records for entity resolution."""
+
+    is_match: bool
+    score: float
+    match_type: str
+    company_a: StandardizedCompany
+    company_b: StandardizedCompany
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the company comparison result into a JSON-compatible dictionary."""
+        return {
+            "is_match": self.is_match,
+            "score": round(self.score, 4),
+            "match_type": self.match_type,
+            "company_a": self.company_a.to_dict(),
+            "company_b": self.company_b.to_dict(),
+        }
+
+
+def compare_companies(
+    company_a: str | StandardizedCompany | None,
+    company_b: str | StandardizedCompany | None,
+) -> CompanyComparisonResult:
+    """Compare two company names or StandardizedCompany objects across canonical, alias, brand, and phonetic keys."""
+    from phone_standardizer._native_dispatch import damerau_levenshtein_distance_dispatch
+
+    ca = company_a if isinstance(company_a, StandardizedCompany) else standardize_company(company_a)
+    cb = company_b if isinstance(company_b, StandardizedCompany) else standardize_company(company_b)
+
+    if not ca.is_valid or not cb.is_valid or not ca.base_name or not cb.base_name:
+        return CompanyComparisonResult(
+            is_match=False,
+            score=0.0,
+            match_type="INVALID_INPUT",
+            company_a=ca,
+            company_b=cb,
+        )
+
+    if ca.company_key == cb.company_key:
+        return CompanyComparisonResult(
+            is_match=True,
+            score=1.0,
+            match_type="EXACT_COMPANY_KEY",
+            company_a=ca,
+            company_b=cb,
+        )
+
+    if ca.base_name == cb.base_name:
+        return CompanyComparisonResult(
+            is_match=True,
+            score=0.96,
+            match_type="BASE_NAME_MATCH",
+            company_a=ca,
+            company_b=cb,
+        )
+
+    aliases_a = {x for x in (ca.dba_name, ca.fka_name) if x}
+    aliases_b = {x for x in (cb.dba_name, cb.fka_name) if x}
+    names_a = {x for x in (ca.base_name, ca.legal_name, ca.brand_stem) if x} | aliases_a
+    names_b = {x for x in (cb.base_name, cb.legal_name, cb.brand_stem) if x} | aliases_b
+    if (aliases_a & names_b) or (aliases_b & names_a):
+        return CompanyComparisonResult(
+            is_match=True,
+            score=0.94,
+            match_type="ALIAS_MATCH",
+            company_a=ca,
+            company_b=cb,
+        )
+
+    if ca.brand_stem and ca.brand_stem == cb.brand_stem and len(ca.brand_stem) >= 3:
+        return CompanyComparisonResult(
+            is_match=True,
+            score=0.9,
+            match_type="BRAND_STEM_MATCH",
+            company_a=ca,
+            company_b=cb,
+        )
+
+    max_len = max(len(ca.base_name), len(cb.base_name))
+    dist = damerau_levenshtein_distance_dispatch(ca.base_name, cb.base_name)
+    sim = round(max(0.0, 1.0 - (dist / max_len)), 4)
+
+    if ca.phonetic_key and ca.phonetic_key == cb.phonetic_key and sim >= 0.8:
+        return CompanyComparisonResult(
+            is_match=True,
+            score=sim,
+            match_type="PHONETIC_FUZZY_MATCH",
+            company_a=ca,
+            company_b=cb,
+        )
+
+    return CompanyComparisonResult(
+        is_match=False,
+        score=sim,
+        match_type="NO_MATCH",
+        company_a=ca,
+        company_b=cb,
+    )
+
+
+compare_organizations = compare_companies
+
+
 def batch_standardize_companies(
     inputs: Sequence[str | None],
     *,
@@ -465,3 +680,94 @@ def batch_standardize_companies(
 
 
 batch_standardize_organizations = batch_standardize_companies
+
+
+@dataclass(frozen=True, slots=True)
+class CompanyCluster:
+    """A deduplicated cluster of company records resolved to a single Golden Company Record."""
+
+    cluster_id: str
+    golden_company: StandardizedCompany
+    members: tuple[StandardizedCompany, ...]
+    raw_inputs: tuple[str, ...]
+    match_types: tuple[str, ...]
+
+    def to_dict(self) -> dict[str, Any]:
+        """Serialize the company cluster to a JSON-compatible dictionary."""
+        return {
+            "cluster_id": self.cluster_id,
+            "golden_company": self.golden_company.to_dict(),
+            "members": [m.to_dict() for m in self.members],
+            "raw_inputs": list(self.raw_inputs),
+            "match_types": list(self.match_types),
+        }
+
+
+def _company_survivorship_rank(comp: StandardizedCompany) -> tuple[int, float, int, int, int]:
+    return (
+        1 if comp.is_valid else 0,
+        comp.confidence,
+        1 if comp.legal_suffix else 0,
+        1 if (comp.dba_name or comp.fka_name) else 0,
+        len(comp.legal_name or ""),
+    )
+
+
+def deduplicate_companies(
+    companies: Sequence[str | StandardizedCompany | None],
+    *,
+    country: str | None = None,
+    min_score: float = 0.90,
+) -> list[CompanyCluster]:
+    """Cluster and deduplicate a collection of company names into Golden Company Records."""
+    if not companies:
+        return []
+
+    parsed: list[StandardizedCompany] = [
+        c if isinstance(c, StandardizedCompany) else standardize_company(c, country=country)
+        for c in companies
+    ]
+    n = len(parsed)
+    parent = list(range(n))
+    reasons: dict[int, set[str]] = {i: set() for i in range(n)}
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            cmp = compare_companies(parsed[i], parsed[j])
+            if cmp.is_match and cmp.score >= min_score:
+                ri, rj = find(i), find(j)
+                lo, hi = (ri, rj) if ri < rj else (rj, ri)
+                if lo != hi:
+                    parent[hi] = lo
+                    reasons[lo].update(reasons[hi])
+                reasons[lo].add(cmp.match_type)
+
+    groups: dict[int, list[int]] = {}
+    for idx in range(n):
+        groups.setdefault(find(idx), []).append(idx)
+
+    clusters: list[CompanyCluster] = []
+    for cluster_num, (root_idx, member_indices) in enumerate(groups.items(), start=1):
+        members = tuple(parsed[i] for i in member_indices)
+        golden = max(members, key=_company_survivorship_rank)
+        match_types = tuple(sorted(reasons[root_idx] or {"SINGLETON"}))
+        clusters.append(
+            CompanyCluster(
+                cluster_id=f"COMPANY-CLUSTER-{cluster_num:04d}",
+                golden_company=golden,
+                members=members,
+                raw_inputs=tuple(m.raw_input for m in members),
+                match_types=match_types,
+            )
+        )
+    return clusters
+
+
+deduplicate_organizations = deduplicate_companies
+

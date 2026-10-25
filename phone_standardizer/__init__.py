@@ -15,6 +15,10 @@ from phone_standardizer._native_dispatch import (
 from phone_standardizer.arrow import (
     register_duckdb_udfs,
     standardize_arrow,
+    standardize_companies_arrow,
+    standardize_companies_polars,
+    standardize_persons_arrow,
+    standardize_persons_polars,
     standardize_polars,
 )
 from phone_standardizer.audit import (
@@ -98,11 +102,14 @@ from phone_standardizer.standardizer import (
 from address_standardizer.models import StandardizedAddress
 from address_standardizer.standardizer import standardize_address
 from phone_standardizer.joint import (
+    ContactComparisonResult,
     CrossHealingAction,
     StandardizedContact,
     StandardizedEntity,
     batch_standardize_contacts,
     batch_standardize_entities,
+    compare_contacts,
+    compare_entities,
     standardize_contact,
     standardize_entity,
 )
@@ -138,6 +145,7 @@ __version__ = "2.0.0"
 __all__ = [
     "CallingWindowResult",
     "ContactCluster",
+    "ContactComparisonResult",
     "CountryDialPlan",
     "CountryDialRegistry",
     "CrossHealingAction",
@@ -174,6 +182,8 @@ __all__ = [
     "batch_standardize_phones",
     "clear_cache",
     "cluster_contact_records",
+    "compare_contacts",
+    "compare_entities",
     "compare_phones",
     "configure_cache",
     "damerau_levenshtein_distance",
@@ -217,6 +227,8 @@ __all__ = [
     "standardize_arrow",
     "standardize_batch_e164_dispatch",
     "standardize_batch_with_country_dispatch",
+    "standardize_companies_arrow",
+    "standardize_companies_polars",
     "standardize_company",
     "standardize_contact",
     "standardize_email",
@@ -224,6 +236,8 @@ __all__ = [
     "standardize_job_title",
     "standardize_organization",
     "standardize_person",
+    "standardize_persons_arrow",
+    "standardize_persons_polars",
     "standardize_phone",
     "standardize_polars",
     "standardize_social",
