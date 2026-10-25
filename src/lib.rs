@@ -818,6 +818,93 @@ pub fn fold_latin_diacritics_rs(input: &str) -> String {
     fold_latin_diacritics_to_chars(input).into_iter().collect()
 }
 
+#[inline(always)]
+pub fn is_company_extra_combining_mark(ch: char) -> bool {
+    matches!(
+        ch as u32,
+        0x0898..=0x089F
+            | 0x08CA..=0x08D3
+            | 0x08E0..=0x08E1
+            | 0x08EA..=0x08EF
+            | 0x093C
+            | 0x0951..=0x0954
+            | 0x09BC
+            | 0x0A3C
+            | 0x0ABC
+            | 0x0B3C
+            | 0x0CBC
+            | 0x0D3B..=0x0D3C
+            | 0x0DCA
+            | 0x0E47..=0x0E4C
+            | 0x0E4E
+            | 0x0EBA
+            | 0x0EC8..=0x0ECC
+            | 0x0F18..=0x0F19
+            | 0x0F35
+            | 0x0F37
+            | 0x0F39
+            | 0x0F3E..=0x0F3F
+            | 0x0F84
+            | 0x0F86..=0x0F87
+            | 0x0FC6
+            | 0x1037
+            | 0x1039..=0x103A
+            | 0x135D..=0x135F
+            | 0x1714
+            | 0x1734
+            | 0x17B4..=0x17B5
+            | 0x17C9..=0x17D3
+            | 0x17DD
+            | 0x180B..=0x180D
+            | 0x1939..=0x193B
+            | 0x1A60
+            | 0x1A75..=0x1A7C
+            | 0x1A7F
+            | 0x1B34
+            | 0x1B44
+            | 0x1B6B..=0x1B73
+            | 0x1BAA
+            | 0x1BE6
+            | 0x1BF2..=0x1BF3
+            | 0x1C37
+            | 0x1CD0..=0x1CD2
+            | 0x1CD4..=0x1CE8
+            | 0x1CED
+            | 0x1CF4
+            | 0x1CF7..=0x1CF9
+            | 0x2118
+            | 0x2D7F
+            | 0x3099..=0x309A
+            | 0x31D0..=0x31E3
+            | 0xA66F
+            | 0xA67C..=0xA67D
+            | 0xA6F0..=0xA6F1
+            | 0xA806
+            | 0xA82C
+            | 0xA8C4
+            | 0xA8E0..=0xA8F1
+            | 0xA92B..=0xA92D
+            | 0xA953
+            | 0xA9B3
+            | 0xA9C0
+            | 0xAABF
+            | 0xAAC1
+            | 0xAAF6
+            | 0xAB5B
+            | 0xABEC..=0xABED
+            | 0xFE00..=0xFE0F
+    )
+}
+
+#[inline(always)]
+pub fn is_company_word_char(ch: char) -> bool {
+    if ch.is_ascii() {
+        ch.is_ascii_alphanumeric() || ch == '_'
+    } else {
+        ch.is_alphanumeric() || is_company_extra_combining_mark(ch)
+    }
+}
+
 #[pyfunction]
 pub fn normalize_company_tokens_rs(input: &str) -> (Vec<String>, bool, bool) {
     let chars: Vec<char> = fold_latin_diacritics_to_chars(input);
@@ -829,7 +916,7 @@ pub fn normalize_company_tokens_rs(input: &str) -> (Vec<String>, bool, bool) {
     let mut i = 0;
     while i < n {
         let ch = chars[i];
-        let prev_is_word = i > 0 && (chars[i - 1].is_alphanumeric() || chars[i - 1] == '_');
+        let prev_is_word = i > 0 && is_company_word_char(chars[i - 1]);
         let prev_is_alnum = i > 0 && chars[i - 1].is_ascii_alphanumeric();
 
         // 1. Check \bA\s*/\s*S\b (Danish/Norwegian A/S legal form)
@@ -845,7 +932,7 @@ pub fn normalize_company_tokens_rs(input: &str) -> (Vec<String>, bool, bool) {
                 }
                 if j < n
                     && (chars[j] == 'S' || chars[j] == 's')
-                    && (j + 1 == n || (!chars[j + 1].is_alphanumeric() && chars[j + 1] != '_'))
+                    && (j + 1 == n || !is_company_word_char(chars[j + 1]))
                 {
                     stage1.push_str(" AS ");
                     i = j + 1;
@@ -914,9 +1001,18 @@ pub fn normalize_company_tokens_rs(input: &str) -> (Vec<String>, bool, bool) {
     let mut raw_tokens: Vec<String> = Vec::new();
     let mut current = String::new();
     for ch in stage1.chars() {
-        if ch.is_alphanumeric() || ch == '_' {
-            for up in ch.to_uppercase() {
-                current.push(up);
+        if is_company_word_char(ch) {
+            match ch {
+                '\u{019B}' => current.push('\u{019B}'),
+                '\u{0264}' => current.push('\u{0264}'),
+                '\u{1c8a}' => current.push('\u{1c8a}'),
+                '\u{a7cd}' => current.push('\u{a7cd}'),
+                '\u{a7db}' => current.push('\u{a7db}'),
+                _ => {
+                    for up in ch.to_uppercase() {
+                        current.push(up);
+                    }
+                }
             }
         } else if !current.is_empty() {
             raw_tokens.push(std::mem::take(&mut current));
@@ -931,11 +1027,7 @@ pub fn normalize_company_tokens_rs(input: &str) -> (Vec<String>, bool, bool) {
     let mut idx = 0;
     let m = raw_tokens.len();
     let is_single_alpha = |s: &str| -> bool {
-        let mut it = s.chars();
-        match (it.next(), it.next()) {
-            (Some(c), None) => c.is_alphabetic(),
-            _ => false,
-        }
+        s.len() == 1 && s.as_bytes()[0].is_ascii_alphabetic()
     };
     while idx < m {
         if is_single_alpha(&raw_tokens[idx])
@@ -1221,6 +1313,12 @@ mod tests {
         assert_eq!(t4, vec!["BOOKING", "COM", "BV"]);
         assert!(!amp4);
         assert!(init4);
+
+        let (t5, _, _) = normalize_company_tokens_rs("ज़ी एंटरटेनमेंट");
+        assert_eq!(t5, vec!["ज़ी", "एंटरटेनमेंट"]);
+
+        let (t6, _, _) = normalize_company_tokens_rs("บ.จ.ก. สยามพาณิชย์");
+        assert_eq!(t6, vec!["บ", "จ", "ก", "สยามพาณิชย์"]);
 
         let batch = normalize_batch_company_tokens_rs(vec![
             "Beta S.A. de C.V.".to_string(),

@@ -913,3 +913,260 @@ def test_mcp_tools_parity() -> None:
         },
     )
     assert isinstance(cc_res, list) and len(cc_res) == 1
+
+
+def test_rust_python_diacritic_parity_all_scripts_and_symbols() -> None:
+    """Verify 100% output equality between Rust fold_latin_diacritics_rs and Python _fold_latin_diacritics_py."""
+    from entity_standardizer._native_dispatch import _native_mod, is_native_available
+    from entity_standardizer.normalization import (
+        _fold_latin_diacritics_py,
+        fold_latin_diacritics,
+    )
+
+    corpus = [
+        # Pure ASCII
+        "The Quick Brown Fox Jumps Over The Lazy Dog 0123456789",
+        # Stroked letters
+        "đĐ ħĦ øØ łŁ ðÐ þÞ",
+        # Ligatures
+        "ß ẞ æÆ œŒ Ǆǅǆ Ǉǈǉ Ǌǋǌ Ĳĳ Ǳǲǳ",
+        # Decomposed Latin combining characters (must drop Latin combining accents)
+        "e\u0301 a\u0308 c\u0327 n\u0303",
+        # European Latin extended
+        "crème brûlée naïve garçon fête Über Straße München Kraków Łódź",
+        "Dvořák Čapek Plzeň Ålesund Malmö København Tromsø Rīga Viļņa București",
+        # Cyrillic
+        "Київ, Одеса, Львів, Харків, Москва, Санкт-Петербург, Минск, Алматы, София, Београд",
+        # Greek
+        "Αθήνα, Θεσσαλονίκη, Πάτρα, Ηράκλειο, Λάρισα, Βόλος, Ιωάννινα",
+        # Arabic
+        "دبي, أبوظبي, الرياض, القاهرة, بيروت, الدار البيضاء, عَمَّان, مَسْقَط",
+        # Korean Hangul (NFC syllables)
+        "서울특별시 강남구 테헤란로 152, 부산광역시 해운대구, 제주특별자치도",
+        # CJK
+        "北京市 海淀区, 广州市 天河区, 香港特別行政區, 臺北市 信義區, 東京都 新宿区",
+        # Thai
+        "กรุงเทพมหานคร, เชียงใหม่, ภูเก็ต, พัทยา",
+        # Devanagari & Dravidian
+        "नई दिल्ली, मुम्बई, कोलकाता, चेन्नई, ಬೆಂಗಳೂರು, హైదరాబాద్",
+        # Intellectual Property Symbols & Emojis
+        "Acme™ Corp ® © 2026 ℠ Registered Trademark № 42 § 7 ¶ 3 100°C",
+        "🏢 HQ 🚀 Launch 🌐 Global 123 Main St. 🎯 Target 📦 Package",
+        # Currency & Math
+        "€100, £50, ¥1000, ₹500, ₽200, ₩10000, 10±2, 5×5, 10÷2, ∞",
+        # Boundary cases
+        "",
+        " ",
+        "a",
+        "é",
+        "Київ",
+        "™",
+    ]
+
+    for item in corpus:
+        py_res = _fold_latin_diacritics_py(item)
+        disp_res = fold_latin_diacritics(item)
+        assert disp_res == py_res, f"Dispatch divergence for input: {item!r}"
+
+        # Ensure Korean Hangul length is preserved (NFC syllables, not conjoining Jamo)
+        if "서울특별시" in item:
+            assert len(py_res) == len(item), "Hangul NFC syllables were decomposed into Jamo!"
+
+        # Ensure ™ symbol is preserved
+        if "™" in item:
+            assert "™" in py_res and "TM" not in py_res, "Trade mark symbol ™ was decomposed to TM!"
+
+        if is_native_available() and hasattr(_native_mod, "fold_latin_diacritics_rs"):
+            rust_res = _native_mod.fold_latin_diacritics_rs(item)
+            assert rust_res == py_res, (
+                f"Parity mismatch on {item!r}:\n"
+                f"  Rust:   {rust_res!r}\n"
+                f"  Python: {py_res!r}"
+            )
+
+
+def test_diacritic_parity_forced_pure_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify fold_latin_diacritics_dispatch exercises pure Python fallback branch seamlessly."""
+    from entity_standardizer import _native_dispatch as nd
+    from entity_standardizer.normalization import (
+        _fold_latin_diacritics_py,
+        fold_latin_diacritics,
+    )
+
+    test_inputs = [
+        "100 Wall St",
+        "Crème Brûlée Inc.",
+        "Київ Headquarters",
+        "Acme™ Corp",
+        "Αθήνα Branch",
+        "서울특별시 Office",
+    ]
+
+    # Force pure-Python mode by clearing _native_mod
+    monkeypatch.setattr(nd, "_native_mod", None)
+    assert nd.is_native_available() is False
+    assert nd.get_engine_info()["engine"] == "pure_python"
+
+    for s in test_inputs:
+        res = fold_latin_diacritics(s)
+        expected = _fold_latin_diacritics_py(s)
+        assert res == expected
+
+
+def test_cross_script_company_and_address_standardization_parity() -> None:
+    """Verify multi-pillar standardization handles international scripts and symbols identically."""
+    from entity_standardizer import deduplicate_companies, standardize_address, standardize_company
+
+    # 1. Company with trademark and non-Latin city
+    comp1 = standardize_company("Acme™ Corporation, Kyiv (Київ)")
+    comp2 = standardize_company("Acme Corporation, Kyiv (Київ)")
+    assert comp1.company_key == comp2.company_key
+    assert comp1.legal_name == comp2.legal_name
+
+    # Deduplicate company names containing symbols
+    clusters = deduplicate_companies(["Acme™ Technologies", "Acme Technologies, Inc."])
+    assert len(clusters) == 1
+
+    # 2. Address with non-Latin text and diacritics
+    addr = standardize_address("100 Hôtel de Ville, Αθήνα, Greece", country="GR")
+    assert addr.address_status in ("standardized", "unverified")
+
+
+def test_multilingual_company_combining_marks_parity(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify company standardization parity across scripts with combining marks and verify no false initialisms."""
+    from entity_standardizer import _native_dispatch as nd
+    from entity_standardizer._native_dispatch import _native_mod
+    from entity_standardizer.company import standardize_company
+
+    # Matrix: (label, input_text, expected_initialism_collapsed)
+    test_cases: list[tuple[str, str, bool]] = [
+        # Devanagari (Hindi) with vowel signs and viramas
+        ("Devanagari-1", "टाटा कंसल्टेंसी सर्विसेज", False),
+        ("Devanagari-2", "नई दिल्ली", False),
+        ("Devanagari-3", "भारत पेट्रोलियम कॉर्पोरेशन लिमिटेड", False),
+        ("Devanagari-4", "कंपनी एवं उद्योग", False),
+        # Devanagari (Hindi) with Nuktas (U+093C)
+        ("Devanagari-Nukta-Zee", "ज़ी एंटरटेनमेंट एंटरप्राइजेज लिमिटेड", False),
+        ("Devanagari-Nukta-Zindagi", "ज़िंदगी टेक्नोलॉजीज", False),
+        ("Devanagari-Nukta-Film", "फ़िल्म प्रोडक्शंस", False),
+        # Thai with vowels and tone marks
+        ("Thai-1", "บริษัท ปตท. จำกัด (มหาชน)", False),
+        ("Thai-2", "กรุงเทพมหานคร เทคโนโลยี", False),
+        ("Thai-3", "การบินไทย จำกัด (มหาชน)", False),
+        # Thai with Thanthakhat (U+0E4C)
+        ("Thai-Thanthakhat-SCB", "บ.จ.ก. สยามพาณิชย์", False),
+        ("Thai-Thanthakhat-MajorCineplex", "บริษัท เมเจอร์ ซีนีเพล็กซ์ กรุ้ป จำกัด (มหาชน)", False),
+        # Indic Nuktas: Bengali, Gurmukhi, Gujarati, Oriya
+        ("Bengali-Nukta-SquarePharma", "স্কয়ার ফার্মাসিউটিক্যালস লিমিটেড", False),
+        ("Bengali-Nukta-bKash", "বিকাশ লিমিটেড", False),
+        ("Gurmukhi-Nukta-Vardhman", "ਵਰਧਮਾਨ ਸਪਿਨਿੰਗ ਮਿੱਲਜ਼ ਲਿਮਟਿਡ", False),
+        ("Gurmukhi-Nukta-Singh", "ਸਿੰਘ ਐਂਟਰਪ੍ਰਾਈਜਿਜ਼", False),
+        ("Gujarati-Nukta-TorrentPharma", "ટોરેન્ટ ફ઼ાર્માસ્યુટિકલ્સ લિમિટેડ", False),
+        ("Gujarati-Nukta-Zee", "ઝ઼ી એન્ટરટેઈનમેન્ટ લિમિટેડ", False),
+        ("Odia-Nukta-OdishaMining", "ଓଡ଼ିଶା ଖଣି ନିଗମ ଲିମିଟେଡ୍", False),
+        ("Odia-Nukta-OdishaPower", "ଓଡ଼ିଶା ପାୱାର ଜੇନେਰੇਸ਼ਨ", False),
+        # Japanese with Combining Voiced Sound Mark (U+3099)
+        ("Japanese-Combining-Dakuten", "カ\u3099ブシキガイシャ", False),
+        # Arabic with vocalization / tashkeel
+        ("Arabic-1", "عَمَّان, مَسْقَط", False),
+        ("Arabic-2", "شركة الإمارات للاتصالات المتكاملة", False),
+        ("Arabic-3", "مُنَظَّمَةُ التَّجَارَةِ العَالَمِيَّة", False),
+        # Cyrillic
+        ("Cyrillic-1", "ООО Яндекс Технологии", False),
+        ("Cyrillic-2", "О О О Сбербанк", False),
+        ("Cyrillic-3", "ПАО Газпром Нефть", False),
+        # Greek
+        ("Greek-1", "ΑΛΦΑ ΒΗΤΑ ΒΑΣΙΛΟΠΟΥΛΟΣ Α.Ε.", False),
+        ("Greek-2", "Εθνική Τράπεζα της Ελλάδος", False),
+        # Latin with initialisms & ligatures
+        ("Latin-1", "The I. B. M. Corporation", True),
+        ("Latin-2", "I B M Holdings & Group LLC", True),
+        ("Latin-3", "Acme™ Corporation, Kyiv (Київ)", False),
+        ("Latin-4", "Novo Nordisk A/S", False),
+        # Hebrew, CJK
+        ("Hebrew-1", 'בנק הפועלים בע"מ', False),
+        ("Japanese-1", "トヨタ自動車株式会社", False),
+        ("Chinese-1", "阿里巴巴集团控股有限公司", False),
+        ("Korean-1", "삼성전자 주식회사", False),
+    ]
+
+    for label, text, expect_init in test_cases:
+        # 1. Native PyO3 mode (if extension available)
+        monkeypatch.setattr(nd, "_native_mod", _native_mod)
+        native_res = standardize_company(text).to_dict()
+
+        # 2. Pure Python fallback mode
+        monkeypatch.setattr(nd, "_native_mod", None)
+        pure_res = standardize_company(text).to_dict()
+
+        # 3. Assert 100% output parity between runtimes
+        assert native_res == pure_res, (
+            f"Parity mismatch on [{label}] for input {text!r}:\n"
+            f"  Native: legal={native_res['legal_name']!r}, actions={native_res['healing_actions']}\n"
+            f"  Pure:   legal={pure_res['legal_name']!r}, actions={pure_res['healing_actions']}"
+        )
+
+        # 4. Assert absence or presence of initialism collapse
+        if not expect_init:
+            assert "INITIALISM_COLLAPSED" not in pure_res["healing_actions"], (
+                f"Spurious INITIALISM_COLLAPSED on [{label}] in pure mode: {pure_res['healing_actions']}"
+            )
+            assert "INITIALISM_COLLAPSED" not in native_res["healing_actions"], (
+                f"Spurious INITIALISM_COLLAPSED on [{label}] in native mode: {native_res['healing_actions']}"
+            )
+        else:
+            assert "INITIALISM_COLLAPSED" in pure_res["healing_actions"], (
+                f"Expected INITIALISM_COLLAPSED on [{label}] in pure mode but got: {pure_res['healing_actions']}"
+            )
+            assert "INITIALISM_COLLAPSED" in native_res["healing_actions"], (
+                f"Expected INITIALISM_COLLAPSED on [{label}] in native mode but got: {native_res['healing_actions']}"
+            )
+
+
+def test_indic_thai_nukta_thanthakhat_codepoint_integrity() -> None:
+    """Verify that Nuktas and Thanthakhat combining codepoints are retained in standardized output."""
+    from entity_standardizer.company import standardize_company
+
+    cases = [
+        ("ज़ी एंटरटेनमेंट एंटरप्राइजेज लिमिटेड", 0x093C),
+        ("ज़िंदगी टेक्नोलॉजीज", 0x093C),
+        ("फ़िल्म प्रोडक्शंस", 0x093C),
+        ("บ.จ.ก. สยามพาณิชย์", 0x0E4C),
+        ("স্কয়ার ফার্মাসিউটিক্যালস লিমিটেড", 0x09BC),
+        ("ਵਰਧਮਾਨ ਸਪਿਨਿੰਗ ਮਿੱਲਜ਼ ਲਿਮਟਿਡ", 0x0A3C),
+        ("ટોરેન્ટ ફ઼ાર્માસ્યુટિકલ્સ લિમિટેડ", 0x0ABC),
+        ("ଓଡ଼ିଶା ଖଣି ନିଗମ ଲିਮିଟେଡ୍", 0x0B3C),
+    ]
+    for text, expected_cp in cases:
+        res = standardize_company(text).to_dict()
+        legal = res["legal_name"] or ""
+        assert chr(expected_cp) in legal, (
+            f"Expected combining codepoint U+{expected_cp:04X} to be preserved in legal_name: {legal!r}"
+        )
+
+
+def test_unicode_circled_letters_and_bmp_parity(monkeypatch) -> None:
+    """Verify that circled Latin letters and Unicode 15.1 characters match across runtimes."""
+    import entity_standardizer._native_dispatch as nd
+    from entity_standardizer._native_dispatch import _native_mod
+    from entity_standardizer.company import standardize_company
+
+    test_inputs = [
+        "Ⓐcme Ⓑrand Ⓒorp",
+        "Prefix\u0897Suffix LLC",
+        "Alpha \u0afa Beta Corp",
+        "Omega \u0cf3 Holdings Ltd",
+        "Gamma \u1bac Delta Inc",
+        "Zeta \u24b6\u24b7 Solutions",
+    ]
+    for raw in test_inputs:
+        monkeypatch.setattr(nd, "_native_mod", _native_mod)
+        nat_res = standardize_company(raw).to_dict()
+
+        monkeypatch.setattr(nd, "_native_mod", None)
+        pure_res = standardize_company(raw).to_dict()
+
+        assert nat_res == pure_res, f"Disparity on {raw!r}: native={nat_res} pure={pure_res}"
+
+
+
