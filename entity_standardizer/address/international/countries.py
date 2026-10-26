@@ -2731,8 +2731,6 @@ class CountryRegistry:
         idx: Dict[str, CountryInfo] = {}
 
         def _add(key: str, info: CountryInfo) -> None:
-            if not key:
-                return
             clean = key.strip().lower()
             if clean:
                 idx.setdefault(clean, info)
