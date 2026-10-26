@@ -43,6 +43,20 @@ from entity_standardizer.address._patterns import (
     clean_repetitive_cycles,
 )
 from entity_standardizer.address.phonetics import generate_phonetic_address_key
+from entity_standardizer.address.secondary_units import _standardize_secondary_unit
+from entity_standardizer.address.fuzzy import (
+    heal_city_token,
+    heal_postal_code_transposition,
+    heal_street_name,
+)
+
+_RE_CONTROL_WS = re.compile(r"[\r\n\t]+")
+_RE_TRAILING_PUNCT = re.compile(r"[\s,.\-#;:]+$")
+_RE_ZIP5_SPACE_ZIP4 = re.compile(r"^(\d{5})\s+(\d{4})$")
+_RE_ASCII_ALPHA = re.compile(r"[A-Z]")
+_RE_STREET_FRAGMENT = re.compile(r"^\d+[A-Z]?\s+[A-Z]{2,}")
+_RE_FLOOR_TOKEN = re.compile(r"\b(?:FL|FLR|FLOOR)\b")
+
 
 def _normalize_city(text: str) -> str:
     """Same city normalization as the full pipeline (strip punctuation, collapse whitespace, upper-case)."""
@@ -81,11 +95,10 @@ def _normalize_fast_sec_unit(sec_raw: str) -> Optional[str]:
     sec_clean = sec_raw.strip().upper()
     if not sec_clean:
         return ""
-    from entity_standardizer.address.standardizer import _standardize_secondary_unit
     matches = list(RE_SEC_UNIT.finditer(sec_clean))
     if matches:
         # Text before the first unit ("200 OAK AVE APT 3") is not a unit: extracting only the unit would silently drop it.
-        if re.search(r"[A-Z]", sec_clean[:matches[0].start()]):
+        if _RE_ASCII_ALPHA.search(sec_clean[:matches[0].start()]):
             return None
         sec_parts = []
         for m in matches:
@@ -101,7 +114,7 @@ def _normalize_fast_sec_unit(sec_raw: str) -> Optional[str]:
                 sec_parts.append(f"{stype} {sval}".strip())
         res = " ".join(sec_parts).strip()
         return _standardize_secondary_unit(res)
-    if re.match(r"^\d+[A-Z]?\s+[A-Z]{2,}", sec_clean) and not re.search(r"\b(?:FL|FLR|FLOOR)\b", sec_clean):
+    if _RE_STREET_FRAGMENT.match(sec_clean) and not _RE_FLOOR_TOKEN.search(sec_clean):
         return None  # "5 OAK": a street fragment, not a unit; the full parser decides
     res = _standardize_secondary_unit(sec_clean)
     if res and res != sec_clean:
@@ -114,7 +127,7 @@ def _normalize_fast_street_phrase(phrase: str, enable_fuzzy: bool = True) -> Opt
     Parses clean street phrase e.g. '100 Main St' or '200 Park Ave Suite 1200'.
     Returns (normalized_street1, normalized_street2) or None if complex/ambiguous.
     """
-    phrase_upper = re.sub(r"[\r\n\t]+", " ", phrase).strip().upper()
+    phrase_upper = _RE_CONTROL_WS.sub(" ", phrase).strip().upper()
     if not phrase_upper:
         return None
     phrase_upper = RE_TERMINAL_COUNTRY.sub("", phrase_upper).rstrip(" ,.-")
@@ -155,7 +168,6 @@ def _normalize_fast_street_phrase(phrase: str, enable_fuzzy: bool = True) -> Opt
                 sval = m.group(5).lstrip("#-").upper() if m.group(5) else ""
                 sec_parts.append(f"{stype} {sval}".strip())
         sec_cand = " ".join(sec_parts).strip()
-        from entity_standardizer.address.standardizer import _standardize_secondary_unit
         sec_unit = _standardize_secondary_unit(sec_cand)
         phrase_upper = RE_SEC_UNIT.sub(" ", phrase_upper).strip(" ,.-")
 
@@ -274,7 +286,6 @@ def _normalize_fast_street_phrase(phrase: str, enable_fuzzy: bool = True) -> Opt
             elif m_num:
                 norm_name_parts.append(t)
             elif enable_fuzzy:
-                from entity_standardizer.address.fuzzy import heal_street_name
                 h_name = heal_street_name(t)
                 norm_name_parts.append(h_name if h_name else t)
             else:
@@ -290,7 +301,7 @@ def _normalize_fast_street_phrase(phrase: str, enable_fuzzy: bool = True) -> Opt
         st1_parts.append(post_dir)
 
     st1_norm = " ".join(st1_parts).strip()
-    st1_norm = re.sub(r"[\s,.\-#;:]+$", "", st1_norm).strip()
+    st1_norm = _RE_TRAILING_PUNCT.sub("", st1_norm).strip()
     return st1_norm, sec_unit
 
 
@@ -314,14 +325,14 @@ def fast_path_parse(
     if c_raw not in ("USA", "US", "UNITED STATES", "UNITED STATES OF AMERICA"):
         return None
 
-    s1_raw = re.sub(r"[\r\n\t]+", " ", (street1 or "")).strip()
-    s2_raw = re.sub(r"[\r\n\t]+", " ", (street2 or "")).strip()
+    s1_raw = _RE_CONTROL_WS.sub(" ", (street1 or "")).strip()
+    s2_raw = _RE_CONTROL_WS.sub(" ", (street2 or "")).strip()
     s1_raw = clean_repetitive_cycles(s1_raw)
     if s2_raw:
         s2_raw = clean_repetitive_cycles(s2_raw)
-    city_raw = re.sub(r"[\r\n\t]+", " ", (city or "")).strip()
-    state_raw = re.sub(r"[\r\n\t]+", " ", (state or "")).strip()
-    zip_raw = re.sub(r"[\r\n\t]+", " ", (postal_code or "")).strip()
+    city_raw = _RE_CONTROL_WS.sub(" ", (city or "")).strip()
+    state_raw = _RE_CONTROL_WS.sub(" ", (state or "")).strip()
+    zip_raw = _RE_CONTROL_WS.sub(" ", (postal_code or "")).strip()
 
     # Path A: Structured Inputs (street1, city, state, postal_code provided)
     if s1_raw and city_raw and state_raw and zip_raw:
@@ -342,14 +353,13 @@ def fast_path_parse(
             s2_raw = clean_redundant_street_tail(s2_raw, city=city_raw, state=state_code, postal_code=zip_raw)
 
         # Validate ZIP5
-        zip_clean = re.sub(r"^(\d{5})\s+(\d{4})$", r"\1-\2", zip_raw.strip())  # "02101 1234" -> "02101-1234"
+        zip_clean = _RE_ZIP5_SPACE_ZIP4.sub(r"\1-\2", zip_raw.strip())  # "02101 1234" -> "02101-1234"
         if len(zip_clean) >= 5 and zip_clean[:5].isdigit():
             zip5 = zip_clean[:5]
             norm_postal = f"{zip5}-{zip_clean[6:10]}" if len(zip_clean) >= 10 and zip_clean[5] == "-" and zip_clean[6:10].isdigit() else (
                 f"{zip5}-{zip_clean[5:9]}" if len(zip_clean) >= 9 and zip_clean[5:9].isdigit() else zip5
             )
             if enable_fuzzy:
-                from entity_standardizer.address.fuzzy import heal_postal_code_transposition
                 h_zip = heal_postal_code_transposition(zip5, state=state_code)
                 if h_zip and h_zip != zip5:
                     if len(norm_postal) > 5 and norm_postal[:5] == zip5:
@@ -384,13 +394,11 @@ def fast_path_parse(
             else:
                 norm_s2 = embedded_sec
 
-            from entity_standardizer.address.standardizer import _standardize_secondary_unit
             norm_s2 = _standardize_secondary_unit(norm_s2)
-            norm_s1 = re.sub(r"[\s,.\-#;:]+$", "", norm_s1).strip()
+            norm_s1 = _RE_TRAILING_PUNCT.sub("", norm_s1).strip()
 
         norm_city = _normalize_city(city_raw)
         if enable_fuzzy:
-            from entity_standardizer.address.fuzzy import heal_city_token
             h_city = heal_city_token(norm_city, state=state_code, zip3=zip5[:3])
             if h_city:
                 norm_city = h_city
@@ -485,14 +493,12 @@ def fast_path_parse(
             if embedded_sec:
                 norm_s2 = f"{norm_s2} {embedded_sec}".strip() if norm_s2 else embedded_sec
 
-            from entity_standardizer.address.standardizer import _standardize_secondary_unit
             norm_s2 = _standardize_secondary_unit(norm_s2)
-            norm_s1 = re.sub(r"[\s,.\-#;:]+$", "", norm_s1).strip()
+            norm_s1 = _RE_TRAILING_PUNCT.sub("", norm_s1).strip()
 
             zip5 = zip_cand[:5]
             norm_postal = zip_cand
             if enable_fuzzy:
-                from entity_standardizer.address.fuzzy import heal_city_token, heal_postal_code_transposition
                 h_zip = heal_postal_code_transposition(zip5, state=state_cand)
                 if h_zip and h_zip != zip5:
                     if len(norm_postal) > 5 and norm_postal[:5] == zip5:

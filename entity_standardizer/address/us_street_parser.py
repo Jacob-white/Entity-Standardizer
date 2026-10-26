@@ -67,6 +67,9 @@ from entity_standardizer.address.secondary_units import (  # noqa: E402
     _standardize_secondary_unit,
     _words_to_number,
 )
+from entity_standardizer.address.fuzzy import heal_street_name  # noqa: E402
+
+_RE_TRAILING_PUNCT = re.compile(r"[\s,.\-#;:]+$")
 
 
 def _rule_based_us_street_parse(address_str: str, enable_fuzzy: bool = True) -> Tuple[str, str, bool]:
@@ -247,7 +250,6 @@ def _rule_based_us_street_parse(address_str: str, enable_fuzzy: bool = True) -> 
             elif f_dir:
                 norm_tokens.append(f_dir)
             elif enable_fuzzy:
-                from entity_standardizer.address.fuzzy import heal_street_name
                 h_name = heal_street_name(t)
                 norm_tokens.append(h_name if h_name else t)
             else:
@@ -255,7 +257,7 @@ def _rule_based_us_street_parse(address_str: str, enable_fuzzy: bool = True) -> 
         j += 1
 
     st1 = " ".join(norm_tokens).strip()
-    st1 = re.sub(r"[\s,.\-#;:]+$", "", st1).strip()
+    st1 = _RE_TRAILING_PUNCT.sub("", st1).strip()
     sec_unit = _standardize_secondary_unit(sec_unit)
     return st1, sec_unit, bool(st1)
 
@@ -830,7 +832,7 @@ def _parse_us_street_tokens(address_str: str, enable_fuzzy: bool = True, city_ra
                 city_parts = []
 
     st1 = " ".join(street_parts).strip()
-    st1 = re.sub(r"[\s,.\-#;:]+$", "", st1).strip()
+    st1 = _RE_TRAILING_PUNCT.sub("", st1).strip()
     if is_invalid_thoroughfare(st1):
         if st1:
             sec_parts.append(st1)
@@ -889,7 +891,7 @@ def _parse_us_street_tokens(address_str: str, enable_fuzzy: bool = True, city_ra
             city_parts = []
             # (no p_city reset needed: an input-derived p_city only exists together with a state and ZIP)
 
-    st1 = re.sub(r"[\s,.\-#;:]+$", "", st1).strip()
+    st1 = _RE_TRAILING_PUNCT.sub("", st1).strip()
     st2 = _standardize_secondary_unit(st2)
 
     # Fallback to rule-based parser if st1 is empty
@@ -1014,7 +1016,7 @@ def _parse_us_address_components(street1_raw: str, street2_raw: str = "", enable
                 parse_res = _parse_us_street_tokens(s2_clean, enable_fuzzy=enable_fuzzy, city_raw=city_raw)
                 st1, st2, ok, p_city, p_state, p_zip = parse_res
                 st1 = f"{urb_prefix} {st1}".strip() if st1 else urb_prefix
-                st1 = re.sub(r"[\s,.\-#;:]+$", "", st1).strip()
+                st1 = _RE_TRAILING_PUNCT.sub("", st1).strip()
                 st2 = _standardize_secondary_unit(st2)
                 return USStreetParseResult(st1, st2, True, p_city, p_state, p_zip, building_name=getattr(parse_res, "building_name", None))
 
@@ -1030,7 +1032,7 @@ def _parse_us_address_components(street1_raw: str, street2_raw: str = "", enable
         po_box_str = f"PO BOX {m_s2_po.group(1).upper()}"
         combined_st2 = f"{st2} {po_box_str}".strip() if st2 else po_box_str
         combined_st2 = _standardize_secondary_unit(combined_st2)
-        st1 = re.sub(r"[\s,.\-#;:]+$", "", st1).strip()
+        st1 = _RE_TRAILING_PUNCT.sub("", st1).strip()
         return USStreetParseResult(st1, combined_st2, True, p_city, p_state, p_zip, building_name=getattr(parse_res, "building_name", None))
 
     # Two physical street lines ("100 Main St" / "200 Oak Ave"): parse each on its own. Merging them into one string
@@ -1048,7 +1050,7 @@ def _parse_us_address_components(street1_raw: str, street2_raw: str = "", enable
                 second = f"{p2[0]} {p2[1]}".strip() if p2[1] else p2[0]
                 st2_dual = f"{p1[1]} {second}".strip() if p1[1] else second
                 return USStreetParseResult(
-                    re.sub(r"[\s,.\-#;:]+$", "", p1[0]).strip(), st2_dual, True, p1[3], p1[4], p1[5],
+                    _RE_TRAILING_PUNCT.sub("", p1[0]).strip(), st2_dual, True, p1[3], p1[4], p1[5],
                     building_name=getattr(p1, "building_name", None),
                 )
 
@@ -1081,7 +1083,7 @@ def _parse_us_address_components(street1_raw: str, street2_raw: str = "", enable
             if st1:
                 combined_st2 = f"{st2} PO BOX {po_box_num}".strip() if st2 else f"PO BOX {po_box_num}"
                 combined_st2 = _standardize_secondary_unit(combined_st2)
-                st1 = re.sub(r"[\s,.\-#;:]+$", "", st1).strip()
+                st1 = _RE_TRAILING_PUNCT.sub("", st1).strip()
                 return USStreetParseResult(st1, combined_st2, True, p_city, p_state, p_zip, building_name=getattr(parse_res, "building_name", None))
             else:
                 combined_st2 = _standardize_secondary_unit(st2)
@@ -1092,7 +1094,7 @@ def _parse_us_address_components(street1_raw: str, street2_raw: str = "", enable
     st1, st2, ok, p_city, p_state, p_zip = parse_res
     if st1 and city_raw and st1.upper() == city_raw.strip().upper():
         st1 = ""
-    st1 = re.sub(r"[\s,.\-#;:]+$", "", st1).strip()
+    st1 = _RE_TRAILING_PUNCT.sub("", st1).strip()
     st2 = _standardize_secondary_unit(st2)
     return USStreetParseResult(st1, st2, ok, p_city, p_state, p_zip, building_name=getattr(parse_res, "building_name", None))
 

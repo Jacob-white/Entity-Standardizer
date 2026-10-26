@@ -2,6 +2,14 @@
 
 All notable changes to **Entity Standardizer** (`entity_standardizer`) will be documented in this file.
 
+## [Unreleased]
+
+### Added & Fixed
+- **Address Subsystem Coverage Gate (`>= 98%`), Hot-Path Regex Pre-Compilation & Zero-Warning Enforcement (`.github/workflows/ci.yml`, `pyproject.toml`, `entity_standardizer/address/`, `tests/`)**:
+  - Raised the CI `Address subsystem coverage gate` in `.github/workflows/ci.yml` from `--cov-fail-under=95` to `--cov-fail-under=98` (with `>= 98.5%` actual statement coverage across `entity_standardizer/address/`, alongside `100.00%` line and branch coverage on root `entity_standardizer` modules).
+  - Pre-compiled per-record hot-path regular expressions and hoisted per-call imports in `entity_standardizer/address/models.py`, `entity_standardizer/address/standardizer.py`, `entity_standardizer/address/fast_path.py`, and `entity_standardizer/address/us_street_parser.py`, eliminating repeated `re.compile` cache lookups and `re.split` allocations on single-line inputs.
+  - Enforced `filterwarnings = ["error"]` in `pyproject.toml` so `pytest` runs with zero warnings across both native Rust PyO3 and pure-Python (`ENTITY_STANDARDIZER_FORCE_PURE=1`) modes, and hardened SQLite connection lifecycle cleanup (`closing(...)` / explicit `.close()`) across `AutocompleteEngine`, `SpatialEngine`, `OfflineReferenceIndex`, `SQLiteReferenceProvider`, and `SQLiteCache`.
+
 ## [2.1.0] - 2026-10-25
 
 ### Added & Fixed
