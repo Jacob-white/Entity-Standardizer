@@ -683,3 +683,335 @@ def test_standardizer_and_us_street_parser_deep_branches(monkeypatch: pytest.Mon
         res_crf2 = usp._parse_us_street_tokens("Lighton Plaza II", city_raw="Overland Park")
         assert "LIGHTON PLAZA II" in res_crf2[0]
 
+
+def test_us_street_parser_patterns_and_normalization_exhaustive(monkeypatch: pytest.MonkeyPatch) -> None:
+    import entity_standardizer.address.us_street_parser as usp
+    from entity_standardizer.address._patterns import (
+        _normalize_intersection_branch,
+        clean_redundant_street_tail,
+        clean_repetitive_cycles,
+        clean_rooftop_address,
+        get_fuzzy_suffix,
+        is_city_noise_in_street1,
+        is_edit_distance_leq1,
+        is_invalid_thoroughfare,
+        parse_intersection_address,
+    )
+    from entity_standardizer.address.normalization import (
+        _clean_token,
+        _crown_dependency_code,
+        _drop_from_first_numeric_token,
+        get_state_from_zip3,
+        normalize_country_code,
+        normalize_us_postal_code,
+        normalize_us_state,
+    )
+
+    # 1. _patterns.py branches
+    assert is_invalid_thoroughfare("") is True
+    assert is_invalid_thoroughfare("   ") is True
+    assert is_invalid_thoroughfare("A") is True
+    assert is_invalid_thoroughfare("(NOTE)") is True
+    assert is_invalid_thoroughfare("A&B") is True
+    assert is_invalid_thoroughfare("STE 100") is True
+    assert is_invalid_thoroughfare("BROADWAY") is False
+    assert is_invalid_thoroughfare("LLC") is True
+    assert is_invalid_thoroughfare("ONE") is True
+    assert is_invalid_thoroughfare("STREET") is True
+    assert is_invalid_thoroughfare("12345") is True
+    assert is_invalid_thoroughfare("A1") is True
+    assert is_invalid_thoroughfare("100 MAIN ST") is False
+
+    assert is_edit_distance_leq1("A", "ABC") is False
+    assert is_edit_distance_leq1("ABC", "AXZ") is False
+    assert is_edit_distance_leq1("ABCD", "ABXY") is False
+    assert is_edit_distance_leq1("ABCD", "ACD") is True
+
+    assert get_fuzzy_suffix("AB") is None
+    assert get_fuzzy_suffix("STREET") == "ST"
+    assert get_fuzzy_suffix("STERET") == "ST"
+
+    assert clean_redundant_street_tail("", "NY", "NY", "10001") == ""
+    assert clean_redundant_street_tail("   ", "NY", "NY", "10001") == ""
+    assert clean_redundant_street_tail("100 MAIN ST, NEW YORK", city="NEW YORK", state="NEW YORK") == "100 MAIN ST"
+    assert clean_redundant_street_tail("NEW YORK", city="NEW YORK") == ""
+
+    assert clean_repetitive_cycles("") == ""
+    assert clean_repetitive_cycles("A B C D E F A B C D E F") == "A B C D E F"
+
+    assert _normalize_intersection_branch("") == ""
+    assert _normalize_intersection_branch("NORTH FOURTH STREET ROUTES 60 HIGHWAYS 1") == "N 4TH ST RT 60 HWY 1"
+
+    assert parse_intersection_address("") is None
+    assert parse_intersection_address("Routes 60 And 155") == "RT 60 & RT 155"
+    assert parse_intersection_address("The Village at Thornblade") is None
+    assert parse_intersection_address("Cherry and Fourth Streets") == "CHERRY ST & 4TH ST"
+    assert parse_intersection_address("CORNER OF 5TH AVE & 42ND ST") == "5TH AVE & 42ND ST"
+    assert parse_intersection_address("SUITE 100 AND 42ND ST") is None
+    assert parse_intersection_address("5TH AVE AND SUITE 100") is None
+    assert parse_intersection_address("FOO AND BAR") is None
+
+    assert is_city_noise_in_street1("", "BOSTON", "MA") is False
+    assert is_city_noise_in_street1("...", "BOSTON", "MA") is True
+    assert is_city_noise_in_street1("100 MAIN ST", "100 MAIN ST", "MA") is False
+    assert is_city_noise_in_street1("BLVD", "BOSTON", "MA") is True
+    assert is_city_noise_in_street1("MA", "BOSTON", "MA") is True
+    assert is_city_noise_in_street1("HALF MOON", "HALF MOON BAY", "CA") is True
+    assert is_city_noise_in_street1("S BND IN", "SOUTH BEND", "IN") is True
+    assert is_city_noise_in_street1("CHADDS FRD", "CHADDS FORD", "PA") is True
+    assert is_city_noise_in_street1("SOMETHING ELSE", "BOSTON", "MA") is False
+
+    assert clean_rooftop_address("") is None
+    assert clean_rooftop_address("   ") is None
+    assert clean_rooftop_address("PRIVATE RESIDENCE") is None
+    assert clean_rooftop_address("PO BOX 123") is None
+    assert clean_rooftop_address("STREET") is None
+    assert clean_rooftop_address("BROADWAY") == "BROADWAY"
+    assert clean_rooftop_address("100 MAIN ST BSMT") == "100 MAIN ST"
+    assert clean_rooftop_address("100 MAIN ST STE 200") == "100 MAIN ST"
+    assert clean_rooftop_address("STE 200") is None
+
+    # 2. normalization.py branches
+    assert get_state_from_zip3("") is None
+    assert _clean_token(" ,Boston. ") == "Boston"
+    assert _drop_from_first_numeric_token("LEEDS 4 EXTRA") == "LEEDS"
+    assert _crown_dependency_code("10 High St, JE2 3AB") == "JEY"
+    assert normalize_country_code("N/A") == "USA"
+    assert normalize_country_code("XYZ") == "XYZ"
+    assert normalize_country_code("République Française") == "FRA"
+    assert normalize_country_code(None, state_raw="Ontario") == "CAN"
+    assert normalize_country_code("PRI") == "PRI"
+    assert normalize_country_code(None, city_raw="LONDON 123") == "GBR"
+    assert normalize_country_code(None, city_raw="10115 BERLIN") == "DEU"
+    assert normalize_country_code(None, city_raw="WESTMINSTER, LONDON") == "GBR"
+    assert normalize_country_code(None, city_raw="ZÜRICH") == "CHE"
+    assert normalize_country_code(None, postal_raw="M5J 2J5") == "CAN"
+    assert normalize_country_code(None, postal_raw="JE2 3AB") == "JEY"
+    assert normalize_country_code(None, raw_street="10 Fort St, Grand Cayman") == "CYM"
+    assert normalize_country_code(None, raw_street="10 High St, St Helier, Jersey") == "JEY"
+    assert normalize_country_code(None, raw_street="100 King St, Toronto, Canada") == "CAN"
+    assert normalize_country_code(None, raw_street="100 King St, Toronto, ON") == "CAN"
+    assert normalize_country_code(None, raw_street="100 George St, Sydney NSW 2000") == "AUS"
+    assert normalize_country_code(None, raw_street="100 Main St, Paris, TX, USA") == "USA"
+    assert normalize_country_code(None, raw_street="100 Main St, Austin Texas") == "USA"
+    assert normalize_country_code(None, raw_street="100 Main St, Avenue, France") == "FRA"
+    assert normalize_country_code(None, raw_street="100 Main St, New Zealand") == "NZL"
+    assert normalize_country_code(None, raw_street="100 Main St, France 75001") == "FRA"
+    assert normalize_country_code(None, raw_street="10 Downing St, London, Unit 1") == "GBR"
+    assert normalize_country_code(None, raw_street="Bahnhofstrasse 1, Zürich, Unit 1") == "CHE"
+    assert normalize_country_code(None, raw_street="10 Downing St, London 123, Ste 1") == "GBR"
+    assert normalize_country_code(None, raw_street="10 Rue Paix, France 123, Ste 1") == "FRA"
+    assert normalize_country_code(None, raw_street="10 Bahnhofstr, 8001 Zürich, Ste 1") == "CHE"
+    assert normalize_country_code(None, raw_street="10 Rue Paix, 75001 France, Ste 1") == "FRA"
+    assert normalize_us_state("USA-CA") == "CA"
+    assert normalize_us_state("US-NY") == "NY"
+    assert normalize_us_postal_code("   ") == ("", "")
+    assert normalize_us_postal_code("ABC-123") == ("ABC-123", "")
+
+    # 3. us_street_parser.py branches
+    assert usp._rule_based_us_street_parse("100 Main St At Ste 200")[0].startswith("100 MAIN ST")
+    assert usp._rule_based_us_street_parse("100 Main St 2nd Floor West") == ("100 MAIN ST 2ND", "FL WEST", True)
+    assert usp._RE_ORDINAL_FLOOR.sub(usp._ordinal_floor_to_unit, "100 Fifth Floor Rd") == "100 Fifth Floor Rd"
+    assert usp._RE_ORDINAL_FLOOR.sub(usp._ordinal_floor_to_unit, "100 Main St, Third Floor") == "100 Main St, FL 3"
+    assert usp._parse_us_street_tokens("100 Main St in, Boston, MA 02110")[0] == "100 MAIN ST"
+    assert usp._parse_us_street_tokens("100 Main St New York 10005")[3].upper() == "NEW YORK"
+    assert usp._move_trailing_house_number("St. Nicholas 100") == "St. Nicholas 100"
+    assert usp._parse_us_address_components("PO Box 100", "200 Main St")[:2] == ("200 MAIN ST", "PO BOX 100")
+    assert usp._parse_us_address_components("100 Main St Ste 200", "Ste 200")[:2] == ("100 MAIN ST", "STE 200")
+    assert usp._parse_us_street_lines("100 Main St", "Ste 200") == ("100 MAIN ST", "STE 200", True)
+
+    if usp.usaddress is not None:
+        orig_parse = usp.usaddress.parse
+
+        # Case A: usaddress.parse raises exception -> fallback reverse-anchor parser
+        def _raise_parse(s: str) -> list:
+            raise RuntimeError("crf failure")
+
+        monkeypatch.setattr(usp.usaddress, "parse", _raise_parse)
+        assert usp._parse_us_street_tokens("Boston MA 02110")[3].upper() == "BOSTON"
+        assert usp._parse_us_street_tokens("Boston 02110")[5] == "02110"
+        assert usp._parse_us_street_tokens("100 Main St PO Box 50 Boston MA 02110")[3].upper() == "BOSTON"
+        assert usp._parse_us_street_tokens("100 Main St N Ste 200 Boston MA 02110")[1] == "STE 200"
+        assert usp._parse_us_street_tokens("100 Main St Unknowncity 02110")[5] == "02110"
+        assert usp._parse_us_street_tokens("100 Broadway MA 02110")[4] == "MA"
+        assert usp._parse_us_street_tokens("100 Main St New York NY 10005")[3].upper() == "NEW YORK"
+
+        # Case B: compound directionals, compound ordinals, Spanish pre-type, SLIP, EXT, compound OccupancyIdentifier
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [
+                ("100", "AddressNumber"),
+                ("N", "StreetNamePreDirectional"),
+                ("E", "StreetNamePreDirectional"),
+                ("AVENIDA", "StreetNamePreType"),
+                ("TWENTY", "StreetName"),
+                ("FIRST", "StreetName"),
+                ("EXT", "StreetNamePostType"),
+                ("NORTH", "StreetNamePostDirectional"),
+                ("EAST", "StreetNamePostDirectional"),
+                ("SUITE", "OccupancyType"),
+                ("A", "OccupancyIdentifier"),
+                ("100", "OccupancyIdentifier"),
+                ("BLDG", "BuildingName"),
+                ("1", "BuildingName"),
+            ],
+        )
+        r_b = usp._parse_us_street_tokens("dummy")
+        assert "N E" in r_b[0] and "21ST" in r_b[0] and "EXT" in r_b[0] and "BLDG 1" in r_b[1]
+
+        # Case C: SLIP post-type, USPSBoxType/ID, UrbanizationName, SAINT PlaceName, LandmarkName, Recipient
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [
+                ("URB", "UrbanizationType"),
+                ("LAS", "UrbanizationName"),
+                ("FLORES", "UrbanizationName"),
+                ("10", "AddressNumber"),
+                ("HARBOR", "StreetName"),
+                ("SLIP", "StreetNamePostType"),
+                ("5", "OccupancyIdentifier"),
+                ("SAINT", "PlaceName"),
+                ("LOUIS", "PlaceName"),
+            ],
+        )
+        r_c = usp._parse_us_street_tokens("dummy")
+        assert "STE 5" in r_c[1] and r_c[3] == "SAINT LOUIS"
+
+        # Case D: OccupancyIdentifier without sec_type (with & without street_num), PlaceName secondary unit, ZipCode rescued suffixes & numbers
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [
+                ("100", "OccupancyIdentifier"),
+                ("AVENIDA", "StreetName"),
+                ("LUNA", "StreetName"),
+                ("SUITE", "PlaceName"),
+                ("200", "PlaceName"),
+                ("PLAZA", "LandmarkName"),
+                ("TOWER", "Recipient"),
+                ("FLOOR", "StateName"),
+                ("3", "StateName"),
+                ("NW", "ZipCode"),
+                ("400", "ZipCode"),
+                ("10005", "ZipCode"),
+            ],
+        )
+        r_d = usp._parse_us_street_tokens("dummy")
+        assert "FL 3" in r_d[1]
+
+        # Case E: Invalid StateName branches (suffix, directional, >2 chars, 2-char with/without city_parts), non-digit ZipCode, city_raw reassociation
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [
+                ("100", "AddressNumber"),
+                ("NORTH", "PlaceName"),
+                ("MAIN", "PlaceName"),
+                ("AVE", "PlaceName"),
+                ("EXTRA", "PlaceName"),
+                ("ST", "StateName"),
+                ("NW", "StateName"),
+                ("LONGSTATE", "StateName"),
+                ("XX", "StateName"),
+                ("BLVD", "ZipCode"),
+                ("99", "ZipCode"),
+                ("88", "ZipCode"),
+            ],
+        )
+        r_e = usp._parse_us_street_tokens("dummy", city_raw="BOSTON")
+        assert "100" in r_e[0]
+
+        # Case F: Subaddress multiple parts, PO BOX in street_name, HIGHWAY + suffix, fuzzy suffix without street_num, street_num + suffix only, post_dir only
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [
+                ("PO", "StreetName"),
+                ("BOX", "StreetName"),
+                ("55", "StreetName"),
+                ("FL", "SubaddressType"),
+                ("2", "SubaddressIdentifier"),
+                ("STE", "SubaddressType"),
+                ("10", "SubaddressIdentifier"),
+            ],
+        )
+        r_f1 = usp._parse_us_street_tokens("dummy")
+        assert "PO BOX 55" in r_f1[0]
+
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [
+                ("100", "AddressNumber"),
+                ("HIGHWAY", "StreetName"),
+                ("10", "StreetName"),
+                ("AVE", "StreetNamePostType"),
+            ],
+        )
+        assert "100 HIGHWAY 10 AVE" in usp._parse_us_street_tokens("dummy")[0]
+
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [
+                ("NORTH", "StreetNamePreDirectional"),
+                ("MAIN", "StreetName"),
+                ("STERET", "StreetName"),
+            ],
+        )
+        assert usp._parse_us_street_tokens("dummy", enable_fuzzy=True)[0] == "N MAIN ST"
+
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [
+                ("100", "AddressNumber"),
+                ("BROADWAY", "StreetNamePostType"),
+            ],
+        )
+        assert usp._parse_us_street_tokens("dummy")[0] == "100 BROADWAY"
+
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [
+                ("100", "AddressNumber"),
+                ("N", "StreetNamePostDirectional"),
+            ],
+        )
+        assert usp._parse_us_street_tokens("dummy")[0] == "100 N"
+
+        # Case G: Commercial hub fallbacks (bldg_parts, recipient_parts, city_parts with city_raw)
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("EMPIRE", "BuildingName"), ("BUILDING", "BuildingName")],
+        )
+        assert usp._parse_us_street_tokens("dummy")[0] == "EMPIRE BUILDING"
+
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("WORLD", "Recipient"), ("PLAZA", "Recipient")],
+        )
+        assert usp._parse_us_street_tokens("World Plaza")[0] == "WORLD PLZ"
+
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("FOO", "Recipient")],
+        )
+        assert "BLUE BELL EXECUTIVE" in usp._parse_us_street_tokens("Blue Bell Executive Campus, Suite 200, Blue Bell, PA 19422")[0]
+
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("CORPORATE", "PlaceName"), ("CENTER", "PlaceName")],
+        )
+        assert usp._parse_us_street_tokens("dummy", city_raw="BOSTON")[0] == "CORPORATE CENTER"
+
+        monkeypatch.setattr(usp.usaddress, "parse", orig_parse)
+
+

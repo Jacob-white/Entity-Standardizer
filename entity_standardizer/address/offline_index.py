@@ -128,6 +128,8 @@ class OfflineReferenceIndex:
         if current_pid != self._pid:
             with self._lock:
                 if current_pid != self._pid:
+                    if self._real_conn is not None:
+                        self._real_conn.close()
                     self._pid = current_pid
                     self._real_conn = sqlite3.connect(self._db_path, check_same_thread=False)
                     self._real_conn.row_factory = sqlite3.Row
@@ -839,8 +841,11 @@ class OfflineReferenceIndex:
     def close(self):
         """Closes internal database connection."""
         with self._lock:
-            if self._conn:
-                self._conn.close()
+            if getattr(self, "_real_conn", None) is not None:
+                self._real_conn.close()
+
+    def __del__(self):
+        self.close()
 
 
 _DEFAULT_OFFLINE_INDEX: Optional[OfflineReferenceIndex] = None

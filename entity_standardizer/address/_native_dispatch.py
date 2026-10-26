@@ -10,7 +10,6 @@ import logging
 import os
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from entity_standardizer.address import _pure_python_core
 from entity_standardizer.address.models import StandardizedAddress
 
 logger = logging.getLogger(__name__)
@@ -109,6 +108,9 @@ def is_native_available() -> bool:
 def is_using_native() -> bool:
     """Returns True if native compiled core is active for dispatch calls."""
     return _NATIVE_AVAILABLE and not _FORCE_PURE_PYTHON and _NATIVE_MODULE is not None
+
+
+from entity_standardizer.address import _pure_python_core  # noqa: E402
 
 
 def get_active_engine() -> Any:

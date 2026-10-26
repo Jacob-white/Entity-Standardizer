@@ -7,7 +7,12 @@ from dataclasses import dataclass, field
 import re
 from typing import Any
 
-from entity_standardizer._native_dispatch import normalize_company_tokens_dispatch
+from entity_standardizer._native_dispatch import (
+    compute_soundex_dispatch,
+    damerau_levenshtein_distance_dispatch,
+    normalize_batch_company_tokens_dispatch,
+    normalize_company_tokens_dispatch,
+)
 from entity_standardizer.normalization import fold_latin_diacritics
 
 # Multi-token and single-token legal entity forms (ISO 20275 ELF)
@@ -282,18 +287,22 @@ StandardizedOrganization = StandardizedCompany
 _fold_latin_diacritics = fold_latin_diacritics
 
 
+_AMP_PLUS_RE = re.compile(r"\s*[&+]\s*")
+_NON_ALPHA_ASCII_RE = re.compile(r"[^A-Za-z]")
+
+
 def _pure_normalize_tokens(text: str, actions: list[str] | None = None) -> list[str]:
     """Pure-Python normalization of punctuation, ampersands, and spaced/dotted initialisms into uppercase tokens."""
     working = _AS_SLASH_RE.sub(" AS ", fold_latin_diacritics(text))
 
     if "&" in working or "+" in working:
-        working = re.sub(r"\s*[&+]\s*", " AND ", working)
+        working = _AMP_PLUS_RE.sub(" AND ", working)
         if actions is not None:
             actions.append("AMPERSAND_NORMALIZED")
 
     def _collapse_dotted(match: re.Match[str]) -> str:
         raw_seq = match.group(0)
-        letters = re.sub(r"[^A-Za-z]", "", raw_seq).upper()
+        letters = _NON_ALPHA_ASCII_RE.sub("", raw_seq).upper()
         if actions is not None:
             actions.append("INITIALISM_COLLAPSED")
         return f" {letters} "
@@ -424,7 +433,7 @@ def standardize_company(
         return StandardizedCompany(raw_input=str(raw_input))
 
     actions: list[str] = []
-    working = re.sub(r"\s+", " ", cleaned_raw)
+    working = " ".join(cleaned_raw.split())
 
     # 0. Strip trailing SEC /XX or /XX/ state-of-incorporation or filing suffixes
     sec_country: str | None = None
@@ -550,7 +559,6 @@ def standardize_company(
     branch_tokens = _normalize_tokens(branch_raw) if branch_raw else []
     branch_unit = " ".join(branch_tokens) if branch_tokens else None
 
-    from entity_standardizer._native_dispatch import compute_soundex_dispatch
     from entity_standardizer.registry import normalize_country_iso2
 
     explicit_country = normalize_country_iso2(country) if country else None
@@ -612,8 +620,6 @@ def compare_companies(
     company_b: str | StandardizedCompany | None,
 ) -> CompanyComparisonResult:
     """Compare two company names or StandardizedCompany objects across canonical, alias, brand, and phonetic keys."""
-    from entity_standardizer._native_dispatch import damerau_levenshtein_distance_dispatch
-
     ca = company_a if isinstance(company_a, StandardizedCompany) else standardize_company(company_a)
     cb = company_b if isinstance(company_b, StandardizedCompany) else standardize_company(company_b)
 
@@ -697,11 +703,9 @@ def batch_standardize_companies(
     country: str | None = None,
 ) -> list[StandardizedCompany]:
     """Batch-standardize a sequence of organization or company names."""
-    from entity_standardizer._native_dispatch import normalize_batch_company_tokens_dispatch
-
     clean_texts = list(
         dict.fromkeys(
-            re.sub(r"\s+", " ", str(x).strip())
+            " ".join(str(x).split())
             for x in inputs
             if x is not None and str(x).strip()
         )

@@ -157,6 +157,8 @@ class SQLiteCache:
         import os
         current_pid = os.getpid()
         if current_pid != self._pid:
+            if self._conn is not None:
+                self._conn.close()
             self._pid = current_pid
             self._conn = sqlite3.connect(self.db_path, timeout=30.0, check_same_thread=False)
             self._conn.row_factory = sqlite3.Row
@@ -268,6 +270,15 @@ class SQLiteCache:
                 "evictions": self._evictions,
                 "hit_rate": round(hit_rate, 4),
             }
+
+    def close(self) -> None:
+        """Closes the underlying SQLite connection."""
+        conn = getattr(self, "_conn", None)
+        if conn is not None:
+            conn.close()
+
+    def __del__(self) -> None:
+        self.close()
 
 
 class MultiTierCache:

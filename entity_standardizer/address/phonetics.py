@@ -7,13 +7,13 @@ without third-party C dependencies.
 """
 
 from typing import Optional
+from entity_standardizer.address._native_dispatch import try_native
 from entity_standardizer.address.tables import STREET_SUFFIXES, DIRECTIONALS
 from entity_standardizer.address._patterns import (
     RE_CLEAN_ALPHA,
     RE_PO_BOX_KEY,
     RE_US_ZIP5_OR_9,
     RE_PUNCTUATION_SPLIT,
-    RE_WHITESPACE,
     RE_DIGITS,
     RE_NUMBERED_STREET_KEY,
     FROZEN_DIRECTIONAL_VALUES,
@@ -52,7 +52,6 @@ def _pure_compute_soundex(token: str) -> str:
 
 def compute_soundex(token: str) -> str:
     """Computes standard American Soundex code for a word token with native Rust acceleration."""
-    from entity_standardizer.address._native_dispatch import try_native
     ok, result = try_native("compute_soundex", token)
     return result if ok else _pure_compute_soundex(token)
 
@@ -87,8 +86,7 @@ def _pure_generate_phonetic_address_key(street1: Optional[str], postal_or_zip: s
             else (city.strip() if city else (p_clean if p_clean else ""))
         )
 
-    st_clean = RE_PUNCTUATION_SPLIT.sub(" ", st_raw).strip()
-    st_clean = RE_WHITESPACE.sub(" ", st_clean)
+    st_clean = RE_PUNCTUATION_SPLIT.sub(" ", st_raw)
     parts = st_clean.split()
     if not parts:
         return None

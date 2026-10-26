@@ -328,6 +328,8 @@ _TRACKING_QUERY_PARAMS: frozenset[str] = frozenset(
 _ANGLE_EMAIL_RE = re.compile(r"^\s*(.*?)\s*<\s*([^<>]+)\s*>\s*$")
 _LOCAL_PART_RE = re.compile(r"^[A-Za-z0-9.!#$%&'*+/=?^_`{|}~\-]{1,64}$")
 _DOMAIN_LABEL_RE = re.compile(r"^[a-z0-9](?:[a-z0-9\-]{0,61}[a-z0-9])?$")
+_ROLE_SEP_RE = re.compile(r"[._\-]")
+_SOCIAL_PREFIX_RE = re.compile(r"^([A-Za-z]+)\s*:\s*(.+)$")
 
 
 @dataclass(slots=True)
@@ -537,7 +539,7 @@ def standardize_email(raw_input: str | None) -> StandardizedEmail:
         disp_cand = m_angle.group(1).strip().strip("\"'").strip()
         working = m_angle.group(2).strip()
         if disp_cand:
-            display_name = re.sub(r"\s+", " ", disp_cand)
+            display_name = " ".join(disp_cand.split())
             actions.append("DISPLAY_NAME_EXTRACTED")
 
     # 2. Strip mailto: scheme and any mailto query string
@@ -595,7 +597,7 @@ def standardize_email(raw_input: str | None) -> StandardizedEmail:
 
     is_disposable = effective_domain in _DISPOSABLE_EMAIL_DOMAINS or norm_domain in _DISPOSABLE_EMAIL_DOMAINS
     is_free_provider = effective_domain in _FREE_WEBMAIL_DOMAINS or norm_domain in _FREE_WEBMAIL_DOMAINS
-    role_candidate = re.sub(r"[._\-]", "", base_local)
+    role_candidate = _ROLE_SEP_RE.sub("", base_local)
     is_role_account = base_local in _ROLE_ACCOUNT_PREFIXES or role_candidate in _ROLE_ACCOUNT_PREFIXES
 
     if is_disposable:
@@ -762,7 +764,7 @@ def standardize_social(
     )
 
     # Check prefix syntax like "twitter: @jack" or "linkedin: in/jane-doe"
-    m_prefix = re.match(r"^([A-Za-z]+)\s*:\s*(.+)$", working)
+    m_prefix = _SOCIAL_PREFIX_RE.match(working)
     if m_prefix and m_prefix.group(1).upper() in _PLATFORM_ALIASES:
         explicit_plat = _PLATFORM_ALIASES[m_prefix.group(1).upper()]
         working = m_prefix.group(2).strip()
