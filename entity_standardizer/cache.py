@@ -109,6 +109,7 @@ class SQLiteCache:
     def _get_conn(self) -> sqlite3.Connection:
         current_pid = os.getpid()
         if current_pid != self._pid:
+            self._conn.close()
             self._pid = current_pid
             self._conn = self._open_conn()
             self._closed = False
@@ -159,6 +160,9 @@ class SQLiteCache:
         return self
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
+        self.close()
+
+    def __del__(self) -> None:
         self.close()
 
 

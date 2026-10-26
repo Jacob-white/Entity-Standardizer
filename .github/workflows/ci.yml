@@ -37,7 +37,7 @@ jobs:
       - name: Tests with 100% coverage gate
         run: pytest --cov --cov-report=term-missing
       - name: Address subsystem coverage gate (>= 93%)
-        run: pytest -q --cov=entity_standardizer/address --cov-config=/dev/null --cov-fail-under=93
+        run: pytest -q --cov=entity_standardizer/address --cov-config="" --cov-fail-under=93
 
   rust:
     runs-on: ubuntu-latest

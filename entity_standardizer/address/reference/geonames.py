@@ -349,7 +349,13 @@ class GeoNamesPostalProvider:
         }
 
     def close(self) -> None:
-        self._conn.close()
+        """Close the underlying SQLite connection."""
+        conn = getattr(self, "_conn", None)
+        if conn is not None:
+            conn.close()
+
+    def __del__(self) -> None:
+        self.close()
 
     def __enter__(self) -> "GeoNamesPostalProvider":
         return self

@@ -243,6 +243,8 @@ class StewardshipAuditLedger:
         with self._lock:
             current_pid = os.getpid()
             if current_pid != self._pid:
+                if self._conn is not None:
+                    self._conn.close()
                 self._pid = current_pid
                 self._conn = sqlite3.connect(self.db_path, timeout=30.0, check_same_thread=False)
                 self._conn.row_factory = sqlite3.Row
@@ -572,6 +574,15 @@ class StewardshipAuditLedger:
                 conn.execute("DELETE FROM address_stewardship_audit_ledger")
                 conn.execute("DELETE FROM address_stewardship_audit_history")
             self._inserts_since_prune = 0
+
+    def close(self) -> None:
+        """Closes the underlying SQLite connection."""
+        conn = getattr(self, "_conn", None)
+        if conn is not None:
+            conn.close()
+
+    def __del__(self) -> None:
+        self.close()
 
     def _row_to_record(self, row: sqlite3.Row) -> StewardshipAuditRecord:
         return StewardshipAuditRecord(
