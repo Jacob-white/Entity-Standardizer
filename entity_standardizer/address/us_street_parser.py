@@ -7,10 +7,7 @@ import logging
 import re
 from typing import Optional, Tuple, List
 
-try:
-    import usaddress
-except ImportError:
-    usaddress = None
+import usaddress
 
 from entity_standardizer.address.tables import (
     DIRECTIONALS,
