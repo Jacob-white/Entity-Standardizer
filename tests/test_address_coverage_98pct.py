@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import sys
 import types
 from pathlib import Path
 from unittest.mock import patch
@@ -223,9 +222,9 @@ def test_native_dispatch_and_pure_python_core(monkeypatch):
         with pytest.raises(KeyboardInterrupt):
             addr_native_dispatch.try_native("kb")
 
-    fake_mod = types.ModuleType("_phone_standardizer_rs")
-    monkeypatch.setitem(sys.modules, "_phone_standardizer_rs", fake_mod)
-    assert addr_native_dispatch._load_fallback_native() is not None
+    fake_mod = types.ModuleType("_entity_standardizer_rs")
+    with patch("entity_standardizer._native_dispatch._load_native_module", return_value=fake_mod):
+        assert addr_native_dispatch._load_fallback_native() is fake_mod
 
     orig_mod = addr_native_dispatch._NATIVE_MODULE
     orig_avail = addr_native_dispatch._NATIVE_AVAILABLE
