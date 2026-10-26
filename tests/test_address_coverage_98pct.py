@@ -1449,3 +1449,130 @@ def test_transliterate_calibration_explain_cache_and_audit(tmp_path: Path):
     ledger.clear()
     ledger.close()
 
+
+def test_reference_transliterate_delivery_and_helper_branches(monkeypatch: pytest.MonkeyPatch) -> None:
+    import sys
+    from entity_standardizer.address.care_of import extract_care_of
+    from entity_standardizer.address.delivery import DPVFootnote, evaluate_delivery_intelligence
+    from entity_standardizer.address.fast_path import _normalize_fast_street_phrase
+    from entity_standardizer.address.fuzzy import heal_street_name
+    from entity_standardizer.address.models import StandardizedAddress
+    from entity_standardizer.address.reference._match import names_match
+    from entity_standardizer.address.reference.base import ReferencePlace, ReferenceProvider
+    from entity_standardizer.address.reference.validation import (
+        apply_reference_validation,
+        validate_against_reference,
+    )
+    from entity_standardizer.address.transliterate import transliterate
+
+    def _mk_addr(**kw) -> StandardizedAddress:
+        defaults = dict(
+            street1="100 MAIN ST",
+            street2="",
+            city="NEW YORK",
+            state="NY",
+            postal_code="10005",
+            country="USA",
+            normalized_address_key="USA|NY|NEWYORK|10005|100|MAINST|",
+            address_status="standardized",
+            raw_street_address="100 MAIN ST",
+            is_us=True,
+        )
+        defaults.update(kw)
+        return StandardizedAddress(**defaults)
+
+    # reference/_match.py lines 41, 48, 52
+    assert names_match("", "Springfield") is False
+    assert names_match("Springfield", "East Springfield") is True
+    assert names_match("RYE", "ADA") is False
+
+    # reference/validation.py lines 93-95, 111, 159, 186
+    class _DummyRefProvider(ReferenceProvider):
+        name = "dummy"
+        source = "unit-test"
+        license = "MIT"
+        as_of = "2026-01-01"
+
+        def covers_country(self, country_iso2: str) -> bool:
+            return country_iso2 == "US"
+
+        def lookup_postal(self, country_iso2: str, postal_code: str):
+            if postal_code == "10005":
+                return [
+                    ReferencePlace(
+                        country="US",
+                        postal_code="10005",
+                        place_name="NEW YORK",
+                        admin1_code="NY",
+                        latitude=40.706,
+                        longitude=-74.009,
+                    )
+                ]
+            return []
+
+    prov = _DummyRefProvider()
+    std_unk = _mk_addr(street1="100 MAIN ST", city="ATLANTIS", state="", postal_code="00000", country="ZZZ", is_us=False)
+    val_unk = validate_against_reference(std_unk, prov)
+    assert val_unk.status == "not_checked"
+    assert val_unk.detail == "country not recognised"
+
+    std_geo = _mk_addr(
+        street1="100 WALL ST",
+        city="NEW YORK",
+        state="NY",
+        postal_code="10005",
+        country="USA",
+    )
+    std_geo.latitude = 40.7128
+    std_geo.longitude = -74.0060
+    val_geo = validate_against_reference(std_geo, prov)
+    assert val_geo.status == "confirmed"
+    assert val_geo.distance_km is not None and val_geo.distance_km > 0
+
+    std_bad_zip = _mk_addr(
+        street1="100 WALL ST",
+        city="NEW YORK",
+        state="NY",
+        postal_code="99998",
+        country="USA",
+    )
+    std_bad_zip.confidence_score = 1.10
+    std_bad_zip.routing_tier = "AUTO_PASS"
+    apply_reference_validation(std_bad_zip, prov)
+    assert std_bad_zip.routing_tier == "FUZZY_REVIEW"
+
+    # transliterate.py fallback when anyascii is not installed (lines 49-50, 61, 69, 133)
+    monkeypatch.setitem(sys.modules, "anyascii", None)
+    out_translit = transliterate("Москва, é, \u046b", errors="passthrough")
+    assert "Moskva" in out_translit
+    assert "é" in out_translit
+    assert "\u046b" in out_translit
+
+    # delivery.py lines 195, 211, 283, 330
+    std_cmra_kw = _mk_addr(street1="100 THE UPS STORE ST")
+    deliv_cmra_kw = evaluate_delivery_intelligence(std_cmra_kw)
+    assert deliv_cmra_kw.cmra is True
+
+    std_cmra_reg = _mk_addr(street1="275 MADISON AVE", postal_code="10016")
+    deliv_cmra_reg = evaluate_delivery_intelligence(std_cmra_reg)
+    assert deliv_cmra_reg.cmra is True
+
+    std_zero_num = _mk_addr(street1="0 MAIN ST")
+    deliv_zero = evaluate_delivery_intelligence(std_zero_num)
+    assert DPVFootnote.M3 in deliv_zero.dpv_footnotes
+
+    std_unindexed_hub = _mk_addr(street1="9999 UNINDEXED ST", is_registered_agent_hub=True)
+    deliv_hub = evaluate_delivery_intelligence(std_unindexed_hub)
+    assert deliv_hub.suggested_secondary_units == ["STE", "FL", "UNIT", "APT"]
+
+    # care_of.py lines 104, 169
+    addr_co1, co1 = extract_care_of("C/O ACME HOLDINGS LLC INC")
+    assert addr_co1 == ""
+    assert "ACME HOLDINGS" in co1
+    addr_co2, co2 = extract_care_of("SUITE 200, C/O ACME LLC, 100 MAIN ST")
+    assert addr_co2 == "SUITE 200, 100 MAIN ST"
+    assert co2 == "ACME LLC"
+
+    # fuzzy.py line 290 and fast_path.py line 135
+    assert heal_street_name("MARKETS") is None
+    assert _normalize_fast_street_phrase(", USA") is None

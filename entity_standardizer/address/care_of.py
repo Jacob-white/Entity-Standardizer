@@ -68,6 +68,9 @@ _RE_LEGAL_SUFFIX_THEN_TEXT = re.compile(
     re.IGNORECASE,
 )
 _RE_NUMBERED_TAIL = re.compile(r"\b(\d+\s+[A-Za-z].*)$")
+_RE_DIGIT = re.compile(r"\d")
+_RE_WORD = re.compile(r"\w+")
+_RE_CO_PAREN_PREFIX = re.compile(rf"^[\(\[]\s*{_CO_MARKER}{_CO_END}[:\s\-]*", re.IGNORECASE)
 
 
 def has_care_of(text: str) -> bool:
@@ -81,9 +84,9 @@ def _looks_like_street(candidate: str) -> bool:
     Requiring the street type to be the last word keeps company-name tails such as "Park Capital Partners",
     "Ocean Park Holdings" or "Way Financial" from becoming a delivery line.
     """
-    if re.search(r"\d", candidate):
+    if _RE_DIGIT.search(candidate):
         return True
-    words = [w.upper() for w in re.findall(r"\w+", candidate)]
+    words = [w.upper() for w in _RE_WORD.findall(candidate)]
     if not words:
         return False
     if len(words) == 1:
@@ -96,7 +99,7 @@ def _street_after_legal_suffix(after_co: str) -> str:
     matches = list(_RE_LEGAL_SUFFIX_THEN_TEXT.finditer(after_co))
     for m in reversed(matches):
         candidate = after_co[m.end():].strip(" ,.-")  # never empty: the regex lookahead requires an alphanumeric
-        words = [w.upper() for w in re.findall(r"\w+", candidate)]
+        words = [w.upper() for w in _RE_WORD.findall(candidate)]
         if words and all(w in LEGAL_SUFFIXES_CLEAN for w in words):
             continue
         # The tail is only a street if it looks like one; otherwise it is just the rest of the c/o name
@@ -128,7 +131,7 @@ def extract_care_of(text: str) -> "tuple[str, str]":
         prev = curr
         # Strip parenthesized or bracketed care-of / attn clauses: (C/O ...) or [C/O ...]
         for m_paren in RE_CO_PAREN.finditer(curr):
-            inner = re.sub(rf"^[\(\[]\s*{_CO_MARKER}{_CO_END}[:\s\-]*", "", m_paren.group(0), flags=re.IGNORECASE)
+            inner = _RE_CO_PAREN_PREFIX.sub("", m_paren.group(0))
             inner = inner.rstrip(")] ").strip(" ,.-")
             if inner:
                 removed.append(inner)
@@ -173,8 +176,8 @@ def extract_care_of(text: str) -> "tuple[str, str]":
             rem_co = co_parts[1:]
             while rem_co and rem_co[0].upper().replace(".", "").replace("&", "").replace(" ", "").strip() in LEGAL_SUFFIXES_CLEAN:
                 rem_co = rem_co[1:]
-            if len(rem_co) == 1 and not re.search(r"\d", rem_co[0]):
-                words = set(re.findall(r"\w+", rem_co[0].upper()))
+            if len(rem_co) == 1 and not _RE_DIGIT.search(rem_co[0]):
+                words = set(_RE_WORD.findall(rem_co[0].upper()))
                 if not (words & _SINGLE_PART_STREET_WORDS):
                     rem_co = []
             kept = ", ".join(rem_co)

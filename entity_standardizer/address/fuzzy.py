@@ -123,6 +123,30 @@ PROTECTED_STREET_WORDS: frozenset[str] = frozenset({
     "STATES", "UNITED", "AMERICA", "ISLANDS",
 })
 
+_RE_DIGIT_OR_HYPHEN = re.compile(r"[\d\-]")
+_RE_NON_UPPER_ALPHA = re.compile(r"[^A-Z]")
+_RE_NON_WORD_SPACE = re.compile(r"[^\w\s]")
+_RE_WHITESPACE = re.compile(r"\s+")
+_RE_NON_DIGITS = re.compile(r"[^\d]")
+_RE_LEADING_DIGITS_REST = re.compile(r"^(\d+)(.*)$")
+
+_ALL_PROMINENT_CITIES = frozenset(c for cities in PROMINENT_STATE_CITIES.values() for c in cities)
+_SORTED_MULTI_WORD_CITIES = tuple(sorted(MULTI_WORD_CITIES))
+_SORTED_COMMON_STREET_NAMES = tuple(sorted(COMMON_STREET_NAMES))
+_NON_STREET_NAME_TOKENS = (
+    frozenset(DIRECTIONALS)
+    | frozenset(DIRECTIONALS.values())
+    | frozenset(STREET_SUFFIXES)
+    | frozenset(STREET_SUFFIXES.values())
+    | frozenset(ROUTE_PREFIXES)
+    | frozenset(WORD_ORDINALS)
+    | frozenset(COMPOUND_ORDINALS)
+    | frozenset(SECONDARY_UNITS)
+    | frozenset(SECONDARY_UNITS.values())
+    | frozenset(US_STATES)
+    | frozenset(US_STATES.values())
+)
+
 
 @functools.lru_cache(maxsize=4096)
 def heal_street_suffix(token: str, max_distance: int = 2) -> Optional[str]:
@@ -131,10 +155,10 @@ def heal_street_suffix(token: str, max_distance: int = 2) -> Optional[str]:
     Only checks words of length >= 3 to avoid 2-letter abbreviation collisions.
     Rejects tokens containing digits or hyphens, protected words, and short substitutions.
     """
-    if not token or re.search(r"[\d\-]", token):
+    if not token or _RE_DIGIT_OR_HYPHEN.search(token):
         return None
 
-    tok_clean = re.sub(r"[^A-Z]", "", token.upper())
+    tok_clean = _RE_NON_UPPER_ALPHA.sub("", token.upper())
     if not tok_clean or tok_clean in ("STATE", "STATES", "COUNTY", "UNITED", "AMERICA", "ISLANDS", "COUNTRY", "NORTH", "SOUTH", "EAST", "WEST"):
         return None
 
@@ -185,8 +209,8 @@ def heal_city_token(
         return None
 
     city_unaccented = unicodedata.normalize("NFKD", city_raw).encode("ASCII", "ignore").decode("utf-8")
-    clean_city = re.sub(r"[^\w\s]", "", city_unaccented).strip().upper()
-    clean_city = re.sub(r"\s+", " ", clean_city)
+    clean_city = _RE_NON_WORD_SPACE.sub("", city_unaccented).strip().upper()
+    clean_city = _RE_WHITESPACE.sub(" ", clean_city)
 
     # 1. Direct match check
     if clean_city in MULTI_WORD_CITIES:
@@ -199,8 +223,7 @@ def heal_city_token(
         target_state = ZIP3_TO_STATE[zip3]
 
     # A city that is itself a known city (in any state) is never rewritten into a different one.
-    all_known = {c for cities in PROMINENT_STATE_CITIES.values() for c in cities}
-    if clean_city in all_known or clean_city in VALID_LOCALITY_NAMES:
+    if clean_city in _ALL_PROMINENT_CITIES or clean_city in VALID_LOCALITY_NAMES:
         return clean_city
 
     candidate_cities: List[str] = []
@@ -212,7 +235,7 @@ def heal_city_token(
         for cities in PROMINENT_STATE_CITIES.values():
             candidate_cities.extend(cities)
     # Add multi-word cities
-    candidate_cities.extend(sorted(MULTI_WORD_CITIES))
+    candidate_cities.extend(_SORTED_MULTI_WORD_CITIES)
 
     # Collect every candidate at the best distance; only a unique winner is a trustworthy correction
     # (e.g. DEVER is equally close to DENVER and DOVER, so it is left alone).
@@ -240,29 +263,14 @@ def heal_street_name(name_raw: str, max_distance: int = 1) -> Optional[str]:
     if any(c.isdigit() for c in name_raw):
         return None
     name_unaccented = unicodedata.normalize("NFKD", name_raw).encode("ASCII", "ignore").decode("utf-8")
-    clean_name = re.sub(r"[^A-Z]", "", name_unaccented.upper())
+    clean_name = _RE_NON_UPPER_ALPHA.sub("", name_unaccented.upper())
     if not clean_name or len(clean_name) < 3:
         return None
 
     if clean_name in COMMON_STREET_NAMES:
         return clean_name
 
-    if clean_name in PROTECTED_STREET_WORDS:
-        return None
-
-    if (
-        clean_name in DIRECTIONALS
-        or clean_name in DIRECTIONALS.values()
-        or clean_name in STREET_SUFFIXES
-        or clean_name in STREET_SUFFIXES.values()
-        or clean_name in ROUTE_PREFIXES
-        or clean_name in WORD_ORDINALS
-        or clean_name in COMPOUND_ORDINALS
-        or clean_name in SECONDARY_UNITS
-        or clean_name in SECONDARY_UNITS.values()
-        or clean_name in US_STATES
-        or clean_name in US_STATES.values()
-    ):
+    if clean_name in PROTECTED_STREET_WORDS or clean_name in _NON_STREET_NAME_TOKENS:
         return None
 
     n_len = len(clean_name)
@@ -270,7 +278,7 @@ def heal_street_name(name_raw: str, max_distance: int = 1) -> Optional[str]:
     allowed_distance = min(max_distance, 1)
     min_dist = allowed_distance + 1
 
-    for cand in sorted(COMMON_STREET_NAMES):
+    for cand in _SORTED_COMMON_STREET_NAMES:
         if abs(len(cand) - n_len) <= allowed_distance:
             # Never mutate plural or singular variants of street names
             if (
@@ -304,7 +312,7 @@ def heal_postal_code_transposition(postal_code: str, state: Optional[str] = None
     if not postal_code or not state:
         return None
 
-    digits = re.sub(r"[^\d]", "", postal_code)
+    digits = _RE_NON_DIGITS.sub("", postal_code)
     if len(digits) < 5:
         return None
 
@@ -347,7 +355,7 @@ def heal_street_number_transposition(
     if not number_str or not valid_ranges:
         return None
 
-    digits = re.sub(r"[^\d]", "", number_str)
+    digits = _RE_NON_DIGITS.sub("", number_str)
     if len(digits) < 2:
         return None
 
@@ -373,7 +381,7 @@ def heal_street_number_transposition(
                     break
 
     if len(candidates) == 1:
-        m = re.match(r"^(\d+)(.*)$", number_str.strip())
+        m = _RE_LEADING_DIGITS_REST.match(number_str.strip())
         if m and m.group(2):
             return f"{candidates[0]}{m.group(2)}"
         return candidates[0]

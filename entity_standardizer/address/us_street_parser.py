@@ -68,8 +68,25 @@ from entity_standardizer.address.secondary_units import (  # noqa: E402
     _words_to_number,
 )
 from entity_standardizer.address.fuzzy import heal_street_name  # noqa: E402
+from entity_standardizer.address.reference._match import name_tokens  # noqa: E402
+from entity_standardizer.address.reference.us_zip5 import get_default_us_zip5_provider  # noqa: E402
 
 _RE_TRAILING_PUNCT = re.compile(r"[\s,.\-#;:]+$")
+_RE_TRAILING_ZIP = re.compile(r"(?:^|[,\s])(\d{5}(?:-\d{4})?)\s*$")
+_RE_ALPHA_CITY_CAND = re.compile(r"[A-Za-z][A-Za-z\s.\-]*")
+_RE_ALNUM_STREET_NUM = re.compile(r"^[A-Z]?\d|\d+[A-Z]?$")
+_RE_PH_UNIT = re.compile(r"^PH-[A-Z0-9]+$")
+_RE_LEADING_DIGITS = re.compile(r"^\d+")
+_RE_NON_WORD = re.compile(r"[^\w]")
+_RE_UPPER_ALNUM_WORD = re.compile(r"\b[A-Z0-9]+\b")
+_RE_NON_UPPER_ALNUM = re.compile(r"[^A-Z0-9]")
+
+_ALL_STREET_SUFFIX_TOKENS = frozenset(STREET_SUFFIXES) | frozenset(STREET_SUFFIXES.values())
+_STREET_SUFFIX_VALUES = frozenset(STREET_SUFFIXES.values())
+_ALL_SEC_UNIT_TOKENS = frozenset(SECONDARY_UNITS) | frozenset(SECONDARY_UNITS.values())
+_ALL_SEC_UNIT_AND_BOX_TOKENS = _ALL_SEC_UNIT_TOKENS | {"BOX"}
+_DANGLING_PREPOSITIONS = frozenset({"DE", "DEL", "OF", "LA", "EL", "DU", "VON", "VAN"})
+_SPANISH_THOROUGHFARES = frozenset({"CALLE", "AVENIDA", "CARR", "PASEO", "CAMINO", "CALZADA", "CARRETERA", "RUTA", "AVE"})
 
 
 def _rule_based_us_street_parse(address_str: str, enable_fuzzy: bool = True) -> Tuple[str, str, bool]:
@@ -376,13 +393,12 @@ def _parse_us_street_tokens(address_str: str, enable_fuzzy: bool = True, city_ra
         p_st = m_sz.group(1)
         p_zp = m_sz.group(2)
         before_sz = clean_input[:m_sz.start()].rstrip(" ,")
-        DANGLING_PREPOSITIONS = {"DE", "DEL", "OF", "LA", "EL", "DU", "VON", "VAN"}
         if "," in before_sz:
             st_part, city_cand = before_sz.rsplit(",", 1)
             p_city = city_cand.strip()
             st_clean = st_part.strip()
             st_tokens = st_clean.split()
-            if st_tokens and st_tokens[-1].upper() in DANGLING_PREPOSITIONS:
+            if st_tokens and st_tokens[-1].upper() in _DANGLING_PREPOSITIONS:
                 st_clean = " ".join(st_tokens[:-1]).rstrip(" ,.-")
             clean_input = st_clean
         else:
@@ -393,20 +409,16 @@ def _parse_us_street_tokens(address_str: str, enable_fuzzy: bool = True, city_ra
                     cand_city = " ".join(tokens_upper[-num_words:])
                     if cand_city in MULTI_WORD_CITIES:
                         cand_street_tokens = tokens_raw[:-num_words]
-                        if cand_street_tokens and cand_street_tokens[-1].upper() in DANGLING_PREPOSITIONS:
+                        if cand_street_tokens and cand_street_tokens[-1].upper() in _DANGLING_PREPOSITIONS:
                             cand_street_tokens = cand_street_tokens[:-1]
                         p_city = " ".join(tokens_raw[-num_words:])
                         clean_input = " ".join(cand_street_tokens)
                         break
     else:
-        m_z = re.search(r"(?:^|[,\s])(\d{5}(?:-\d{4})?)\s*$", clean_input)
+        m_z = _RE_TRAILING_ZIP.search(clean_input)
         if m_z and get_state_from_zip3(m_z.group(1)[:3]):
             cand_zip = m_z.group(1).strip()
             before_z = clean_input[:m_z.start()].rstrip(" ,")
-            DANGLING_PREPOSITIONS = {"DE", "DEL", "OF", "LA", "EL", "DU", "VON", "VAN"}
-            from entity_standardizer.address.reference._match import name_tokens
-            from entity_standardizer.address.reference.us_zip5 import get_default_us_zip5_provider
-
             place_tokens = {
                 name_tokens(p.place_name)
                 for p in get_default_us_zip5_provider().lookup_postal("US", cand_zip[:5])
@@ -418,16 +430,14 @@ def _parse_us_street_tokens(address_str: str, enable_fuzzy: bool = True, city_ra
                 if (
                     st_part.strip()
                     and cand_city
-                    and re.fullmatch(r"[A-Za-z][A-Za-z\s.\-]*", cand_city)
-                    and not (city_toks & set(SECONDARY_UNITS.keys()))
-                    and not (city_toks & set(SECONDARY_UNITS.values()))
-                    and "BOX" not in city_toks
+                    and _RE_ALPHA_CITY_CAND.fullmatch(cand_city)
+                    and not (city_toks & _ALL_SEC_UNIT_AND_BOX_TOKENS)
                 ):
                     p_city = cand_city
                     p_zp = cand_zip
                     st_clean = st_part.strip()
                     st_tokens = st_clean.split()
-                    if st_tokens and st_tokens[-1].upper() in DANGLING_PREPOSITIONS:
+                    if st_tokens and st_tokens[-1].upper() in _DANGLING_PREPOSITIONS:
                         st_clean = " ".join(st_tokens[:-1]).rstrip(" ,.-")
                     clean_input = st_clean
             elif not RE_DIGITS.search(before_z):
@@ -435,10 +445,9 @@ def _parse_us_street_tokens(address_str: str, enable_fuzzy: bool = True, city_ra
                 city_tok_list = [RE_NON_ALPHANUMERIC.sub("", t).upper() for t in cand_city.split()]
                 if (
                     cand_city
-                    and re.fullmatch(r"[A-Za-z][A-Za-z\s.\-]*", cand_city)
-                    and not (set(city_tok_list) & (set(SECONDARY_UNITS.keys()) | set(SECONDARY_UNITS.values()) | {"BOX"}))
-                    and city_tok_list[-1] not in STREET_SUFFIXES
-                    and city_tok_list[-1] not in STREET_SUFFIXES.values()
+                    and _RE_ALPHA_CITY_CAND.fullmatch(cand_city)
+                    and not (set(city_tok_list) & _ALL_SEC_UNIT_AND_BOX_TOKENS)
+                    and city_tok_list[-1] not in _ALL_STREET_SUFFIX_TOKENS
                     and (name_tokens(cand_city) in place_tokens or usaddress is None)
                 ):
                     p_city = cand_city
@@ -450,11 +459,11 @@ def _parse_us_street_tokens(address_str: str, enable_fuzzy: bool = True, city_ra
                     if len(tokens_raw) >= num_words + 2:
                         cand_city = " ".join(tokens_raw[-num_words:])
                         if (
-                            re.fullmatch(r"[A-Za-z][A-Za-z\s.\-]*", cand_city)
+                            _RE_ALPHA_CITY_CAND.fullmatch(cand_city)
                             and name_tokens(cand_city) in place_tokens
                         ):
                             cand_street_tokens = tokens_raw[:-num_words]
-                            if cand_street_tokens and cand_street_tokens[-1].upper() in DANGLING_PREPOSITIONS:
+                            if cand_street_tokens and cand_street_tokens[-1].upper() in _DANGLING_PREPOSITIONS:
                                 cand_street_tokens = cand_street_tokens[:-1]
                             p_city = cand_city
                             p_zp = cand_zip
@@ -474,7 +483,7 @@ def _parse_us_street_tokens(address_str: str, enable_fuzzy: bool = True, city_ra
         st_input = clean_input
         m_tail = m_sz
         if not m_tail and not p_city and not p_zp:
-            m_z_fb = re.search(r"(?:^|[,\s])(\d{5}(?:-\d{4})?)\s*$", clean_input)
+            m_z_fb = _RE_TRAILING_ZIP.search(clean_input)
             if m_z_fb and get_state_from_zip3(m_z_fb.group(1)[:3]):
                 m_tail = m_z_fb
         if not p_city and m_tail:
@@ -529,7 +538,7 @@ def _parse_us_street_tokens(address_str: str, enable_fuzzy: bool = True, city_ra
         rb_st1, rb_st2, ok = _rule_based_us_street_parse(st_input, enable_fuzzy=enable_fuzzy)
         if urb_prefix:
             rb_st1 = f"{urb_prefix} {rb_st1}".strip()
-        rb_st1 = re.sub(r"[\s,.\-#;:]+$", "", rb_st1).strip()
+        rb_st1 = _RE_TRAILING_PUNCT.sub("", rb_st1).strip()
         rb_st2 = _standardize_secondary_unit(rb_st2)
         return USStreetParseResult(rb_st1, rb_st2, ok, p_city, p_st, p_zp)
 
@@ -612,14 +621,13 @@ def _parse_us_street_tokens(address_str: str, enable_fuzzy: bool = True, city_ra
                 elif f_suf and len(street_parts) >= 2 and (i == len(parsed) - 1 or (i == len(parsed) - 2 and parsed[i+1][1] in ("StateName", "ZipCode"))):
                     street_parts.append(f_suf)
                 elif enable_fuzzy:
-                    from entity_standardizer.address.fuzzy import heal_street_name
                     h_name = heal_street_name(clean)
                     street_parts.append(h_name if h_name else clean)
                 else:
                     street_parts.append(clean)
         elif label in ("OccupancyType", "SubaddressType"):
             has_existing_suf = any(
-                p in STREET_SUFFIXES or p in STREET_SUFFIXES.values()
+                p in _ALL_STREET_SUFFIX_TOKENS
                 for p in street_parts[1:]
             ) if len(street_parts) >= 2 else False
 
@@ -627,7 +635,7 @@ def _parse_us_street_tokens(address_str: str, enable_fuzzy: bool = True, city_ra
                 street_parts.append(clean.upper())
             elif clean.upper() == "SLIP" and not has_existing_suf and street_parts:
                 street_parts.append("SLIP")
-            elif clean.upper() in SECONDARY_UNITS or clean.upper() in SECONDARY_UNITS.values():
+            elif clean.upper() in _ALL_SEC_UNIT_TOKENS:
                 sec_parts.append(SECONDARY_UNITS.get(clean.upper(), clean.upper()))
             elif street_parts and any(p.upper() in SPANISH_PREFIX_THOROUGHFARES for p in street_parts):
                 street_parts.append(clean)
@@ -641,7 +649,7 @@ def _parse_us_street_tokens(address_str: str, enable_fuzzy: bool = True, city_ra
                     or (
                         not sec_parts
                         and any(p.upper() in SPANISH_PREFIX_THOROUGHFARES for p in street_parts)
-                        and not any(p.isdigit() or re.match(r"^[A-Z]?\d|\d+[A-Z]?$", p) for p in street_parts)
+                        and not any(p.isdigit() or _RE_ALNUM_STREET_NUM.match(p) for p in street_parts)
                     )
                 ):
                     street_parts.append(clean_id)
@@ -673,10 +681,10 @@ def _parse_us_street_tokens(address_str: str, enable_fuzzy: bool = True, city_ra
             if clean.upper() in SPANISH_PREFIX_THOROUGHFARES or (
                 street_parts
                 and any(p.upper() in SPANISH_PREFIX_THOROUGHFARES for p in street_parts)
-                and not any(p.isdigit() or re.match(r"^[A-Z]?\d|\d+[A-Z]?$", p) for p in street_parts)
+                and not any(p.isdigit() or _RE_ALNUM_STREET_NUM.match(p) for p in street_parts)
             ):
                 street_parts.append(clean)
-            elif re.match(r"^PH-[A-Z0-9]+$", clean):
+            elif _RE_PH_UNIT.match(clean):
                 sec_parts.append(clean)
             elif clean in STANDALONE_SEC_UNITS:
                 sec_type = SECONDARY_UNITS.get(clean, clean)
@@ -741,7 +749,7 @@ def _parse_us_street_tokens(address_str: str, enable_fuzzy: bool = True, city_ra
 
     clean_st = " ".join(state_parts)
     if clean_st:
-        is_valid_state = (clean_st in US_STATES or clean_st in US_STATES.values() or clean_st in CANADIAN_PROVINCES)
+        is_valid_state = (clean_st in US_STATES or clean_st in FROZEN_US_STATE_CODES or clean_st in CANADIAN_PROVINCES)
         if not is_valid_state:
             # Invalid state tag from CRF (e.g. "FLOOR", "SUITE", or stray words)
             cand_sec = f"{clean_st} {' '.join(zip_parts)}".strip()
@@ -761,7 +769,7 @@ def _parse_us_street_tokens(address_str: str, enable_fuzzy: bool = True, city_ra
                 "NV", "BV", "GMBH", "SGIIC", "SL", "PLC", "BO", "BARRIO", "SEC", "SECTOR"
             ):
                 state_parts = []
-            elif all(p in STREET_SUFFIXES or p in STREET_SUFFIXES.values() for p in street_parts) and not any(p.isdigit() or re.match(r"^\d+", p) for p in street_parts):
+            elif all(p in _ALL_STREET_SUFFIX_TOKENS for p in street_parts) and not any(p.isdigit() or _RE_LEADING_DIGITS.match(p) for p in street_parts):
                 street_parts = city_parts + state_parts + street_parts
                 city_parts = []
                 state_parts = []
@@ -779,7 +787,7 @@ def _parse_us_street_tokens(address_str: str, enable_fuzzy: bool = True, city_ra
 
     # Rescue non-numeric street suffixes from zip_parts when no leading house number exists
     has_leading_house_num = bool(
-        street_parts and (street_parts[0].isdigit() or re.match(r"^\d+", street_parts[0]))
+        street_parts and (street_parts[0].isdigit() or _RE_LEADING_DIGITS.match(street_parts[0]))
     )
     if not has_leading_house_num and zip_parts:
         rescued_suffixes = [z for z in zip_parts if not z.isdigit() and z.upper() in STREET_SUFFIXES]
@@ -795,7 +803,7 @@ def _parse_us_street_tokens(address_str: str, enable_fuzzy: bool = True, city_ra
         elif any(p.upper() in SPANISH_PREFIX_THOROUGHFARES for p in street_parts):
             # Rescue numeric or alphanumeric street number mistakenly tagged as ZipCode
             rescued_nums = [z for z in zip_parts if (len(z) < 5 or not p_zp)]
-            if rescued_nums and not any(p.isdigit() or re.match(r"^[A-Z]?\d|\d+[A-Z]?$", p) for p in street_parts):
+            if rescued_nums and not any(p.isdigit() or _RE_ALNUM_STREET_NUM.match(p) for p in street_parts):
                 for z in rescued_nums:
                     zip_parts.remove(z)
                     street_parts.append(z)
@@ -804,18 +812,17 @@ def _parse_us_street_tokens(address_str: str, enable_fuzzy: bool = True, city_ra
     # (e.g. empty or only Roman numerals / bare single identifiers like "LIGHTON PLAZA II" where
     # "LIGHTON PLAZA" was tagged as PlaceName and "II" as street/state), reassociate city_parts
     if city_raw and city_parts:
-        city_raw_clean = re.sub(r"[^\w]", "", city_raw.upper())
-        cand_city = re.sub(r"[^\w]", "", " ".join(city_parts).upper())
+        city_raw_clean = _RE_NON_WORD.sub("", city_raw.upper())
+        cand_city = _RE_NON_WORD.sub("", " ".join(city_parts).upper())
         if city_raw_clean and cand_city and cand_city != city_raw_clean:
-            has_addr_num = any(p.isdigit() or re.match(r"^\d+", p) for p in street_parts)
-            has_thoroughfare = any(p in STREET_SUFFIXES or p in STREET_SUFFIXES.values() for p in street_parts)
+            has_addr_num = any(p.isdigit() or _RE_LEADING_DIGITS.match(p) for p in street_parts)
+            has_thoroughfare = any(p in _ALL_STREET_SUFFIX_TOKENS for p in street_parts)
             if has_addr_num and has_thoroughfare:
                 is_continuation_only = False
             else:
                 is_continuation_only = (not street_parts) or all(
                     p in ("I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X")
-                    or p in STREET_SUFFIXES
-                    or p in STREET_SUFFIXES.values()
+                    or p in _ALL_STREET_SUFFIX_TOKENS
                     or p.isdigit()
                     or len(p) == 1
                     for p in street_parts
@@ -873,14 +880,12 @@ def _parse_us_street_tokens(address_str: str, enable_fuzzy: bool = True, city_ra
         if not city_raw and not (p_st or p_zp):
             p_city = ""
     elif city_parts:
-        cand_city = re.sub(r"[^\w]", "", " ".join(city_parts).upper())
-        prov_city = re.sub(r"[^\w]", "", (city_raw or p_city or "").upper())
-        SPANISH_THOROUGHFARES = {"CALLE", "AVENIDA", "CARR", "PASEO", "CAMINO", "CALZADA", "CARRETERA", "RUTA", "AVE"}
+        cand_city = _RE_NON_WORD.sub("", " ".join(city_parts).upper())
+        prov_city = _RE_NON_WORD.sub("", (city_raw or p_city or "").upper())
         st1_words = [
             w for w in st1.split()
-            if w.upper() not in STREET_SUFFIXES
-            and w.upper() not in STREET_SUFFIXES.values()
-            and w.upper() not in SPANISH_THOROUGHFARES
+            if w.upper() not in _ALL_STREET_SUFFIX_TOKENS
+            and w.upper() not in _SPANISH_THOROUGHFARES
             and not w.isdigit()
         ]
         if (not st1 or not st1_words) and (not prov_city or (cand_city and cand_city != prov_city)):
@@ -908,9 +913,9 @@ def _parse_us_street_tokens(address_str: str, enable_fuzzy: bool = True, city_ra
         elif clean_input:
             # address_str contained city/state/zip, but clean_input remains
             # Check if clean_input contains landmark campus keywords or commercial hubs and is not just the city name
-            clean_words = set(re.findall(r"\b[A-Z0-9]+\b", clean_input.upper()))
-            norm_pc = re.sub(r"[^A-Z0-9]", "", p_city.upper()) if p_city else ""
-            norm_ci = re.sub(r"[^A-Z0-9]", "", clean_input.upper())
+            clean_words = set(_RE_UPPER_ALNUM_WORD.findall(clean_input.upper()))
+            norm_pc = _RE_NON_UPPER_ALNUM.sub("", p_city.upper()) if p_city else ""
+            norm_ci = _RE_NON_UPPER_ALNUM.sub("", clean_input.upper())
             is_hub = (
                 bool(clean_words & LANDMARK_CAMPUS_KEYWORDS)
                 or clean_input.upper().strip() in CATALOGED_COMMERCIAL_HUBS
@@ -923,7 +928,7 @@ def _parse_us_street_tokens(address_str: str, enable_fuzzy: bool = True, city_ra
                     if not st2 and rb_st2:
                         st2 = rb_st2
 
-    if st1 and st2 and re.sub(r"[^\w]", "", st1.upper()) == re.sub(r"[^\w]", "", st2.upper()):
+    if st1 and st2 and _RE_NON_WORD.sub("", st1.upper()) == _RE_NON_WORD.sub("", st2.upper()):
         st2 = ""
     if st1 and st2 and st2.upper().startswith(st1.upper() + " "):
         # The premise name ended up in both lines ("ACME" / "ACME STE 500"): the unit is what follows it.
@@ -969,7 +974,7 @@ def _move_trailing_house_number(street: str) -> str:
     if not m:
         return street
     words = m.group("street").replace(".", " ").upper().split()
-    if len(words) < 2 or words[-1] not in STREET_SUFFIXES and words[-1] not in STREET_SUFFIXES.values():
+    if len(words) < 2 or words[-1] not in _ALL_STREET_SUFFIX_TOKENS:
         return street
     name_words = words[:-1]
     # "St"/"Saint" at the very start is part of a name (St. Louis); anywhere else ST is a street type.
@@ -1000,11 +1005,10 @@ def _parse_us_address_components(street1_raw: str, street2_raw: str = "", enable
             s2_words = {w.upper().strip(" ,.-#") for w in s2_clean.split()}
             has_thoroughfare = bool(
                 (s2_words & SPANISH_PREFIX_THOROUGHFARES)
-                or (s2_words & set(STREET_SUFFIXES.keys()))
-                or (s2_words & set(STREET_SUFFIXES.values()))
+                or (s2_words & _ALL_STREET_SUFFIX_TOKENS)
                 or RE_PHYSICAL_STREET_INDICATOR.search(s2_clean)
                 or RE_PR_HIGHWAY.match(s2_clean)
-                or re.match(r"^\d+[A-Z]?\s+[A-Za-z]", s2_clean)
+                or _RE_NUMBERED_STREET.match(s2_clean)
             )
             if s2_clean and not has_thoroughfare and not RE_PO_BOX.match(s2_clean):
                 # "Urb Las Flores" + "Apt 5": the urbanization name is street1 and street2 is just the unit.
@@ -1040,11 +1044,11 @@ def _parse_us_address_components(street1_raw: str, street2_raw: str = "", enable
     # address is kept (normalised) in street2 rather than guessed at or dropped.
     if s1_clean and s2_clean and _RE_NUMBERED_STREET.match(s1_clean) and _RE_NUMBERED_STREET.match(s2_clean):
         first_word = s2_clean.split()[1].strip(".,#").upper() if len(s2_clean.split()) > 1 else ""
-        if first_word not in SECONDARY_UNITS and first_word not in SECONDARY_UNITS.values():
+        if first_word not in _ALL_SEC_UNIT_TOKENS:
             p1 = _parse_us_street_tokens(s1_clean, enable_fuzzy=enable_fuzzy, city_raw=city_raw)
             p2 = _parse_us_street_tokens(s2_clean, enable_fuzzy=enable_fuzzy, city_raw=city_raw)
             p2_words = set(p2[0].upper().split()[1:])
-            has_suffix = bool(p2_words & set(STREET_SUFFIXES.values()))  # a real street ("OAK AVE"), not "3 FL"/"5 OAK"
+            has_suffix = bool(p2_words & _STREET_SUFFIX_VALUES)  # a real street ("OAK AVE"), not "3 FL"/"5 OAK"
             has_suffix = has_suffix or bool(p2[1] and p2_words - set(p2[1].upper().split()))  # "200 Oak Ste 5"
             if p1[0] and p2[0] and has_suffix:
                 second = f"{p2[0]} {p2[1]}".strip() if p2[1] else p2[0]

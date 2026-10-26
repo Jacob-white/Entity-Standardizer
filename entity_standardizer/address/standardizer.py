@@ -55,10 +55,29 @@ from entity_standardizer.address.phonetics import (
 )
 from entity_standardizer.address.fast_path import fast_path_parse
 from entity_standardizer.address.explain import _RECORDER as _explain_recorder
-from entity_standardizer.address.tables import US_DOMESTIC_ISO3
+from entity_standardizer.address.tables import CANADIAN_PROVINCES, US_DOMESTIC_ISO3
 from entity_standardizer.address.international import (
     CountryGrammarRegistry,
     fold_to_ascii_key,
+)
+from entity_standardizer.address.international.australia import AU_STATES
+from entity_standardizer.address.international.base import split_single_line_locality
+from entity_standardizer.address.international.india import IN_STATES
+from entity_standardizer.address.international.latin_america import BR_STATES, MX_STATES
+from entity_standardizer.address.international.postal import validate_postal_code
+from entity_standardizer.address.international.scripts import (
+    country_matches_script,
+    detect_script_country,
+    split_script_single_line,
+)
+from entity_standardizer.address.fuzzy import (
+    heal_city_token,
+    heal_postal_code_transposition,
+)
+from entity_standardizer.address.reference.us_zip5 import get_default_us_zip5_provider
+from entity_standardizer.address.reference.validation import (
+    apply_reference_validation,
+    get_env_reference_provider,
 )
 
 logger = logging.getLogger(__name__)
@@ -317,9 +336,6 @@ def standardize_address(
     ``std.alternatives`` (next-best readings of an ambiguous input). Both bypass the result cache and are off by default.
     """
     if reference_provider is None and enable_reference_validation:
-        from entity_standardizer.address.reference.us_zip5 import get_default_us_zip5_provider
-        from entity_standardizer.address.reference.validation import get_env_reference_provider
-
         reference_provider = get_env_reference_provider() or get_default_us_zip5_provider()
 
     if explain or alternatives:
@@ -332,8 +348,6 @@ def standardize_address(
             reference_provider=reference_provider, enable_reference_validation=enable_reference_validation, **kwargs,
         ))
     if reference_provider is not None:
-        from entity_standardizer.address.reference.validation import apply_reference_validation
-
         base = standardize_address(
             street1=street1, street2=street2, city=city, state=state, postal_code=postal_code, country=country,
             is_vacant=is_vacant, enable_fuzzy=enable_fuzzy, enable_geocoding=enable_geocoding, use_cache=use_cache,
@@ -604,12 +618,6 @@ def standardize_address(
         city_raw=city_raw,
     )
     if not country_raw:
-        from entity_standardizer.address.international.scripts import (
-            country_matches_script,
-            detect_script_country,
-            split_script_single_line,
-        )
-
         _script_iso = detect_script_country(raw_street_address)
         if _script_iso:
             if not country_matches_script(country_iso, _script_iso):
@@ -627,11 +635,6 @@ def standardize_address(
     if is_us:
         city_raw, state_raw = swap_us_city_state(city_raw, state_raw)
     elif country_iso in ("CAN", "AUS", "BRA", "IND", "MEX"):
-        from entity_standardizer.address.international.australia import AU_STATES
-        from entity_standardizer.address.international.india import IN_STATES
-        from entity_standardizer.address.international.latin_america import BR_STATES, MX_STATES
-        from entity_standardizer.address.tables import CANADIAN_PROVINCES
-
         if country_iso == "CAN":
             regs = CANADIAN_PROVINCES
         elif country_iso == "AUS":
@@ -711,7 +714,6 @@ def standardize_address(
         norm_state = normalize_us_state(state_raw, zip5)
 
         if enable_fuzzy:
-            from entity_standardizer.address.fuzzy import heal_city_token, heal_postal_code_transposition
             if norm_city:
                 healed_city = heal_city_token(norm_city, state=norm_state, zip3=zip5[:3] if zip5 else None)
                 if healed_city:
@@ -838,9 +840,6 @@ def standardize_address(
             # "Street, City, Postal, Country" written on one line: when the grammar did not isolate a valid postal
             # code, split the locality off generically and parse the street and locality separately.
             if not city_raw and not postal_raw and not state_raw and "," in s1_raw:
-                from entity_standardizer.address.international.base import split_single_line_locality
-                from entity_standardizer.address.international.postal import validate_postal_code
-
                 has_valid_postal = bool(parsed.postal_code) and bool(validate_postal_code(parsed.postal_code, country_iso))
                 split = None if has_valid_postal else split_single_line_locality(s1_raw, country_iso)
                 if split is not None:

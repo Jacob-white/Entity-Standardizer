@@ -12,7 +12,27 @@ import unicodedata
 from dataclasses import dataclass
 from typing import ClassVar, Dict, List, Optional, Set, Tuple
 
+from entity_standardizer.address._patterns import (
+    FROZEN_US_STATE_CODES,
+    RE_CAN_POSTCODE,
+    RE_STATE_ZIP,
+    RE_UK_POSTCODE,
+)
 from entity_standardizer.address.international.diacritics import fold_to_ascii_key
+from entity_standardizer.address.tables import (
+    COUNTRY_MAP,
+    GLOBAL_METRO_TO_COUNTRY,
+    STREET_SUFFIXES,
+    US_STATES,
+)
+
+_RE_NON_ALNUM = re.compile(r"[^a-zA-Z0-9]")
+_RE_NON_WORD_SPACE = re.compile(r"[^\w\s]")
+_RE_NON_ASCII_ALNUM_SPACE = re.compile(r"[^a-zA-Z0-9\s]")
+_IGNORE_2LETTER_COUNTRY = FROZEN_US_STATE_CODES | frozenset(
+    {"ST", "DR", "RD", "LN", "AV", "CT", "PL", "BL", "HW", "PK", "TR", "WY", "CR", "RT"}
+)
+_ALL_STREET_SUFFIX_TOKENS = frozenset(STREET_SUFFIXES) | frozenset(STREET_SUFFIXES.values())
 
 
 @dataclass(frozen=True)
@@ -2717,7 +2737,7 @@ class CountryRegistry:
             if clean:
                 idx.setdefault(clean, info)
             # Alphanumeric only
-            alnum = re.sub(r"[^a-zA-Z0-9]", "", clean)
+            alnum = _RE_NON_ALNUM.sub("", clean)
             if alnum:
                 idx.setdefault(alnum, info)
             # ASCII folded
@@ -2729,7 +2749,7 @@ class CountryRegistry:
             )
             if unaccent and unaccent != clean:
                 idx.setdefault(unaccent, info)
-                unaccent_alnum = re.sub(r"[^a-zA-Z0-9]", "", unaccent)
+                unaccent_alnum = _RE_NON_ALNUM.sub("", unaccent)
                 if unaccent_alnum:
                     idx.setdefault(unaccent_alnum, info)
 
@@ -2746,8 +2766,6 @@ class CountryRegistry:
 
         # The flat alias table in tables.COUNTRY_MAP and this registry must agree: every name the table knows resolves
         # here to the same country (registry entries win; the table only fills gaps such as "Burma" or "Ivory Coast").
-        from entity_standardizer.address.tables import COUNTRY_MAP
-
         for alias_name, alpha3 in COUNTRY_MAP.items():
             info = cls._BY_ALPHA3.get(alpha3)
             if info is not None:
@@ -2779,7 +2797,7 @@ class CountryRegistry:
         if q_lower in cls._LOOKUP_INDEX:
             return cls._LOOKUP_INDEX[q_lower]
 
-        q_alnum = re.sub(r"[^a-zA-Z0-9]", "", q_lower)
+        q_alnum = _RE_NON_ALNUM.sub("", q_lower)
         if q_alnum in cls._LOOKUP_INDEX:
             return cls._LOOKUP_INDEX[q_alnum]
 
@@ -2824,8 +2842,6 @@ class CountryRegistry:
             return direct
 
         # Check US State + ZIP pattern first (e.g. NY 10005)
-        from entity_standardizer.address._patterns import FROZEN_US_STATE_CODES, RE_CAN_POSTCODE, RE_STATE_ZIP, RE_UK_POSTCODE
-
         m_sz = RE_STATE_ZIP.search(t)
         if m_sz and m_sz.group(1).upper() in FROZEN_US_STATE_CODES:
             return cls.get("USA")
@@ -2836,16 +2852,11 @@ class CountryRegistry:
         if RE_CAN_POSTCODE.search(t):
             return cls.get("CAN")
 
-        # Check trailing country by checking last parts (comma-delimited)
-        ignore_2letter = FROZEN_US_STATE_CODES | {
-            "ST", "DR", "RD", "LN", "AV", "CT", "PL", "BL", "HW", "PK", "TR", "WY", "CR", "RT",
-        }
-
         parts = [p.strip() for p in t.split(",") if p.strip()]
         if parts:
             # Check last segment
             p_last = parts[-1]
-            if len(p_last) > 2 or p_last.upper() not in ignore_2letter:
+            if len(p_last) > 2 or p_last.upper() not in _IGNORE_2LETTER_COUNTRY:
                 cand = cls.get(p_last)
                 if cand is not None:
                     return cand
@@ -2858,7 +2869,7 @@ class CountryRegistry:
                     return cand
             if subwords and not subwords[-1].isdigit():
                 last_w = subwords[-1]
-                if len(last_w) > 2 or last_w.upper() not in ignore_2letter:
+                if len(last_w) > 2 or last_w.upper() not in _IGNORE_2LETTER_COUNTRY:
                     cand = cls.get(last_w)
                     if cand is not None:
                         return cand
@@ -2866,13 +2877,11 @@ class CountryRegistry:
             # Prioritize US state code/name to prevent domestic namesake cities
             # (e.g. Paris TX, London OH, Berlin CT, Montevideo MN, Rome GA, Lebanon NH, Mexico ME, Brazil IN)
             # from being hijacked by sovereign country names (on parts[-2]) or GLOBAL_METRO_TO_COUNTRY.
-            from entity_standardizer.address.tables import US_STATES
-
             # (a trailing "USA"/"United States" part was already resolved by the direct lookups above)
-            last_clean = re.sub(r"[^\w\s]", "", parts[-1]).strip().upper()
+            last_clean = _RE_NON_WORD_SPACE.sub("", parts[-1]).strip().upper()
             if last_clean in FROZEN_US_STATE_CODES or last_clean in US_STATES:
                 return cls.get("USA")
-            sub_last = re.sub(r"[^\w\s]", "", parts[-1].split()[-1]).strip().upper()
+            sub_last = _RE_NON_WORD_SPACE.sub("", parts[-1].split()[-1]).strip().upper()
             if sub_last in FROZEN_US_STATE_CODES or sub_last in US_STATES:
                 return cls.get("USA")
 
@@ -2885,12 +2894,10 @@ class CountryRegistry:
                         return cand
 
         # Check Global Metros
-        from entity_standardizer.address.tables import GLOBAL_METRO_TO_COUNTRY, STREET_SUFFIXES
-
         # Metro keys are ASCII: fold diacritics first ("Zürich" -> "ZURICH") so accented spellings still match.
         parts = [fold_to_ascii_key(p) for p in parts]
         for p in parts:
-            p_clean = re.sub(r"[^a-zA-Z0-9\s]", " ", p).strip().upper()
+            p_clean = _RE_NON_ASCII_ALNUM_SPACE.sub(" ", p).strip().upper()
             p_clean = " ".join(p_clean.split())
             if p_clean in GLOBAL_METRO_TO_COUNTRY:
                 return cls.get(GLOBAL_METRO_TO_COUNTRY[p_clean])
@@ -2898,7 +2905,7 @@ class CountryRegistry:
         # If comma-delimited, check subsequent segments (parts[1:]) rather than thoroughfare
         target_parts = parts[1:] if len(parts) > 1 else parts
         for p in target_parts:
-            p_clean = re.sub(r"[^a-zA-Z0-9\s]", " ", p).upper()
+            p_clean = _RE_NON_ASCII_ALNUM_SPACE.sub(" ", p).upper()
             p_words = p_clean.split()
             for n in (3, 2, 1):
                 for i in range(len(p_words) - n, -1, -1):
@@ -2906,7 +2913,7 @@ class CountryRegistry:
                     if cand in GLOBAL_METRO_TO_COUNTRY:
                         if n == 1:
                             # If followed by street suffix, it is a street name, not a municipality
-                            if i + 1 < len(p_words) and (p_words[i+1] in STREET_SUFFIXES or p_words[i+1] in STREET_SUFFIXES.values()):
+                            if i + 1 < len(p_words) and p_words[i+1] in _ALL_STREET_SUFFIX_TOKENS:
                                 continue
                         return cls.get(GLOBAL_METRO_TO_COUNTRY[cand])
 

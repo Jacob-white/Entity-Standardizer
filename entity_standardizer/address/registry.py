@@ -13,6 +13,7 @@ import unicodedata
 from functools import lru_cache
 from typing import Dict, List, Optional, Tuple, Any
 
+from entity_standardizer.address.normalization import normalize_country_code
 from entity_standardizer.address.registry_data import (  # noqa: F401
     CURATED_CORPORATE_REGISTRY,
     CorporateRegistryEntry,
@@ -21,12 +22,33 @@ from entity_standardizer.address.registry_data import (  # noqa: F401
 )
 from entity_standardizer.address.tables import US_STATES
 
+_RE_NON_DIGITS = re.compile(r"[^\d]")
+_RE_SEC_PUNCT = re.compile(r"[,\.#;:]+")
+_RE_SPACE_HYPHEN = re.compile(r"[\s\-]")
+
 
 @lru_cache(maxsize=8192)
 def _fold_ascii(s: str) -> str:
     if not s:
         return ""
     return unicodedata.normalize("NFKD", s).encode("ASCII", "ignore").decode("utf-8").upper()
+
+
+@lru_cache(maxsize=2048)
+def _word_boundary_regex(token: str) -> "re.Pattern[str]":
+    return re.compile(r"\b" + re.escape(token) + r"\b")
+
+
+@lru_cache(maxsize=2048)
+def _sec_unit_regex(pat: str) -> "re.Pattern[str]":
+    pat_upper = pat.upper()
+    esc_pat = re.escape(pat_upper)
+    pattern_re = (
+        r"(?:\b|#)" + esc_pat.lstrip("#") + r"\b"
+        if pat_upper.startswith("#")
+        else r"\b" + esc_pat + r"\b"
+    )
+    return re.compile(pattern_re)
 
 
 COUNTRY_SYNONYMS: Dict[str, List[str]] = {
@@ -115,7 +137,7 @@ def _lookup_corporate_registry_uncached(
     st_norm = US_STATES.get(st_clean, st_clean)
     city_clean = _fold_ascii(city)
     post_clean = _fold_ascii(postal_code)
-    zip_digits = re.sub(r"[^\d]", "", postal_code)
+    zip_digits = _RE_NON_DIGITS.sub("", postal_code)
 
     # Detect if address exhibits explicit domestic US state indicators
     is_explicit_us_state = bool(st_norm and st_norm in US_STATES)
@@ -153,17 +175,11 @@ def _lookup_corporate_registry_uncached(
         # 3. Secondary unit match (if required by tower hub)
         if entry.requires_secondary_match:
             sec_candidates = f" {street2} {street1} {raw_street} ".upper()
-            sec_candidates_clean = re.sub(r"[,\.#;:]+", " ", sec_candidates)
+            sec_candidates_clean = _RE_SEC_PUNCT.sub(" ", sec_candidates)
             matched_sec = False
             for pat in entry.mandatory_unit_patterns:
-                pat_upper = pat.upper()
-                esc_pat = re.escape(pat_upper)
-                pattern_re = (
-                    r"(?:\b|#)" + esc_pat.lstrip("#") + r"\b"
-                    if pat_upper.startswith("#")
-                    else r"\b" + esc_pat + r"\b"
-                )
-                if re.search(pattern_re, sec_candidates) or re.search(pattern_re, sec_candidates_clean):
+                pat_re = _sec_unit_regex(pat)
+                if pat_re.search(sec_candidates) or pat_re.search(sec_candidates_clean):
                     matched_sec = True
                     break
             if not matched_sec:
@@ -185,7 +201,7 @@ def _lookup_corporate_registry_uncached(
                 if st_norm == entry.state:
                     state_match = True
                 else:  # a differing explicit state was already ruled out above, so none was supplied
-                    state_match = bool(re.search(r"\b" + re.escape(entry.state) + r"\b", combined))
+                    state_match = bool(_word_boundary_regex(entry.state).search(combined))
 
             city_match = False
             if entry.city:
@@ -193,7 +209,7 @@ def _lookup_corporate_registry_uncached(
                 if city_clean and city_clean == entry_city_norm:
                     city_match = True
                 elif not city_clean:
-                    city_match = bool(re.search(r"\b" + re.escape(entry_city_norm) + r"\b", combined))
+                    city_match = bool(_word_boundary_regex(entry_city_norm).search(combined))
 
             zip_match = False
             if entry.postal_code:
@@ -208,8 +224,6 @@ def _lookup_corporate_registry_uncached(
         else:
             # An explicit country that is a different country vetoes the entry (Hamilton, Ontario is not Bermuda).
             if norm_c and norm_c not in ("USA", "US", "UNITED STATES"):
-                from entity_standardizer.address.normalization import normalize_country_code
-
                 supplied_iso = normalize_country_code(country, state, postal_code, raw_street=raw_street, city_raw=city)
                 if supplied_iso and supplied_iso != entry_country:
                     continue
@@ -218,7 +232,7 @@ def _lookup_corporate_registry_uncached(
             country_matched = False
             if norm_c and norm_c in (entry_country, _fold_ascii(entry.country)):
                 country_matched = True
-            elif re.search(r"\b" + re.escape(entry_country) + r"\b", combined):
+            elif _word_boundary_regex(entry_country).search(combined):
                 country_matched = True
             elif any(k in combined for k in COUNTRY_SYNONYMS.get(entry_country, [])):
                 country_matched = True
@@ -229,15 +243,15 @@ def _lookup_corporate_registry_uncached(
                 entry_city_norm = _fold_ascii(entry.city)
                 if city_clean and city_clean == entry_city_norm:
                     city_matched = True
-                elif re.search(r"\b" + re.escape(entry_city_norm) + r"\b", combined):
+                elif _word_boundary_regex(entry_city_norm).search(combined):
                     city_matched = True
 
             # C. Postal code matching
             postal_matched = False
             if entry.postal_code:
                 entry_post_norm = _fold_ascii(entry.postal_code)
-                entry_post_clean = re.sub(r"[\s\-]", "", entry_post_norm)
-                post_input_clean = re.sub(r"[\s\-]", "", post_clean)
+                entry_post_clean = _RE_SPACE_HYPHEN.sub("", entry_post_norm)
+                post_input_clean = _RE_SPACE_HYPHEN.sub("", post_clean)
                 if post_input_clean and (
                     post_input_clean == entry_post_clean
                     or post_input_clean.startswith(entry_post_clean[:3])

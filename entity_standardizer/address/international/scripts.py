@@ -57,6 +57,7 @@ _RE_BG_MARKERS = re.compile(
 _MIN_SCRIPT_SHARE = 0.3
 
 _ZERO_WIDTH = re.compile("[​⁠﻿‌‍]")
+_ZERO_WIDTH_NO_JOINERS = re.compile("[​⁠﻿]")
 _RE_INDIC_PERSIAN = re.compile("[؀-ۿऀ-෿]")
 
 
@@ -68,7 +69,7 @@ def strip_zero_width(text: str) -> str:
     if not text or not _ZERO_WIDTH.search(text):
         return text
     if _RE_INDIC_PERSIAN.search(text):
-        return re.sub("[​⁠﻿]", "", text)
+        return _ZERO_WIDTH_NO_JOINERS.sub("", text)
     return _ZERO_WIDTH.sub("", text)
 
 

@@ -9,6 +9,7 @@ import re
 import unicodedata
 from typing import Optional
 from entity_standardizer.address.tables import (
+    CANADIAN_PROVINCES,
     DIRECTIONALS,
     STREET_SUFFIXES,
     SECONDARY_UNITS,
@@ -180,12 +181,32 @@ RE_BARE_UNIT_PHRASE = re.compile(
 )
 RE_LONE_NUMBER = re.compile(r"^\d+[A-Z0-9\-\/]*$")
 RE_LONE_ALPHANUM = re.compile(r"^[A-Z]\d+$|^\d+[A-Z]$")
+_RE_NON_WORD = re.compile(r"[^\w]")
+_RE_DIGIT_OR_HYPHEN = re.compile(r"[\d\-]")
+_RE_CAN_TAIL = re.compile(
+    r"(?:,\s*|\s+)([A-CEGHJ-NPR-TVXY]\d[A-CEGHJ-NPR-TV-Z]\s*\d[A-CEGHJ-NPR-TV-Z]\d)\s*$",
+    re.IGNORECASE,
+)
+_WORD_NUMBERS_1_TO_10 = frozenset({"ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE", "TEN"})
+_DANGLING_PREPOSITIONS = frozenset({"DE", "DEL", "OF", "LA", "EL", "DU", "VON", "VAN"})
 INVALID_ORPHAN_TOKENS = frozenset({
     "UP", "BO", "GDN", "LB", "DUO", "FSB", "ESQ", "CPA", "MD", "PA", "NA", "NTSA",
     "JR", "SR", "II", "III", "IV", "LPA", "FLT", "LHS", "RHS", "TOR",
     "LLC", "LP", "LLP", "INC", "CORP", "LTD", "PLC", "SA", "AG", "GMBH", "BV", "NV",
     "IST", "IIND", "IIIRD", "IVTH"
 })
+
+
+def _drop_from_first_numeric_token(text: str) -> str:
+    """"LEEDS 4 EXTRA" -> "LEEDS": everything from the first digit-initial word (after the first word) onwards is dropped.
+
+    Linear-time replacement for the regex ``\\s+\\d+.*$``, which backtracks quadratically on long whitespace runs.
+    """
+    words = text.split()
+    for i, word in enumerate(words):
+        if i > 0 and word[:1].isdigit():
+            return " ".join(words[:i])
+    return text.strip()
 
 
 def is_invalid_thoroughfare(st1: Optional[str]) -> bool:
@@ -198,7 +219,7 @@ def is_invalid_thoroughfare(st1: Optional[str]) -> bool:
     clean = str(st1).strip().upper()
     if not clean:
         return True
-    clean_alnum = re.sub(r"[^\w]", "", clean)
+    clean_alnum = _RE_NON_WORD.sub("", clean)
     if len(clean_alnum) <= 1:
         return True
     if clean.startswith("(") and clean.endswith(")"):
@@ -211,9 +232,9 @@ def is_invalid_thoroughfare(st1: Optional[str]) -> bool:
         return False
     if clean in INVALID_ORPHAN_TOKENS or clean_alnum in INVALID_ORPHAN_TOKENS:
         return True
-    if clean in ("ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE", "TEN"):
+    if clean in _WORD_NUMBERS_1_TO_10:
         return True
-    if clean in STREET_SUFFIXES or clean in STREET_SUFFIXES.values():
+    if clean in STREET_SUFFIXES or clean in FROZEN_STREET_SUFFIX_VALUES:
         return True
     if RE_LONE_NUMBER.match(clean):
         return True
@@ -292,7 +313,7 @@ def get_fuzzy_suffix(token: str) -> Optional[str]:
     Fuzzy distance check only applies to word tokens of length >= 4 to avoid abbreviation collisions.
     Excludes keywords like STATE and COUNTY to prevent route prefix misidentification.
     """
-    if not token or re.search(r"[\d\-]", token):
+    if not token or _RE_DIGIT_OR_HYPHEN.search(token):
         return None
     tok_clean = RE_CLEAN_ALPHA.sub("", token.upper())
     if not tok_clean:
@@ -340,7 +361,7 @@ def clean_redundant_street_tail(
             elif len(zip_clean) >= 5 and curr.upper().endswith(zip_clean[:5].upper()):
                 curr = curr[:-5].rstrip(" ,.-")
         else:
-            m_can_tail = re.search(r"(?:,\s*|\s+)([A-CEGHJ-NPR-TVXY]\d[A-CEGHJ-NPR-TV-Z]\s*\d[A-CEGHJ-NPR-TV-Z]\d)\s*$", curr, re.IGNORECASE)
+            m_can_tail = _RE_CAN_TAIL.search(curr)
             if m_can_tail:
                 curr = curr[:m_can_tail.start()].rstrip(" ,.-")
 
@@ -349,7 +370,6 @@ def clean_redundant_street_tail(
             st_clean = state.strip().upper()
             if st_clean:
                 st_variants = [re.escape(st_clean)]
-                from entity_standardizer.address.tables import CANADIAN_PROVINCES, US_STATES
                 for k, v in CANADIAN_PROVINCES.items():
                     if k == st_clean or v == st_clean:
                         st_variants.append(re.escape(k))
@@ -363,7 +383,7 @@ def clean_redundant_street_tail(
                 if m_st:
                     cand = curr[:m_st.start()].rstrip(" ,.-")
                     tokens_cand = cand.split()
-                    has_street_words = any(t.isalpha() and t.upper() not in ("ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE", "TEN") for t in tokens_cand)
+                    has_street_words = any(t.isalpha() and t.upper() not in _WORD_NUMBERS_1_TO_10 for t in tokens_cand)
                     if has_street_words or not tokens_cand:
                         curr = cand
 
@@ -375,14 +395,13 @@ def clean_redundant_street_tail(
                 if m_city:
                     cand = curr[:m_city.start()].rstrip(" ,.-")
                     tokens_cand = cand.split()
-                    DANGLING_PREPOSITIONS = {"DE", "DEL", "OF", "LA", "EL", "DU", "VON", "VAN"}
-                    if tokens_cand and tokens_cand[-1].upper() in DANGLING_PREPOSITIONS:
+                    if tokens_cand and tokens_cand[-1].upper() in _DANGLING_PREPOSITIONS:
                         cand_no_prep = " ".join(tokens_cand[:-1]).rstrip(" ,.-")
                         cand_tokens_check = cand_no_prep.split()
-                        has_street_words = any(t.isalpha() and t.upper() not in ("ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE", "TEN") for t in cand_tokens_check)
+                        has_street_words = any(t.isalpha() and t.upper() not in _WORD_NUMBERS_1_TO_10 for t in cand_tokens_check)
                         if has_street_words:
                             cand = cand_no_prep
-                    has_street_words = any(t.isalpha() and t.upper() not in ("ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE", "TEN") for t in cand.split())
+                    has_street_words = any(t.isalpha() and t.upper() not in _WORD_NUMBERS_1_TO_10 for t in cand.split())
                     if has_street_words or not cand.split():
                         curr = cand
                 if curr.upper() == city_clean:
@@ -552,6 +571,14 @@ RE_ROUTE_PAIR = re.compile(
     r"^(?:ROUTES?|RTES?|HWYS?|STATE\s+ROUTES?|STATE\s+HWYS?)\s+([A-Z0-9\-]+)\s+(?:AND|&|\/)\s+([A-Z0-9\-]+)$",
     re.IGNORECASE,
 )
+_RE_INTERSECTION_SPLIT = re.compile(r"\s+(AND|&|@|\/|AT)\s+", re.IGNORECASE)
+_COMPLEX_PREMISES = frozenset({
+    "VILLAGE", "SHOPS", "COMMONS", "CENTER", "ESTATES", "LANDING",
+    "GALLERIA", "PROMENADE", "MARKETPLACE", "RESIDENCES", "TOWERS",
+})
+_RE_CONTROL_WHITESPACE = re.compile(r"[\r\n\t]+")
+_RE_VOWELS_SPACE = re.compile(r"[AEIOU\s]")
+_RE_TRAILING_PUNCT = re.compile(r"[\s,.\-#;:]+$")
 
 def _normalize_intersection_branch(branch: str) -> str:
     tokens = branch.split()
@@ -594,7 +621,7 @@ def parse_intersection_address(s: str) -> Optional[str]:
         return f"RT {m_rt.group(1)} & RT {m_rt.group(2)}".upper()
 
     # Split on intersection delimiter
-    m_split = re.search(r"\s+(AND|&|@|\/|AT)\s+", raw, re.IGNORECASE)
+    m_split = _RE_INTERSECTION_SPLIT.search(raw)
     if m_split:
         delim = m_split.group(1).upper()
         p1 = raw[:m_split.start()].strip()
@@ -607,8 +634,7 @@ def parse_intersection_address(s: str) -> Optional[str]:
 
         # Exclude commercial development / campus premises like "The Village at Thornblade"
         if delim in ("AT", "@"):
-            COMPLEX_PREMISES = {"VILLAGE", "SHOPS", "COMMONS", "CENTER", "ESTATES", "LANDING", "GALLERIA", "PROMENADE", "MARKETPLACE", "RESIDENCES", "TOWERS"}
-            if bool(set(p1.upper().split()) & COMPLEX_PREMISES):
+            if bool(set(p1.upper().split()) & _COMPLEX_PREMISES):
                 return None
 
         # Check for plural suffix on second part: e.g. 'Cherry and Fourth Streets'
@@ -675,7 +701,7 @@ def is_city_noise_in_street1(s1: Optional[str], city: Optional[str], state: Opti
     """
     if not s1:
         return False
-    s1_clean = re.sub(r"[\r\n\t]+", " ", unicodedata.normalize('NFKC', str(s1))).strip()
+    s1_clean = _RE_CONTROL_WHITESPACE.sub(" ", unicodedata.normalize('NFKC', str(s1))).strip()
     s1_clean = RE_LEGACY_CORRUPTIONS.sub("", s1_clean).strip(" ,.-")
     if not s1_clean:
         return True
@@ -723,8 +749,8 @@ def is_city_noise_in_street1(s1: Optional[str], city: Optional[str], state: Opti
 
     # 5. City consonants / abbreviation match (e.g. "CHADDS FRD" for "CHADDS FORD", "S BND" for "SOUTH BEND")
     if city_upper:
-        city_no_vowels = re.sub(r"[AEIOU\s]", "", city_upper)
-        s1_no_vowels = re.sub(r"[AEIOU\s]", "", s1_upper)
+        city_no_vowels = _RE_VOWELS_SPACE.sub("", city_upper)
+        s1_no_vowels = _RE_VOWELS_SPACE.sub("", s1_upper)
         if s1_no_vowels and s1_no_vowels == city_no_vowels:
             return True
 
@@ -795,7 +821,7 @@ def clean_rooftop_address(street_line: Optional[str]) -> Optional[str]:
         else:
             break
 
-    val = re.sub(r"[\s,.\-#;:]+$", "", val).strip()
+    val = _RE_TRAILING_PUNCT.sub("", val).strip()
     if not val or is_invalid_thoroughfare(val):
         return None
     return val

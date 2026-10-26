@@ -16,7 +16,12 @@ import threading
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
+from entity_standardizer.address.fuzzy import heal_street_number_transposition
 from entity_standardizer.address.offline_seed_data import SEED_ROOFTOP_RECORDS, SEED_STREET_RANGES
+from entity_standardizer.address.tables import STATE_TO_FIPS, US_STATES, ZIP3_TO_STATE
+
+_RE_STREET_NUM_AND_NAME = re.compile(r"^(\d+)\s+(.+)$")
+_RE_ZIP5_WORD = re.compile(r"\b(\d{5})\b")
 
 
 @dataclass
@@ -643,7 +648,6 @@ class OfflineReferenceIndex:
                         if r_tokens and r_tokens[0].isdigit():
                             known_nums.append(int(r_tokens[0]))
                     if known_nums:
-                        from entity_standardizer.address.fuzzy import heal_street_number_transposition
                         ranges = [(n, n) for n in known_nums]
                         healed_num = heal_street_number_transposition(num_part, valid_ranges=ranges)
                         if healed_num and healed_num != num_part:
@@ -681,7 +685,7 @@ class OfflineReferenceIndex:
                 if parts:
                     st1_val = parts[0]
             if st1_val:
-                m_num = re.match(r"^(\d+)\s+(.+)$", str(st1_val).strip().upper())
+                m_num = _RE_STREET_NUM_AND_NAME.match(str(st1_val).strip().upper())
                 if m_num:
                     st_num = int(m_num.group(1))
                     st_name = m_num.group(2).strip()
@@ -725,11 +729,10 @@ class OfflineReferenceIndex:
 
         if fallback_to_centroids and is_us_target:
             from entity_standardizer.address.geocoder import get_fallback_centroid_tier
-            from entity_standardizer.address.tables import STATE_TO_FIPS, US_STATES, ZIP3_TO_STATE
             post = getattr(address, "postal_code", None)
             st = getattr(address, "state", None)
             if isinstance(address, str):
-                m_zip = re.search(r"\b(\d{5})\b", address)
+                m_zip = _RE_ZIP5_WORD.search(address)
                 if m_zip:
                     post = m_zip.group(1)
             if not st and post and len(post) >= 3:
