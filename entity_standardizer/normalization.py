@@ -93,11 +93,16 @@ def _fold_vanity_digits_py(text: str) -> str:
     return "".join(ITU_E161_KEYPAD_MAP.get(ch.upper(), ch) for ch in text)
 
 
+from entity_standardizer import _native_dispatch  # noqa: E402
+
+_TRAILING_PUNCT_RE = re.compile(r"[!?|,;\s]+$")
+_TRAILING_PUNCT_DASH_RE = re.compile(r"[!?|,;\-\s]+$")
+_ALIAS_SEP_RE = re.compile(r"[\s,]+")
+
+
 def fold_unicode_digits(text: str) -> tuple[str, bool]:
     """Fold non-ASCII Unicode numerals and full-width punctuation to ASCII equivalents."""
-    from entity_standardizer._native_dispatch import fold_unicode_digits_dispatch
-
-    return fold_unicode_digits_dispatch(text)
+    return _native_dispatch.fold_unicode_digits_dispatch(text)
 
 
 def strip_leading_label(text: str) -> str:
@@ -108,7 +113,7 @@ def strip_leading_label(text: str) -> str:
 def _is_clean_nanp_segment(seg: str) -> bool:
     """Return True if a multi-phone segment represents a clean 10- or 11-digit NANP candidate."""
     cleaned = _TRAILING_NOTE_RE.sub("", seg).strip()
-    cleaned = re.sub(r"[!?|,;\s]+$", "", cleaned)
+    cleaned = _TRAILING_PUNCT_RE.sub("", cleaned)
     m = _EXTENSION_RE.search(cleaned)
     if m:
         cleaned = cleaned[:m.start()].strip()
@@ -177,7 +182,7 @@ def extract_extension(text: str) -> tuple[str, str | None]:
     primary, _ = split_primary_phone(text)
     # Strip trailing non-digit comments first if they follow an extension or base number
     cleaned = _TRAILING_NOTE_RE.sub("", primary).strip()
-    cleaned = re.sub(r"[!?|,;\s]+$", "", cleaned)
+    cleaned = _TRAILING_PUNCT_RE.sub("", cleaned)
     match = _EXTENSION_RE.search(cleaned)
     if match:
         ext = next(g for g in match.groups() if g is not None)
@@ -188,7 +193,7 @@ def extract_extension(text: str) -> tuple[str, str | None]:
             base_digits = sum(c.isdigit() for c in base)
             if base_digits < 10 or "," in base:
                 return cleaned, None
-        base = re.sub(r"[!?|,;\-\s]+$", "", base)
+        base = _TRAILING_PUNCT_DASH_RE.sub("", base)
         return base, ext
     m_hyph_ext = _HYPHEN_NANP_EXT_RE.match(cleaned)
     if m_hyph_ext:
@@ -198,8 +203,6 @@ def extract_extension(text: str) -> tuple[str, str | None]:
 
 def decode_vanity_phone(text: str) -> tuple[str, str | None]:
     """Detect and decode ITU-T E.161 alphanumeric vanity phone numbers (e.g., 1-800-FLOWERS)."""
-    from entity_standardizer._native_dispatch import fold_vanity_digits_dispatch
-
     if _TIME_RANGE_RE.search(text):
         return text.strip(), None
 
@@ -217,9 +220,9 @@ def decode_vanity_phone(text: str) -> tuple[str, str | None]:
     alpha_part = match.group(2)
     # Reconstruct clean vanity alias
     raw_alias = (prefix_part + alpha_part).strip().upper()
-    raw_alias = re.sub(r"[\s,]+", "-", raw_alias)
+    raw_alias = _ALIAS_SEP_RE.sub("-", raw_alias)
 
-    decoded_tail = fold_vanity_digits_dispatch(alpha_part.upper())
+    decoded_tail = _native_dispatch.fold_vanity_digits_dispatch(alpha_part.upper())
     replaced = stripped[:match.start()] + prefix_part + decoded_tail + stripped[match.end():]
     return replaced, raw_alias
 
@@ -363,6 +366,4 @@ def _fold_latin_diacritics_py(text: str) -> str:
 
 def fold_latin_diacritics(text: str) -> str:
     """Fold Latin diacritics and stroked characters (ø, ł, đ, ħ) to ASCII letters."""
-    from entity_standardizer._native_dispatch import fold_latin_diacritics_dispatch
-
-    return fold_latin_diacritics_dispatch(text)
+    return _native_dispatch.fold_latin_diacritics_dispatch(text)

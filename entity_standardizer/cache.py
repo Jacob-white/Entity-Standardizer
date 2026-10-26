@@ -87,10 +87,11 @@ class SQLiteCache:
         self.db_path = str(db_path)
         self._pid = os.getpid()
         self._lock = threading.Lock()
-        self._closed = False
+        self._closed = True
         self.hits = 0
         self.misses = 0
         self._conn = self._open_conn()
+        self._closed = False
 
     def _open_conn(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, check_same_thread=False)

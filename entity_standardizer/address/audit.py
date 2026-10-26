@@ -10,6 +10,7 @@ with the production PostgreSQL schema defined in Blueprint Section 1.4.3.
 """
 
 import json
+import os
 import threading
 import uuid
 import sqlite3
@@ -218,7 +219,6 @@ class StewardshipAuditLedger:
     """
 
     def __init__(self, db_path: Optional[str] = None, max_rows: Optional[int] = None):
-        import os
         self.db_path = db_path or ":memory:"
         self._pid = os.getpid()
         # One connection is shared by all threads, so every use of it is serialized by this lock.
@@ -239,7 +239,6 @@ class StewardshipAuditLedger:
         self._init_db()
 
     def _get_conn(self) -> sqlite3.Connection:
-        import os
         with self._lock:
             current_pid = os.getpid()
             if current_pid != self._pid:

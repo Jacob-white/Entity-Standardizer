@@ -13,7 +13,9 @@ from entity_standardizer._native_dispatch import (
     normalize_batch_company_tokens_dispatch,
     normalize_company_tokens_dispatch,
 )
+from entity_standardizer.dedup import DisjointSet
 from entity_standardizer.normalization import fold_latin_diacritics
+from entity_standardizer.registry import normalize_country_iso2
 
 # Multi-token and single-token legal entity forms (ISO 20275 ELF)
 # Mapped to (canonical_suffix, unambiguous_country_iso2)
@@ -559,8 +561,6 @@ def standardize_company(
     branch_tokens = _normalize_tokens(branch_raw) if branch_raw else []
     branch_unit = " ".join(branch_tokens) if branch_tokens else None
 
-    from entity_standardizer.registry import normalize_country_iso2
-
     explicit_country = normalize_country_iso2(country) if country else None
     inferred_country_iso2 = explicit_country or suffix_country or sec_country
 
@@ -768,7 +768,6 @@ def deduplicate_companies(
         c if isinstance(c, StandardizedCompany) else standardize_company(c, country=country)
         for c in companies
     ]
-    from entity_standardizer.dedup import DisjointSet
 
     n = len(parsed)
     dsu = DisjointSet(range(n))

@@ -12,6 +12,8 @@ from entity_standardizer._native_dispatch import (
     compute_soundex_dispatch,
     damerau_levenshtein_distance_dispatch,
 )
+from entity_standardizer.company import _DOTTED_INITIALISM_RE
+from entity_standardizer.dedup import DisjointSet
 from entity_standardizer.normalization import fold_latin_diacritics
 
 _SALUTATIONS: dict[str, str] = {
@@ -914,8 +916,6 @@ def standardize_job_title(raw_input: str | None) -> StandardizedJobTitle:
     if not cleaned_raw:
         return StandardizedJobTitle(raw_input=str(raw_input))
 
-    from entity_standardizer.company import _DOTTED_INITIALISM_RE
-
     actions: list[str] = []
     working = cleaned_raw
 
@@ -1155,7 +1155,6 @@ def deduplicate_persons(
         p if isinstance(p, StandardizedPerson) else standardize_person(p)
         for p in persons
     ]
-    from entity_standardizer.dedup import DisjointSet
 
     n = len(parsed)
     dsu = DisjointSet(range(n))

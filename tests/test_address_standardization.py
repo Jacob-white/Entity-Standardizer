@@ -1012,6 +1012,262 @@ def test_us_street_parser_patterns_and_normalization_exhaustive(monkeypatch: pyt
         )
         assert usp._parse_us_street_tokens("dummy", city_raw="BOSTON")[0] == "CORPORATE CENTER"
 
+        # Case H: Isolated CRF tag branches that were previously shadowed by combined lists
+        # 551-552 (empty punctuation token), 564 (STATE ROUTE), 587 (single-token compound ordinal),
+        # 591 (& / AND), 607 (numbered street > 999), 617 (enable_fuzzy=False StreetName)
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [
+                (",", "StreetName"),
+                ("100", "AddressNumber"),
+                ("STATE", "StreetName"),
+                ("ROUTE", "StreetNamePostType"),
+                ("TWENTY-FIRST", "StreetName"),
+                ("&", "StreetName"),
+                ("ELM", "StreetName"),
+                ("1000TH", "StreetName"),
+            ],
+        )
+        assert "STATE ROUTE" in usp._parse_us_street_tokens("dummy")[0]
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("100", "AddressNumber"), ("CUSTOMNAME", "StreetName")],
+        )
+        assert usp._parse_us_street_tokens("dummy", enable_fuzzy=False)[0] == "100 CUSTOMNAME"
+
+        # 625, 627, 630-633, 647: OccupancyType & OccupancyIdentifier branches
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("CALLE", "OccupancyType"), ("LUNA", "OccupancyType"), ("10", "OccupancyIdentifier")],
+        )
+        assert "CALLE LUNA 10" in usp._parse_us_street_tokens("dummy")[0]
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("10", "AddressNumber"), ("OAK", "StreetName"), ("SLIP", "OccupancyType"), ("PH", "OccupancyIdentifier")],
+        )
+        r_slip = usp._parse_us_street_tokens("dummy")
+        assert "SLIP" in r_slip[0] and "PH" in r_slip[1]
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("10", "AddressNumber"), ("MAIN", "StreetName"), ("ST", "StreetNamePostType"), ("CUSTOMUNIT", "OccupancyType")],
+        )
+        assert "CUSTOMUNIT" in usp._parse_us_street_tokens("dummy")[1]
+
+        # 659, 661-669, 736, 738: USPSBoxGroupType/ID and USPSBoxType/ID branches
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("RR", "USPSBoxGroupType"), ("2", "USPSBoxGroupID"), ("BOX", "USPSBoxType"), ("14", "USPSBoxID")],
+        )
+        assert usp._parse_us_street_tokens("dummy")[0] == "RR 2 BOX 14"
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [
+                ("100", "AddressNumber"),
+                ("MAIN", "StreetName"),
+                ("ST", "StreetNamePostType"),
+                ("RR", "USPSBoxGroupType"),
+                ("2", "USPSBoxGroupID"),
+            ],
+        )
+        assert "RR 2" in usp._parse_us_street_tokens("dummy")[1]
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("CALLE", "USPSBoxType"), ("SOL", "USPSBoxID")],
+        )
+        assert "CALLE SOL" in usp._parse_us_street_tokens("dummy")[0]
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("100", "AddressNumber"), ("MAIN", "StreetName"), ("BOX", "USPSBoxType"), ("9", "USPSBoxID")],
+        )
+        assert "BOX 9" in usp._parse_us_street_tokens("dummy")[1]
+
+        # 676, 688, 697-700, 711-716, 720-721, 725, 729: PlaceName, Recipient, CountryName, LandmarkName
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("CALLE", "PlaceName"), ("DEL", "PlaceName"), ("MAR", "PlaceName")],
+        )
+        assert "CALLE DEL MAR" in usp._parse_us_street_tokens("dummy")[0]
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("100", "AddressNumber"), ("MAIN", "StreetName"), ("BSMT", "PlaceName")],
+        )
+        assert "BSMT" in usp._parse_us_street_tokens("dummy")[1]
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("100", "AddressNumber"), ("SAINT", "PlaceName"), ("CHARLES", "PlaceName"), ("USA", "CountryName")],
+        )
+        assert "SAINT CHARLES" in usp._parse_us_street_tokens("dummy", city_raw="BOSTON")[0]
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("CALLE", "Recipient"), ("NORTE", "Recipient"), ("12", "Recipient")],
+        )
+        assert "CALLE NORTE 12" in usp._parse_us_street_tokens("dummy")[0]
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("100", "AddressNumber"), ("MAIN", "StreetName"), ("LA", "LandmarkName"), ("JOLLA", "PlaceName"), ("TOWER", "LandmarkName")],
+        )
+        r_lm = usp._parse_us_street_tokens("dummy")
+        assert r_lm.building_name == "TOWER" and "LA JOLLA" in r_lm[3]
+
+        # 752-753, 755-756, 763-765, 767-770, 775-776: Invalid StateName branches
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("100", "AddressNumber"), ("MAIN", "StreetName"), ("BLVD", "StateName")],
+        )
+        assert usp._parse_us_street_tokens("dummy")[0] == "100 MAIN BLVD"
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("100", "AddressNumber"), ("MAIN", "StreetName"), ("ST", "StreetNamePostType"), ("NEW", "StateName"), ("YORK", "StateName"), ("NY", "StateName")],
+        )
+        assert usp._parse_us_street_tokens("dummy")[4] == "NY"
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("PARK", "PlaceName"), ("FAKE", "StateName"), ("AVE", "StreetNamePostType")],
+        )
+        assert usp._parse_us_street_tokens("dummy")[0] == "PARK FAKE AVE"
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("100", "AddressNumber"), ("MAIN", "StreetName"), ("NORTH", "PlaceName"), ("FAKE", "StateName"), ("10005", "ZipCode")],
+        )
+        assert "100 MAIN N" in usp._parse_us_street_tokens("dummy")[0]
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("100", "AddressNumber"), ("MAIN", "StreetName"), ("BOGUSSTATE", "StateName")],
+        )
+        assert "BOGUSSTATE" in usp._parse_us_street_tokens("dummy")[0]
+
+        # 783-799: ZipCode rescued suffixes (with and without city_parts) & Spanish rescued numbers
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("BROADWAY", "PlaceName"), ("AVE", "ZipCode")],
+        )
+        assert usp._parse_us_street_tokens("dummy")[0] == "BROADWAY AVE"
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("MAIN", "StreetName"), ("AVE", "ZipCode")],
+        )
+        assert usp._parse_us_street_tokens("dummy")[0] == "MAIN AVE"
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("CALLE", "StreetName"), ("LUNA", "StreetName"), ("45", "ZipCode")],
+        )
+        assert usp._parse_us_street_tokens("dummy")[0] == "CALLE LUNA 45"
+
+        # 811, 836-837, 864-867, 869-872, 885-889, 905, 925, 928, 932-933
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("100", "AddressNumber"), ("MAIN", "StreetName"), ("ST", "StreetNamePostType"), ("PARK", "PlaceName")],
+        )
+        assert usp._parse_us_street_tokens("dummy", city_raw="BOSTON")[0] == "100 MAIN ST"
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("LLC", "StreetName")],
+        )
+        assert usp._parse_us_street_tokens("Ste 200", enable_fuzzy=False)[0] == ""
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("HARBOR", "PlaceName"), ("CENTER", "PlaceName"), ("200", "OccupancyIdentifier")],
+        )
+        assert usp._parse_us_street_tokens("dummy")[0] == "HARBOR CENTER"
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("MERCHANDISE", "PlaceName"), ("MART", "PlaceName")],
+        )
+        assert usp._parse_us_street_tokens("dummy")[0] == "MERCHANDISE MART"
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("CALLE", "StreetName"), ("SOL", "PlaceName")],
+        )
+        assert usp._parse_us_street_tokens("dummy")[0] == "CALLE SOL"
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("FOO", "Recipient")],
+        )
+        assert usp._parse_us_street_tokens("100 Main St Ste 200")[1] == "STE 200"
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("100", "AddressNumber"), ("MAIN", "StreetName"), ("ST", "StreetNamePostType"), ("100 MAIN ST", "BuildingName")],
+        )
+        assert usp._parse_us_street_tokens("dummy")[1] == ""
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [("100", "AddressNumber"), ("MAIN", "StreetName"), ("ST", "StreetNamePostType"), ("100 MAIN ST", "BuildingName"), ("STE", "OccupancyType"), ("5", "OccupancyIdentifier")],
+        )
+        assert usp._parse_us_street_tokens("dummy")[1] == "STE 5"
+        monkeypatch.setattr(
+            usp.usaddress,
+            "parse",
+            lambda s: [],
+        )
+        assert usp._parse_us_street_tokens("100 Main St")[0] == "100 MAIN ST"
+
         monkeypatch.setattr(usp.usaddress, "parse", orig_parse)
+
+    # Additional us_street_parser.py and secondary_units.py branches
+    assert usp._rule_based_us_street_parse("100 Twenty-First St")[0] == "100 21ST ST"
+    assert usp._rule_based_us_street_parse("100 A & B St")[0] == "100 A & B ST"
+    assert usp._parse_us_street_tokens("100 Main St de, Boston, MA 02110")[0] == "100 MAIN ST"
+    assert usp._parse_us_street_tokens("100 Main St de New York City NY 10005")[0] == "100 MAIN ST"
+    assert usp._parse_us_street_tokens("100 Main St de, Boston 02110")[0] == "100 MAIN ST"
+    assert usp._parse_us_street_tokens("100 Main St de Boston 02110")[0] == "100 MAIN ST"
+    if usp.usaddress is not None:
+        orig_p = usp.usaddress.parse
+        monkeypatch.setattr(usp.usaddress, "parse", lambda s: (_ for _ in ()).throw(RuntimeError("fail")))
+        assert "URB LAS FLORES" in usp._parse_us_street_tokens("Urb Las Flores 100 Main St Boston MA 02110")[0]
+        assert usp._parse_us_street_tokens("Boston 02110")[5] == "02110"
+        monkeypatch.setattr(usp.usaddress, "parse", orig_p)
+    assert usp._move_trailing_house_number("St Ave 100") == "St Ave 100"
+    assert usp._parse_us_address_components("100 Main St", "Ste 200, Boston", city_raw="Boston")[1] == "STE 200"
+    assert usp._parse_us_address_components("PO Box 100", "Ste 200")[:2] == ("PO BOX 100", "STE 200")
+    assert usp._parse_us_address_components("Boston", "", city_raw="Boston")[0] == ""
+
+    from entity_standardizer.address.secondary_units import (
+        _split_international_secondary_unit,
+        _standardize_secondary_unit,
+        _words_to_number,
+    )
+
+    assert _words_to_number(["TWENTIETH"]) == 20
+    assert _words_to_number(["HUNDRED"]) == -1
+    assert _words_to_number(["INVALIDWORD"]) == -1
+    assert _standardize_secondary_unit("TWENTY-FIRST FL") == "FL 21"
+    assert _standardize_secondary_unit(",,,") == ""
+    assert _standardize_secondary_unit("APARTMENT 5") == "APT 5"
+    assert _standardize_secondary_unit("STE 200 STE 200") == "STE 200"
+    assert _standardize_secondary_unit("BLDG A 3RD FL") == "BLDG A FL 3"
+    assert _standardize_secondary_unit("3RD FL FL 3") == "FL 3"
+    assert _split_international_secondary_unit("Flat 4 150 High Street North", "") == ("150 HIGH ST N", "APT 4")
+    assert _split_international_secondary_unit("150 High Street", "Flat 4") == ("150 HIGH ST", "APT 4")
+
 
 

@@ -840,9 +840,9 @@ class OfflineReferenceIndex:
 
     def close(self):
         """Closes internal database connection."""
-        with self._lock:
-            if getattr(self, "_real_conn", None) is not None:
-                self._real_conn.close()
+        conn = getattr(self, "_real_conn", None)
+        if conn is not None:
+            conn.close()
 
     def __del__(self):
         self.close()
