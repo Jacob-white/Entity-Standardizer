@@ -8,6 +8,10 @@ import json
 import re
 from typing import Any
 
+from entity_standardizer._native_dispatch import (
+    compute_soundex_dispatch,
+    damerau_levenshtein_distance_dispatch,
+)
 from entity_standardizer.normalization import fold_latin_diacritics
 
 _SALUTATIONS: dict[str, str] = {
@@ -400,6 +404,13 @@ _LEADING_PLACEHOLDER_RE = re.compile(
     r"^\s*(?:[-–—]+|\[?\s*(?:N\s*/\s*A|NA|NONE|NULL|UNKNOWN|TBD)\s*\]?)\s+(?=[A-Za-z])",
     re.IGNORECASE,
 )
+_ALNUM_WORD_RE = re.compile(r"[A-Za-z0-9]+")
+_NON_ALNUM_RE = re.compile(r"[^A-Za-z0-9]")
+_TOKEN_CLEAN_RE = re.compile(r"[^A-Za-z0-9'\-]")
+_LEADING_NUMBER_RE = re.compile(r"^\d+\s+")
+_CHIEF_OFFICER_RE = re.compile(r"\bCHIEF\s+[A-Z\s]+OFFICER\b")
+_NON_ALPHA_ASCII_RE = re.compile(r"[^A-Za-z]")
+_TITLE_NON_WORD_RE = re.compile(r"[^\w\s\-]")
 
 
 def is_organization_name(raw_input: str | None) -> bool:
@@ -411,7 +422,7 @@ def is_organization_name(raw_input: str | None) -> bool:
         return False
     if _ORG_SUFFIX_PATTERN_RE.search(s):
         return True
-    words = {w.upper() for w in re.findall(r"[A-Za-z0-9]+", s)}
+    words = {w.upper() for w in _ALNUM_WORD_RE.findall(s)}
     return bool(words & _UNAMBIGUOUS_ORG_TOKENS)
 
 
@@ -491,7 +502,7 @@ _SPACED_DOTTED_CRED_RE = re.compile(r"(?<![A-Za-z0-9])(?:[A-Za-z]{1,2}\.\s*){2,}
 
 
 def _collapse_dotted_cred(match: re.Match[str]) -> str:
-    collapsed = re.sub(r"[^A-Za-z0-9]", "", match.group(0)).upper()
+    collapsed = _NON_ALNUM_RE.sub("", match.group(0)).upper()
     if collapsed in _CREDENTIALS:
         return f" {collapsed} "
     return match.group(0)
@@ -499,7 +510,7 @@ def _collapse_dotted_cred(match: re.Match[str]) -> str:
 
 def _clean_token(tok: str) -> str:
     """Strip punctuation periods from a single word token and uppercase it."""
-    cleaned = re.sub(r"[^A-Za-z0-9'\-]", "", tok).upper().strip("'-")
+    cleaned = _TOKEN_CLEAN_RE.sub("", tok).upper().strip("'-")
     if cleaned and cleaned not in _GENERATIONAL_SUFFIXES and any(c.isdigit() for c in cleaned):
         return ""
     return cleaned
@@ -522,7 +533,7 @@ def standardize_person(raw_input: str | None) -> StandardizedPerson:
         return StandardizedPerson(raw_input="")
 
     cleaned_raw = str(raw_input).strip()
-    if not cleaned_raw or re.match(r"^\d+\s+", cleaned_raw):
+    if not cleaned_raw or _LEADING_NUMBER_RE.match(cleaned_raw):
         return StandardizedPerson(raw_input=str(raw_input))
 
     # Reject pure placeholders like "N/A", "NONE", "[none]"
@@ -531,7 +542,7 @@ def standardize_person(raw_input: str | None) -> StandardizedPerson:
         return StandardizedPerson(raw_input=str(raw_input))
 
     actions: list[str] = []
-    working = re.sub(r"\s+", " ", cleaned_raw)
+    working = " ".join(cleaned_raw.split())
 
     # Strip leading placeholder tokens (e.g. "- Enis Hulli" or "N/A Enis Hulli")
     m_lead_ph = _LEADING_PLACEHOLDER_RE.match(working)
@@ -706,8 +717,6 @@ def standardize_person(raw_input: str | None) -> StandardizedPerson:
     )
     person_root_key = f"{last_name or ''}|{root_first_name or ''}"
 
-    from entity_standardizer._native_dispatch import compute_soundex_dispatch
-
     last_snd = compute_soundex_dispatch(last_name.split()[-1]) if last_name else ""
     first_snd = compute_soundex_dispatch(root_first_name or first_name or "")
     phonetic_key = f"{last_snd}|{first_snd}".strip("|") or None
@@ -737,7 +746,7 @@ def standardize_person(raw_input: str | None) -> StandardizedPerson:
 def _classify_seniority(norm_title: str, tokens: set[str]) -> str:
     """Classify canonical job title into seniority_level."""
     if (
-        re.search(r"\bCHIEF\s+[A-Z\s]+OFFICER\b", norm_title)
+        _CHIEF_OFFICER_RE.search(norm_title)
         or "GENERAL COUNSEL" in norm_title
     ):
         return "C_SUITE"
@@ -921,11 +930,11 @@ def standardize_job_title(raw_input: str | None) -> StandardizedJobTitle:
         except ValueError:
             pass
 
-    working = re.sub(r"&", " AND ", working)
+    working = working.replace("&", " AND ")
     working = _DOTTED_INITIALISM_RE.sub(
-        lambda m: f" {re.sub(r'[^A-Za-z]', '', m.group(0)).upper()} ", working
+        lambda m: f" {_NON_ALPHA_ASCII_RE.sub('', m.group(0)).upper()} ", working
     )
-    working = re.sub(r"[^\w\s\-]", " ", working)
+    working = _TITLE_NON_WORD_RE.sub(" ", working)
     raw_tokens = [t.upper().strip("-") for t in working.split() if t.strip("-")]
     if not raw_tokens:
         return StandardizedJobTitle(raw_input=str(raw_input))
@@ -1002,8 +1011,6 @@ def compare_persons(
     person_b: str | StandardizedPerson | None,
 ) -> PersonComparisonResult:
     """Compare two person names or StandardizedPerson objects across exact, root-nickname, initial, and phonetic keys."""
-    from entity_standardizer._native_dispatch import damerau_levenshtein_distance_dispatch
-
     pa = person_a if isinstance(person_a, StandardizedPerson) else standardize_person(person_a)
     pb = person_b if isinstance(person_b, StandardizedPerson) else standardize_person(person_b)
 

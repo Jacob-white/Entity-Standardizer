@@ -408,3 +408,320 @@ def test_h3_cascade_careof_and_intl_grammar_edges() -> None:
     ca_po = ca.standardize("PO Box 123, Toronto, ON M5J 2J5", street2="Stn A")
     assert ca_po.street_name == "PO BOX 123 STN A"
 
+
+def test_spatial_offline_geonames_and_ingestion_exhaustive(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import sqlite3
+    import entity_standardizer.address.offline_index as off_mod
+    import entity_standardizer.address.reference.geonames as gn_mod
+    import entity_standardizer.address.spatial.engine as sp_mod
+    from entity_standardizer.address.offline_index import (
+        OfflineReferenceIndex,
+        _street_names_match,
+        get_default_offline_index,
+    )
+    from entity_standardizer.address.spatial.engine import (
+        SpatialEngine,
+        get_default_spatial_engine,
+        resolve_spatial_coordinates,
+    )
+    from entity_standardizer.address.spatial.ingestion import (
+        OpenAddressesIngestor,
+        OsmBuildingIngestor,
+        TigerLineIngestor,
+        _valid_coordinate,
+        calculate_polygon_centroid,
+    )
+
+    # 1. spatial/ingestion.py branches
+    assert calculate_polygon_centroid([[-179.9, 10.0], [-179.8, 10.0], [179.9, 10.2], [-179.9, 10.2]]) != (0.0, 0.0)
+    assert calculate_polygon_centroid([[10.0, 20.0], [12.0, 22.0]]) == (11.0, 21.0)
+    assert calculate_polygon_centroid([[0.0, 0.0], [1.0, 1.0], [2.0, 2.0]]) == (1.0, 1.0)
+    assert _valid_coordinate("not_a_float", 10.0) is False
+
+    eng = SpatialEngine(seed=True)
+    oa = OpenAddressesIngestor(eng)
+    assert (
+        oa.ingest_records(
+            [
+                {"LATITUDE": None, "LONGITUDE": -71.0, "STREET": "MAIN ST"},
+                {"LATITUDE": "bad", "LONGITUDE": -71.0, "STREET": "MAIN ST"},
+                {"LATITUDE": 200.0, "LONGITUDE": -71.0, "STREET": "MAIN ST"},
+                {"NUMBER": "10", "STREET": "TEST RD", "CITY": "BOSTON", "REGION": "MA", "POSTCODE": "02110", "LATITUDE": 42.35, "LONGITUDE": -71.06},
+                {"NUMBER": "10", "STREET": "TEST RD", "CITY": "BOSTON", "REGION": "MA", "POSTCODE": "02110", "LATITUDE": 42.35, "LONGITUDE": -71.06},
+            ]
+        )
+        == 1
+    )
+    oa_file = tmp_path / "oa.csv"
+    oa_file.write_text("NUMBER,STREET,CITY,REGION,POSTCODE,LATITUDE,LONGITUDE\n12,TEST RD,BOSTON,MA,02110,42.35,-71.06\n", encoding="utf-8")
+    assert oa.ingest_csv(str(oa_file)) == 1
+    with pytest.raises(TypeError):
+        oa.ingest_csv(123)
+
+    tg = TigerLineIngestor(eng)
+    assert (
+        tg.ingest_segments(
+            [
+                {"street_name": "", "from_number": 1, "to_number": 10},
+                {"street_name": "TEST RD", "from_number": "bad", "to_number": 10, "start_lat": 42.0, "start_lon": -71.0, "end_lat": 42.1, "end_lon": -71.1},
+            ]
+        )
+        == 0
+    )
+    tg_file = tmp_path / "tg.csv"
+    tg_file.write_text("street_name,from_number,to_number,start_lat,start_lon,end_lat,end_lon,postal_code,state\nOAK ST,100,100,42.35,-71.06,42.35,-71.06,02110,MA\n", encoding="utf-8")
+    assert tg.ingest_csv(str(tg_file)) == 1
+    with pytest.raises(TypeError):
+        tg.ingest_csv(123)
+
+    osm = OsmBuildingIngestor(eng)
+    assert (
+        osm.ingest_features(
+            [
+                {"geometry": {"type": "Polygon", "coordinates": [["bad"]]}, "properties": {"addr:street": "MAIN"}},
+                {"geometry": {"type": "Point", "coordinates": [-71.0, 200.0]}, "properties": {"addr:street": "MAIN"}},
+                {"geometry": {"type": "Point", "coordinates": [-71.0, 42.35]}, "properties": {"addr:street": ""}},
+                {
+                    "geometry": {"type": "MultiPolygon", "coordinates": [[[[-71.06, 42.35], [-71.05, 42.35], [-71.05, 42.36], [-71.06, 42.36]]]]},
+                    "properties": {"addr:housenumber": "50", "addr:street": "MULTIPOLY ST", "addr:city": "BOSTON", "addr:state": "MA", "addr:postcode": "02110"},
+                },
+                {
+                    "geometry": {"type": "MultiPolygon", "coordinates": [[[[-71.06, 42.35], [-71.05, 42.35], [-71.05, 42.36], [-71.06, 42.36]]]]},
+                    "properties": {"addr:housenumber": "50", "addr:street": "MULTIPOLY ST", "addr:city": "BOSTON", "addr:state": "MA", "addr:postcode": "02110"},
+                },
+            ]
+        )
+        == 1
+    )
+    osm_file = tmp_path / "osm.geojson"
+    osm_file.write_text(
+        json.dumps([{"geometry": {"type": "Point", "coordinates": [-71.06, 42.35]}, "properties": {"addr:housenumber": "55", "addr:street": "FILE ST", "addr:city": "BOSTON", "addr:state": "MA", "addr:postcode": "02110"}}]),
+        encoding="utf-8",
+    )
+    assert osm.ingest_geojson(str(osm_file)) == 1
+    with pytest.raises(TypeError):
+        osm.ingest_geojson(123)
+
+    # 2. spatial/engine.py branches
+    eng._pid = -1
+    assert eng.count() > 0
+    assert eng.has_address_key("") is False
+    assert eng.query_bounding_box(170.0, 10.0, -170.0, 20.0) is not None
+    assert eng.query_bounding_box(-72.0, 43.0, -70.0, 41.0) == []
+    with pytest.raises(ValueError, match="lat must be within"):
+        eng.query_radius(-71.0, 100.0)
+    assert eng.query_radius(-71.0, 89.9, radius_meters=100000.0) == []
+    assert eng.query_radius(-179.99, 10.0, radius_meters=10000.0) == []
+    assert eng.query_radius(179.99, 10.0, radius_meters=10000.0) == []
+
+    # Resolve with plain string (no pipe) & non-dict/non-str & dict with pipe norm_key
+    assert eng.resolve("100 Wall St, New York, NY 10005").stage >= 1
+    assert eng.resolve({"normalized_address_key": "30 N GOULD ST|STE R|SHERIDAN|WY|82801|USA"}).stage == 1
+    assert eng.resolve(12345).stage == 0
+
+    # Stage 2 zero-span segment & parity mismatch
+    eng.insert_street_segment("OAK ST", 100, 100, 42.35, -71.06, 42.35, -71.06, postal_code="02110", state="MA")
+    eng.insert_street_segment("PARITY ST", 200, 100, 42.35, -71.06, 42.36, -71.07, parity="ODD", postal_code="02110", state="MA")
+    eng.insert_street_segment("EVEN ST", 100, 200, 42.35, -71.06, 42.36, -71.07, parity="EVEN", postal_code="02110", state="MA")
+    assert eng.resolve({"street1": "100 OAK ST", "city": "BOSTON", "state": "MA", "postal_code": "02110"}).stage == 2
+    assert eng.resolve({"street1": "150 PARITY ST", "city": "BOSTON", "state": "MA", "postal_code": "02110"}).stage >= 3
+    assert eng.resolve({"street1": "151 EVEN ST", "city": "BOSTON", "state": "MA", "postal_code": "02110"}).stage >= 3
+
+    # Stage 3 METRO_ZIP3_CENTROIDS fallback & Stage 4 municipal_centroids (city+state) and STATE_CENTROIDS fallback
+    eng.insert_municipal_centroid("BOSTON", 42.3601, -71.0589, state="MA")
+    assert eng.resolve({"street1": "999 UNKNOWN", "city": "BOSTON", "state": "MA"}).source == "MUNICIPAL_CENTROID"
+    unseeded_eng = SpatialEngine(seed=False)
+    assert unseeded_eng.resolve({"street1": "999 UNKNOWN", "postal_code": "10099"}).source == "METRO_ZIP3_CENTROID"
+    assert unseeded_eng.resolve({"street1": "999 UNKNOWN", "state": "WY"}).source == "STATE_CENTROID"
+    unseeded_eng.close()
+
+    with pytest.raises(FileNotFoundError):
+        eng.hot_swap(str(tmp_path / "does_not_exist.db"))
+    bad_sp_db = tmp_path / "bad_spatial.db"
+    sqlite3.connect(bad_sp_db).close()
+    with pytest.raises(ValueError, match="Invalid spatial database"):
+        eng.hot_swap(str(bad_sp_db))
+
+    valid_sp_db = tmp_path / "valid_spatial.db"
+    SpatialEngine(db_path=str(valid_sp_db), seed=True).close()
+    SpatialEngine(db_path=str(valid_sp_db), seed=False).close()
+    monkeypatch.setenv("SPATIAL_DB_PATH", str(valid_sp_db))
+    monkeypatch.setattr(sp_mod, "_DEFAULT_SPATIAL_ENGINE", None)
+    default_sp = get_default_spatial_engine()
+    assert default_sp is not None
+    assert resolve_spatial_coordinates("100 Wall St, New York, NY 10005") is not None
+    default_sp.close()
+    monkeypatch.setattr(sp_mod, "_DEFAULT_SPATIAL_ENGINE", None)
+    eng.close()
+
+    # 3. offline_index.py branches
+    assert _street_names_match("MAIN ST", "MAIN ST") is True
+    assert _street_names_match("N MAIN ST", "S MAIN ST") is False
+
+    off_db = tmp_path / "offline_test.db"
+    idx = OfflineReferenceIndex(db_path=str(off_db), seed=True)
+    # Test fork-safety reconnect branch when PID changes
+    idx._pid = -1
+    assert idx.count() > 0
+
+    idx.insert_records(
+        [
+            {
+                "address_key": "50 STATE ST||BOSTON|MA|02109|USA",
+                "building_key": "50 STATE ST||BOSTON|MA|02109|USA",
+                "latitude": 42.358,
+                "longitude": -71.057,
+                "precision": "ROOFTOP",
+                "parcel_id": "MA-BOS-050",
+            }
+        ]
+    )
+    from types import SimpleNamespace
+    from entity_standardizer.address.offline_index import geocode_offline
+
+    idx.insert_records([])
+    idx.insert_record(
+        address_key="50 STATE ST||BOSTON|MA|02109|USA",
+        building_key="50 STATE ST||BOSTON|MA|02109|USA",
+        street1="50 STATE ST",
+        city="BOSTON",
+        state="MA",
+        postal_code="02109",
+        latitude=42.358,
+        longitude=-71.057,
+        parcel_id="MA-BOS-050",
+        metadata={"census_tract": "030300", "fips_code": "25025"},
+    )
+    with pytest.raises(ValueError, match="parity must be"):
+        idx.insert_street_range("BAD ST", "02109", "MA", 1, 10, 42.0, -71.0, 42.1, -71.1, parity="X")
+    idx.insert_street_ranges([])
+    with pytest.raises(ValueError, match="parity must be"):
+        idx.insert_street_ranges(
+            [
+                {
+                    "street_name": "BAD ST",
+                    "from_number": 1,
+                    "to_number": 10,
+                    "postal_code": "02109",
+                    "state": "MA",
+                    "start_latitude": 42.0,
+                    "start_longitude": -71.0,
+                    "end_latitude": 42.1,
+                    "end_longitude": -71.1,
+                    "parity": "X",
+                }
+            ]
+        )
+    idx.insert_street_ranges(
+        [
+            {
+                "street_name": "ZERO SPAN ST",
+                "from_number": 100,
+                "to_number": 100,
+                "postal_code": "02109",
+                "state": "MA",
+                "start_latitude": 42.358,
+                "start_longitude": -71.057,
+                "end_latitude": 42.358,
+                "end_longitude": -71.057,
+            }
+        ]
+    )
+    assert idx.count_ranges() >= 1
+    assert idx.interpolate_street_range(0, "MAIN ST") is None
+    assert idx.interpolate_street_range(100, "ZERO SPAN ST", postal_code="12", state="") is None
+    assert idx.interpolate_street_range(100, "ZERO SPAN ST", postal_code="", state="MA") is not None
+    assert idx.interpolate_street_range(100, "ZERO SPAN ST", postal_code="02109", state="MA") is not None
+
+    # resolve_coordinates with pipe-string, parcel_id, plain address string, transposition healing, and range interpolation
+    assert idx.resolve_coordinates("50 STATE ST||BOSTON|MA|02109|USA") is not None
+    assert idx.resolve_coordinates("MA-BOS-050") is not None
+    assert idx.resolve_coordinates("50 State St, Boston, MA 02109") is not None
+    assert idx.resolve_coordinates(SimpleNamespace(street1="05 STATE ST", city="BOSTON", state="MA", postal_code="02109")) is not None
+    assert idx.resolve_coordinates(SimpleNamespace(street1="100 ZERO SPAN ST", city="BOSTON", state="MA", postal_code="02109")) is not None
+    assert idx.resolve_coordinates(12345) is None
+
+    # geocode with pipe-string centroid fallback and non-US unresolved
+    assert idx.geocode("999 NOWHERE||BOSTON|MA|02109|USA")["precision"] in ("POSTAL_CENTROID", "LOCALITY")
+    assert idx.geocode("999 NOWHERE||||02109|USA")["precision"] in ("POSTAL_CENTROID", "LOCALITY")
+    assert idx.geocode("10 DOWNING ST||LONDON||SW1A 2AA|GBR")["precision"] == "UNRESOLVED"
+
+    # validate_parcel with parcel_id string, rooftop match, interpolated range, and unresolvable
+    assert idx.validate_parcel("MA-BOS-050").is_valid_parcel is True
+    assert idx.validate_parcel("50 STATE ST||BOSTON|MA|02109|USA").is_valid_parcel is True
+    assert idx.validate_parcel(SimpleNamespace(street1="100 ZERO SPAN ST", city="BOSTON", state="MA", postal_code="02109")).is_valid_parcel is False
+    assert idx.validate_parcel(SimpleNamespace(street1="999 NOWHERE", city="BOSTON", state="MA", postal_code="02109")).is_valid_parcel is False
+
+    with pytest.raises(FileNotFoundError):
+        idx.hot_swap(str(tmp_path / "missing_off.db"))
+    bad_off_db = tmp_path / "bad_off.db"
+    sqlite3.connect(bad_off_db).close()
+    with pytest.raises(ValueError, match="Invalid reference database schema"):
+        idx.hot_swap(str(bad_off_db))
+
+    monkeypatch.setattr(off_mod, "_DEFAULT_OFFLINE_INDEX", None)
+    def_idx = get_default_offline_index()
+    assert def_idx is not None
+    assert geocode_offline("100 Wall St, New York, NY 10005")["latitude"] is not None
+    def_idx.close()
+    monkeypatch.setattr(off_mod, "_DEFAULT_OFFLINE_INDEX", None)
+    idx.close()
+
+    # 4. reference/geonames.py branches
+    with pytest.raises(ValueError, match="invalid country code"):
+        download_geonames(["INVALID_CODE"], dest_dir=tmp_path / "gn_dl")
+    with pytest.raises(ValueError, match="no countries given"):
+        download_geonames([], dest_dir=tmp_path / "gn_dl")
+
+    gn_src_dir = tmp_path / "gn_src"
+    gn_src_dir.mkdir()
+    with pytest.raises(FileNotFoundError, match="no GeoNames"):
+        build_geonames_index(tmp_path / "unused.db", source=gn_src_dir)
+    with pytest.raises(FileNotFoundError, match="not found"):
+        build_geonames_index(tmp_path / "unused.db", source=[gn_src_dir / "missing.txt"])
+
+    # Write a .txt file with short lines, empty place, non-float lat/lon/acc, and multiple countries
+    txt_file = gn_src_dir / "data.txt"
+    txt_file.write_text(
+        "SHORT\tLINE\n"
+        "CA\t\t\tOntario\tON\t\t\t\t\tbad_lat\tbad_lon\tbad_acc\n"
+        "US\t10001\tNew York\tNew York\tNY\t\t\t\t\t40.75\t-73.99\t4\n"
+        "CA\tM5V\tToronto\tOntario\tON\t\t\t\t\tbad_lat\tbad_lon\tbad_acc\n",
+        encoding="utf-8",
+    )
+    zip_with_readme = gn_src_dir / "extra.zip"
+    with zipfile.ZipFile(zip_with_readme, "w") as zf:
+        zf.writestr("readme.txt", "ignore me")
+        zf.writestr("CA2.txt", "CA\tH2X\tMontreal\tQuebec\tQC\t\t\t\t\t45.51\t-73.56\t4\n")
+
+    dl_all = download_geonames(
+        ["ALL"],
+        dest_dir=tmp_path / "gn_all",
+        urlopen=lambda req, timeout=60.0: io.BytesIO(zip_with_readme.read_bytes()),
+    )
+    assert len(dl_all) == 1
+
+    gn_target = tmp_path / "gn_built.sqlite"
+    (tmp_path / "gn_built.sqlite.tmp").write_text("stale", encoding="utf-8")
+    monkeypatch.setattr(gn_mod, "_BATCH", 1)
+    summary = build_geonames_index(gn_target, countries=["CA"], source=gn_src_dir)
+    assert summary["rows"] == 2 and summary["skipped"] == 2
+
+    # Corrupt zip raises ValueError
+    corrupt_zip = tmp_path / "corrupt.zip"
+    corrupt_zip.write_text("not a zip", encoding="utf-8")
+    with pytest.raises(ValueError, match="not a valid zip"):
+        build_geonames_index(tmp_path / "corrupt_out.db", source=[corrupt_zip])
+
+    with pytest.raises(FileNotFoundError):
+        GeoNamesPostalProvider(tmp_path / "no_such_gn.db")
+    with pytest.raises(ValueError, match="not a GeoNames postal index"):
+        GeoNamesPostalProvider(bad_off_db)
+
+    with GeoNamesPostalProvider(gn_target) as prov:
+        assert prov.lookup_postal("CA", "Z9Z 9Z9") == []
+        assert prov.info()["name"] == "geonames-postal"
+
+

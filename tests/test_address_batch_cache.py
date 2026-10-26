@@ -603,3 +603,135 @@ def test_census_and_offline_geocoder_branches(monkeypatch: pytest.MonkeyPatch) -
     og_res = og.geocode_batch([("rec1", "100 Wall St", "New York", "NY", "10005")])
     assert "rec1" in og_res and og_res["rec1"]["latitude"] is not None
 
+
+def test_batch_streaming_and_worker_exhaustive(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import os
+    import entity_standardizer.address.batch as addr_batch
+
+    # 1. resolve_column_mappings with country & _restore_env
+    s1, s2, c, st, p, co = resolve_column_mappings({"town": "city", "nation": "country"})
+    assert c == "town" and co == "nation"
+
+    addr_batch._restore_env("ES_TEST_TEMP_VAR", "val1")
+    assert os.environ.get("ES_TEST_TEMP_VAR") == "val1"
+    addr_batch._restore_env("ES_TEST_TEMP_VAR", None)
+    assert "ES_TEST_TEMP_VAR" not in os.environ
+
+    # 2. process_chunk with include_intl=True
+    p_out = process_chunk(
+        [{"street1": "PO Box 500", "city": "Dallas", "state": "TX", "postal_code": "75201"}],
+        include_confidence=True,
+        include_intl=True,
+    )
+    assert p_out[0]["std_country_iso3"] == "USA"
+
+    # 3. batch_standardize with alternate dict keys (address1, address2, postcode, is_vacant)
+    alt_dicts = [
+        {"address1": "100 Wall St", "address2": "Ste 200", "city": "New York", "state": "NY", "postcode": "10005", "country": "USA", "is_vacant": True},
+        {"street": "PO Box 500", "apt": "1B", "city": "Dallas", "state": "TX", "zipcode": "75201", "country": "USA"},
+    ]
+    b_res = list(batch_standardize(alt_dicts, batch_size=1))
+    assert len(b_res) == 2 and b_res[0].vacant is True
+
+    # 4. Mock default CensusGeocoder when geocode=True and geocoder=None, plus audit_csv_path on slow-path rows (PO Box) and unresolved spatial_res
+    fake_cg_cls = MagicMock()
+    fake_cg_inst = MagicMock()
+    fake_cg_inst.geocode_batch.return_value = {}  # triggers empty fallback lat/lon branch
+    fake_cg_cls.return_value = fake_cg_inst
+    monkeypatch.setattr(addr_batch, "CensusGeocoder", fake_cg_cls)
+
+    csv_in = tmp_path / "slow.csv"
+    csv_out = tmp_path / "slow_out.csv"
+    csv_audit = tmp_path / "slow_audit.csv"
+    csv_in.write_text(
+        "street1,city,state,postal_code,country\n"
+        "PO Box 500,Dallas,TX,75201,USA\n"
+        "10 Downing St,London,,SW1A 2AA,GBR\n",
+        encoding="utf-8",
+    )
+    assert (
+        stream_standardize_csv(
+            str(csv_in),
+            str(csv_out),
+            chunk_size=1,
+            include_confidence=True,
+            audit_csv_path=str(csv_audit),
+            geocode=True,
+            geocoder=None,
+            enable_geocoding=True,
+        )
+        == 2
+    )
+    assert csv_audit.is_file()
+
+    # 5. stream_standardize_jsonl with mapping, audit_csv_path, geocode=True (geocoder=None), enable_geocoding=True (unresolved row), and input==output guard
+    jsonl_in = tmp_path / "slow.jsonl"
+    jsonl_out = tmp_path / "slow_out.jsonl"
+    jsonl_audit = tmp_path / "slow_jsonl_audit.csv"
+    jsonl_in.write_text(
+        json.dumps({"addr": "PO Box 500", "st2": "", "town": "Dallas", "prov": "TX", "zip": "75201", "nation": "USA"})
+        + "\n"
+        + json.dumps({"addr": "10 Downing St", "st2": "", "town": "London", "prov": "", "zip": "SW1A 2AA", "nation": "GBR"})
+        + "\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="same file"):
+        stream_standardize_jsonl(str(jsonl_in), str(jsonl_in))
+
+    mapping_all = {
+        "addr": "street1",
+        "st2": "street2",
+        "town": "city",
+        "prov": "state",
+        "zip": "postal_code",
+        "nation": "country",
+    }
+    assert (
+        stream_standardize_jsonl(
+            str(jsonl_in),
+            str(jsonl_out),
+            chunk_size=1,
+            mapping=mapping_all,
+            include_confidence=True,
+            audit_csv_path=str(jsonl_audit),
+            geocode=True,
+            geocoder=None,
+            enable_geocoding=True,
+        )
+        == 2
+    )
+    assert jsonl_audit.is_file()
+
+    # 6. stream_standardize_json with mapping, audit_csv_path, geocode=True (geocoder=None), enable_geocoding=True (unresolved), and _iter_json_array_objects edge cases
+    json_in = tmp_path / "slow.json"
+    json_out = tmp_path / "slow_out.json"
+    json_audit = tmp_path / "slow_json_audit.csv"
+    json_in.write_text(
+        "[\n"
+        + json.dumps({"addr": "PO Box 500", "st2": "", "town": "Dallas", "prov": "TX", "zip": "75201", "nation": "USA"})
+        + ",\n"
+        + json.dumps({"addr": "10 Downing St", "st2": "", "town": "London", "prov": "", "zip": "SW1A 2AA", "nation": "GBR"})
+        + "\n]",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="same file"):
+        stream_standardize_json(str(json_in), str(json_in))
+
+    assert (
+        stream_standardize_json(
+            str(json_in),
+            str(json_out),
+            chunk_size=1,
+            mapping=mapping_all,
+            include_confidence=True,
+            audit_csv_path=str(json_audit),
+            geocode=True,
+            geocoder=None,
+            enable_geocoding=True,
+        )
+        == 2
+    )
+    assert json_audit.is_file()
+
+
+

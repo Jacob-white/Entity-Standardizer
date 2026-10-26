@@ -802,3 +802,301 @@ def test_cjk_uk_ireland_offshore_eastern_europe_hk_romance_branches() -> None:
     assert rom.standardize(street1="V. Dante 53, 20121 Milano, MI, Italy", country="ITA").city == "MILANO"
     assert rom.standardize(street1="Rua Augusta 100 - Consolação, 01305-100, São Paulo - SP", country="PRT").state == "SP"
     assert rom.standardize(street1="Calle Mayor 45, 28013 Madrid", street2="Piso 2", country="ESP").city == "MADRID"
+
+
+def test_international_grammars_exhaustive_coverage() -> None:
+    from entity_standardizer.address.international.australia import (
+        AustraliaGrammar,
+        _au_region_suffix,
+        _postcode_in_state,
+    )
+    from entity_standardizer.address.international.base import (
+        CountryGrammarRegistry,
+        ParsedAddressComponents,
+        UniversalInternationalGrammar,
+        split_commaless_locality,
+        split_intl_secondary_unit,
+        split_single_line_locality,
+    )
+    from entity_standardizer.address.international.canada import (
+        CanadaGrammar,
+        _can_region_suffix,
+    )
+    from entity_standardizer.address.international.cjk import (
+        CJKGrammar,
+        separate_house_number,
+        split_jp_tokens,
+        strip_trailing_country,
+    )
+    from entity_standardizer.address.international.latin_america import LatinAmericaGrammar
+    from entity_standardizer.address.international.mena_africa import (
+        MenaAfricaGrammar,
+        normalize_po_box_str,
+    )
+    from entity_standardizer.address.international.uk import (
+        UKGrammar,
+        UKParsedAddressComponents,
+        is_uk_building_name,
+        is_valid_uk_postcode,
+        split_commaless_postal_city,
+        split_po_box_unit,
+    )
+
+    # 1. AustraliaGrammar exhaustive branches
+    au = AustraliaGrammar()
+    assert _postcode_in_state("", "NSW") is False
+    assert _au_region_suffix(["10", "MAIN", "ST", "MOUNT", "VICTORIA"], "3000") is None
+    assert _au_region_suffix(["10", "MAIN", "ST", "SYDNEY", "UNKNOWN"], "2000") is None
+    assert au.normalize_postal_code("800") == "0800"
+    assert au.normalize_postal_code("Unit 1, NSW 2000") == "2000"
+    assert au.normalize_postal_code("ABC") == ""
+    assert au.validate_postcode_state("2000", "NSW") is True
+    assert au.validate_postcode_state("3000", "NSW") is False
+    assert au.extract_premise_and_thoroughfare("") == (None, None, None)
+    assert au.extract_premise_and_thoroughfare("5/100 GEORGE ST")[1] == "5"
+    assert au.extract_premise_and_thoroughfare("GEORGE ST") == (None, None, "GEORGE ST")
+    assert au.parse([], {"street1": "", "street2": "100 George St N", "city": "Sydney", "state": "NSW", "postal_code": "2000"}).street_name == "GEORGE ST N"
+    assert au.parse([], {"street1": "12 George St, AUSTRALIA"}).street_number == "12"
+    assert au.parse([], {"street1": "12 George St, NSW 2000"}).state == "NSW"
+    assert au.parse([], {"street1": "12 George St 2000"}).postal_code == "2000"
+    assert au.parse([], {"street1": "STE 5/100 GEORGE ST", "city": "Sydney", "postal_code": "2000"}).unit_type == "STE"
+    assert au.parse([], {"street1": "APT 5/100 GEORGE ST", "city": "Sydney", "postal_code": "2000"}).unit_type == "APT"
+    assert au.parse([], {"street1": "5/100 GEORGE ST", "city": "Sydney", "postal_code": "2000"}).unit_type == "UNIT"
+    assert au.parse([], {"street1": "100 GEORGE ST LEVEL 15", "city": "Sydney", "postal_code": "2000"}).unit_type == "LEVEL"
+    assert au.parse([], {"street1": "100 GEORGE ST, SYDNEY, NSW", "postal_code": "2000"}).city == "SYDNEY"
+
+    # 2. CanadaGrammar exhaustive branches
+    ca = CanadaGrammar()
+    assert _can_region_suffix(["100", "MAIN", "ST", "TORONTO"], "M5J 2J5") is None
+    assert ca.normalize_postal_code("") == ""
+    assert ca.normalize_postal_code("INVALID") == "INVALID"
+    assert ca.extract_premise_and_thoroughfare("Rue Saint-Denis Ouest")[2] == "RUE SAINT-DENIS O"
+    assert ca.extract_premise_and_thoroughfare("Rue Saint-Denis North")[2] == "RUE SAINT-DENIS N"
+    assert ca._normalize_bilingual_street("") == ""
+    assert ca._normalize_bilingual_street("   ") == ""
+    assert ca._normalize_bilingual_street("King Street West") == "KING ST W"
+    assert ca._normalize_bilingual_street("King Street Ouest") == "KING ST O"
+    assert ca.parse([], {"street1": "100 King St, Toronto, NotAProv M5J 2J5"}).city == "NOTAPROV M5J 2J5"
+    assert ca.parse([], {"street1": "100 King St, Toronto, Ontario"}).state == "ON"
+    assert ca.parse([], {"street1": "100 Spring Garden Rd, Nova Scotia, Halifax B3J 3R4"}).city == "HALIFAX"
+    assert ca.parse([], {"street1": "100 King St, Toronto"}).city == "TORONTO"
+    assert ca.parse([], {"street1": "100 King St,"}).street_name == "KING ST"
+    assert ca.parse([], {"street1": "100 King St ON M5J 2J5", "city": "Toronto"}).state == "ON"
+    assert ca.parse([], {"street1": "100 Rue Peel", "street2": "bureau 200", "city": "Montreal"}).unit_type == "STE"
+    assert ca.parse([], {"street1": "100 King St PO Box 55", "city": "Toronto"}).unit_type == "PO"
+
+    # 3. international/base.py exhaustive branches
+    assert split_single_line_locality("Switzerland, Switzerland", "CHE") is None
+    assert split_single_line_locality("8001, Zürich", "CHE") is None
+    assert split_single_line_locality("Bahnhofstrasse 10, 8001, Zürich", "CHE") == ("Bahnhofstrasse 10", "Zürich", "8001")
+    assert split_commaless_locality("Zurich", "CHE") is None
+    assert split_commaless_locality("1054 Budapest", "HUN") is None
+    assert split_commaless_locality("1054 Budapest Unknownword", "HUN") is None
+    assert split_commaless_locality("12 شارع الملك فهد الرياض 11564", "SAU") is not None
+    assert split_commaless_locality("10 Thanon Sukhumvit Bangkok 10110", "THA") is not None
+    assert split_commaless_locality("10 ถนนสุขุมวิท Bangkok 10110", "THA") is not None
+    assert split_commaless_locality("12 High Road Zurich 8001", "CHE") is not None
+    assert split_commaless_locality("Bahnhofstrasse 10 Zürich 8001", "CHE") is not None
+
+    assert split_intl_secondary_unit("Suite 400", "") == ("", "STE 400")
+    assert split_intl_secondary_unit("Apt 5, 100 Main St", "")[1] == "APT 5"
+    assert "BLDG B" in split_intl_secondary_unit("100 Main St Apt 5", "Bldg B")[1]
+
+    assert ParsedAddressComponents(street_number="10", street_name="MAIN ST", street_type="ST", post_directional="W").format_street1() == "10 MAIN ST W"
+    assert ParsedAddressComponents(unit_type="BSMT").format_street2() == "BSMT"
+    assert ParsedAddressComponents(unit_number="5B").format_street2() == "5B"
+    assert ParsedAddressComponents(building_name="TOWER ONE").format_street1() == "TOWER ONE"
+
+    ug = UniversalInternationalGrammar()
+    assert ug.extract_premise_and_thoroughfare("12A Bahnhofstrasse") == (None, "12A", "Bahnhofstrasse")
+    assert ug.standardize(street1="100 Main St, Suite 200", city="George Town", country="CYM").unit_type == "STE"
+    assert ug.standardize(street1="Bahnhofstrasse 10, 8001 Zürich, ZH", country="ARE").city == "ZH"
+    assert ug.standardize(street1="10 Bahnhofstrasse, 8001 Zürich, ZH", country="ARE").postal_code == "8001"
+    assert ug.standardize(street1="1054 Budapest, Kossuth Lajos tér 1", country="HUN").postal_code == "1054"
+
+    assert CountryGrammarRegistry.detect_country(country_raw="UNKNOWN_COUNTRY_XYZ") == "USA"
+    assert CountryGrammarRegistry.detect_country(raw_street="100 Main St, NY 10005") == "USA"
+    assert CountryGrammarRegistry.detect_country(raw_street="100 Main St, Austin, TX") == "USA"
+    assert CountryGrammarRegistry.detect_country(raw_street="100 Main St, Austin Texas") == "USA"
+    assert CountryGrammarRegistry.detect_country(raw_street="100 Main St, 75001, France") == "FRA"
+    assert CountryGrammarRegistry.detect_country(raw_street="100 Main St, U.A.E., Extra") == "ARE"
+    assert CountryGrammarRegistry.detect_country(raw_street="100 Main St New Zealand") == "NZL"
+    assert CountryGrammarRegistry.detect_country(raw_street="100 Main St France") == "FRA"
+    assert CountryGrammarRegistry.detect_country(raw_street="Bahnhofstrasse 1, Zürich") == "CHE"
+
+    # 4. MenaAfricaGrammar exhaustive branches
+    assert normalize_po_box_str("P.O. Box 12345") == "PO BOX 12345"
+    assert normalize_po_box_str("Regular Street") == "Regular Street"
+    ma = MenaAfricaGrammar()
+    assert ma._resolve_country_iso(None) == "ARE"
+    assert ma._resolve_country_iso("السعودية") == "SAU"
+    assert ma._resolve_country_iso("MAR") == "MAR"
+    assert ma._resolve_country_iso("UNKNOWN") == "ARE"
+    assert ma.normalize_postal_code("") == ""
+    assert ma.normalize_postal_code("12345-6789") == "12345-6789"
+    assert ma.normalize_postal_code("2196") == "2196"
+    assert ma.extract_premise_and_thoroughfare("") == (None, None, None)
+    assert ma.extract_premise_and_thoroughfare("PO Box 12345")[2] == "PO BOX 12345"
+    assert ma.extract_premise_and_thoroughfare("Plot 42 Victoria Island")[1] == "42"
+    assert ma.extract_premise_and_thoroughfare("7543 King Fahd Road")[1] == "7543"
+    assert ma.extract_premise_and_thoroughfare("Sheikh Zayed Road")[2] == "Sheikh Zayed Road"
+    assert ma.parse([], {"street1": "100 Sandton Drive, Sandton, Johannesburg 2196, Gauteng, South Africa", "country": "ZAF"}).state == "GAUTENG"
+    assert ma.parse([], {"street1": "100 Maude St, Sandton, Johannesburg, South Africa", "country": "ZAF"}).city == "JOHANNESBURG"
+    assert ma.parse([], {"street1": "100 Maude St, Johannesburg 2196", "country": "ZAF"}).postal_code == "2196"
+    assert ma.parse([], {"street1": "Sheikh Zayed Road PO Box 5, Office 204, 12345, Dubai", "country": "ARE"}).unit_number is not None
+    assert ma.parse([], {"street1": "Dubai, UAE", "country": "ARE"}).city == "DUBAI"
+    assert ma.parse([], {"street1": "PO Box 12345, 12345", "country": "ARE"}).street_name == "PO BOX 12345"
+    assert ma.parse([], {"street1": "Sheikh Zayed Road", "street2": "PO Box 12345", "city": "Dubai", "country": "ARE"}).unit_number == "PO BOX 12345"
+    assert ma.parse([], {"street1": "Sheikh Zayed Road", "street2": "Office 204", "city": "Dubai", "country": "ARE"}).unit_number == "OFFICE 204"
+    assert ma.parse([], {"street1": "Sheikh Zayed Road PO Box 12345", "street2": "Office 204", "city": "Dubai", "country": "ARE"}).unit_number == "PO BOX 12345, OFFICE 204"
+    assert ma.parse([], {"street1": "", "street2": "PO Box 12345", "city": "Dubai", "country": "ARE"}).street_name == "PO BOX 12345"
+    assert ma.parse([], {"street1": "Sheikh Zayed Road Suite 200", "city": "Dubai", "country": "ARE"}).unit_type == "STE"
+
+    # 5. LatinAmericaGrammar exhaustive branches
+    la = LatinAmericaGrammar()
+    assert la._resolve_country_iso(None) == "MEX"
+    assert la._resolve_country_iso("UNKNOWN") == "MEX"
+    assert la.normalize_postal_code("") == ""
+    assert la.normalize_postal_code("01310200") == "01310-200"
+    assert la.normalize_postal_code("C1064AAB") == "C1064AAB"
+    assert la.normalize_postal_code("1064") == "1064"
+    assert la.extract_premise_and_thoroughfare("") == (None, None, None)
+    assert la.extract_premise_and_thoroughfare("Calle 72 No. 10-07")[2] == "CALLE 72 NO. 10-07"
+    assert la.extract_premise_and_thoroughfare("Av. Javier Prado 100", country_iso="PER")[2] == "AVE JAVIER PRADO 100"
+    assert la.extract_premise_and_thoroughfare("Torre Mayor, Paseo de la Reforma 505")[2] is not None
+    assert la.parse([], {"street1": "Av. Paulista, 100 - Bela Vista, Curitiba - Paraná, Brasil", "country": "BRA"}).state == "PR"
+    assert la.parse([], {"street1": "Av. Paulista, 100, Bela Vista, São Paulo - SP", "country": "BRA"}).state == "SP"
+    assert la.parse([], {"street1": "Huérfanos 48, Santiago, Región Metropolitana 8320000", "country": "CHL"}).postal_code == "8320000"
+    assert la.parse([], {"street1": "Av. Insurgentes Sur 1602, Del Valle, 03940 Ciudad de México", "country": "MEX"}).postal_code == "03940"
+    assert la.parse([], {"street1": "Av. Paulista 100, Bela Vista, Campinas", "country": "BRA"}).city == "CAMPINAS"
+    assert la.parse([], {"street1": "Carrera 7 # 71-21, Chapinero, Bogotá", "country": "COL"}).city == "BOGOTÁ"
+    assert la.parse([], {"street1": "Av. Reforma 100, 06600 Monterrey, Nuevo León", "country": "MEX"}).postal_code == "06600"
+    assert la.parse([], {"street1": "Av. Reforma 100, Monterrey 06600, Nuevo León", "country": "MEX"}).postal_code == "06600"
+    assert la.parse([], {"street1": "Av. Reforma 100, Monterrey, Nuevo León", "country": "MEX"}).city == "MONTERREY"
+    assert la.parse([], {"street1": "Balcarce 50, C1064AAB Buenos Aires", "country": "ARG"}).postal_code == "C1064AAB"
+    assert la.parse([], {"street1": "Carrera 7 # 71-21, Bogotá 110221", "country": "COL"}).postal_code == "110221"
+    assert la.parse([], {"street1": "Bogotá, Colombia", "country": "COL"}).city == "BOGOTÁ"
+    assert la.parse([], {"street1": "Col. Juárez, 06600", "country": "MEX"}).postal_code == "06600"
+    assert la.parse([], {"street1": "Av. Paulista 1578 - Bela Vista", "street2": "Apto 12", "city": "São Paulo", "country": "BRA"}).dependent_locality == "BELA VISTA"
+
+    # 6. UKGrammar exhaustive branches
+    assert is_valid_uk_postcode("") is False
+    assert is_valid_uk_postcode("GIR 0AA") is True
+    assert is_valid_uk_postcode("Q1A 1AA") is False
+    assert is_valid_uk_postcode("AI1 1AA") is False
+    assert is_valid_uk_postcode("SW1A 1CA") is False
+    assert split_po_box_unit("PO Box 100, Suite 5") == ("PO BOX 100", "Suite 5")
+    assert is_uk_building_name("") is False
+    assert is_uk_building_name("The Shard") is True
+    assert is_uk_building_name("10 High Street") is False
+    assert split_commaless_postal_city("10 Downing Street London SW1A 2AA", is_valid_uk_postcode, {"LONDON"}) == (
+        "10 Downing Street",
+        "London",
+        "SW1A 2AA",
+    )
+    assert split_commaless_postal_city("10 High Street Unknownville SW1A 2AA", is_valid_uk_postcode, set()) == (
+        "10 High Street",
+        "Unknownville",
+        "SW1A 2AA",
+    )
+
+    uk_c1 = UKParsedAddressComponents(street_number="10", pre_directional="N", street_name="HIGH", street_type="ST", post_directional="W")
+    assert uk_c1.format_street1() == "10 N HIGH ST W"
+    uk_c2 = UKParsedAddressComponents(street_name="10", unit_type="UNIT", unit_number="A", building_name="ABBEY HOUSE")
+    assert uk_c2.format_street1() == "10 UNIT A" and uk_c2.format_street2() == "ABBEY HOUSE"
+    uk_c3 = UKParsedAddressComponents(street_number="10", unit_type="STE", unit_number="302")
+    assert uk_c3.format_street1() == "10 STE 302" and uk_c3.format_street2() == ""
+    uk_c4 = UKParsedAddressComponents(street_number="10", street_name="HIGH ST", unit_type="FLAT", unit_number="2", building_name="ABBEY HOUSE")
+    assert uk_c4.format_street2() == "FLAT 2 ABBEY HOUSE"
+
+    uk = UKGrammar()
+    assert uk.normalize_postal_code("") == ""
+    assert uk.normalize_postal_code("GIR 0AA") == "GIR 0AA"
+    assert uk.normalize_postal_code("GB-JE-2 3RP") == "JE2 3RP"
+    assert uk.extract_premise_and_thoroughfare("") == (None, None, None)
+    assert uk.extract_premise_and_thoroughfare("123") == ("123", None, None)
+    assert uk.extract_premise_and_thoroughfare("Abbey House, 10A High Street") == ("ABBEY HOUSE", "10A", "HIGH ST")
+    assert uk.extract_premise_and_thoroughfare("10A High Street") == (None, "10A", "HIGH ST")
+    assert uk.standardize(street1="10 Downing Street London SW1A 2AA England", country="GBR").city == "LONDON"
+    assert uk.standardize(street1="Unit 5, Abbey House, 10 High Street, Headingley, Leeds, West Yorkshire, LS6 2AA", country="GBR").city == "WEST YORKSHIRE"
+
+    # 7. CJKGrammar exhaustive branches
+    assert strip_trailing_country("1-1 Chiyoda, Japan") == ("1-1 Chiyoda", "JPN")
+    assert strip_trailing_country("1-1 Chiyoda") == ("1-1 Chiyoda", None)
+    assert split_jp_tokens(["福岡市", "中央区", "今泉1-18-25"]) is not None
+    assert split_jp_tokens(["東京都八王子市", "元本郷町3-24-1"]) is not None
+    assert split_jp_tokens(["福岡", "天神2-13-7"]) is not None
+    assert split_jp_tokens(["名古屋市東区白壁", "出来町通4-63-3"]) is not None
+    assert separate_house_number("北1条西17丁目16", "JPN") == "北1条西17丁目 16"
+    assert separate_house_number("まねき通り1丁目1-6", "JPN") == "まねき通り 1丁目1-6"
+    assert separate_house_number("復興北路231巷34", "TWN") == "復興北路231巷 34"
+    assert separate_house_number("테헤란로152", "KOR") == "테헤란로 152"
+    cjk = CJKGrammar()
+    assert cjk._resolve_iso3(None) == "JPN"
+    assert cjk._resolve_iso3("MAC") == "MAC"
+    assert cjk._resolve_iso3("MNG") == "MNG"
+    assert cjk._resolve_iso3("PRK") == "PRK"
+    assert cjk._resolve_iso3("UNKNOWN") == "JPN"
+    assert cjk.normalize_postal_code("") == ""
+    assert cjk.normalize_postal_code("1000005") == "100-0005"
+    assert cjk.normalize_postal_code("06236") == "06236"
+    assert cjk.normalize_postal_code("123-456") == "123-456"
+    assert cjk.normalize_postal_code("123456") == "123456"
+    assert cjk.normalize_postal_code("110") == "110"
+    assert cjk.normalize_postal_code("ABC") == "ABC"
+    assert cjk.extract_premise_and_thoroughfare("") == (None, None, None)
+    assert cjk.extract_premise_and_thoroughfare("No. 100, West Nanjing Road")[1] == "100"
+    assert cjk.extract_premise_and_thoroughfare("6-10-1 Roppongi")[1] == "6-10-1"
+    assert cjk.extract_premise_and_thoroughfare("霞が関1-1-1")[1] == "1-1-1"
+    assert cjk.extract_premise_and_thoroughfare("Mori Tower")[2] == "Mori Tower"
+    assert cjk.parse([], {"street1": "Mori Tower, 6-10-1 Roppongi, Minato-ku, Tokyo 106-6132, Japan", "country": "JPN"}).building_name == "Mori Tower"
+    assert cjk.parse([], {"street1": "No. 7, Sec. 5, Xinyi Rd., Xinyi Dist., Taipei City 110, Taiwan", "country": "TWN"}).postal_code == "110"
+    assert cjk.parse([], {"street1": "6-10-1 Roppongi, Japan", "country": "JPN"}).country_iso3 == "JPN"
+    assert cjk.parse([], {"street1": "6-10-1 Roppongi, Tokyo", "country": "JPN"}).city == "TOKYO"
+    assert cjk.parse([], {"street1": "106-6132 Tokyo Roppongi6-10-1", "country": "JPN"}).postal_code == "106-6132"
+    assert cjk.parse([], {"street1": "서울특별시 주흥길 78 South Korea", "country": "KOR"}).city == "서울특별시"
+    assert cjk.parse([], {"street1": "東京都港区六本木6-10-1", "street2": "森タワー", "country": "JPN"}).unit_number == "森タワー"
+    assert cjk.parse([], {"street1": "6-10-1 Roppongi Suite 300, Tokyo", "country": "JPN"}).unit_number == "300"
+
+    # 8. IndiaGrammar & scripts.py exhaustive branches
+    from entity_standardizer.address.international.india import IndiaGrammar
+    from entity_standardizer.address.international.scripts import (
+        detect_script_country,
+        split_script_single_line,
+        strip_zero_width,
+    )
+
+    ind = IndiaGrammar()
+    assert ind.normalize_postal_code("PIN 110001") == "110001"
+    assert ind.normalize_postal_code("PIN 110001 EXTRA 99") == "110001"
+    assert ind.normalize_postal_code("INVALID") == ""
+    assert ind.extract_premise_and_thoroughfare("") == (None, None, None)
+    assert ind.extract_premise_and_thoroughfare("MG Road") == (None, None, "MG ROAD")
+    assert ind.parse([], {"raw_street_address": "10 MG Road, 110001", "city": "New Delhi", "country": "IND"}).postal_code == "110001"
+    assert ind.parse([], {"street1": "10 MG Road", "street2": "Flat 2", "city": "Mumbai", "state": "Maharashtra", "country": "IND"}).unit_number is not None
+    assert ind.parse([], {"street1": "10 Connaught Place, New Delhi", "country": "IND"}).city == "NEW DELHI"
+    assert ind.parse([], {"street1": "10 Connaught Place New Delhi", "country": "IND"}).city == "NEW DELHI"
+    assert ind.parse([], {"street1": "36 Rebello Road, Bandra, Mumbai", "country": "IND"}).dependent_locality == "BANDRA"
+
+    assert strip_zero_width("नमस्ते\u200b") == "नमस्ते"
+    assert detect_script_country(None) is None
+    assert detect_script_country("漢字 abcdefghijklmnop") is None
+    assert detect_script_country("שלום עולם") == "ISR"
+    assert detect_script_country("თბილისი") == "GEO"
+    assert detect_script_country("Երևան") == "ARM"
+    assert detect_script_country("ঢাকা") == "BGD"
+    assert detect_script_country("කොළඹ") == "LKA"
+    assert detect_script_country("ရန်ကုန်") == "MMR"
+    assert detect_script_country("ភ្នំពេញ") == "KHM"
+    assert detect_script_country("ວຽງຈັນ") == "LAO"
+    assert detect_script_country("አዲስ አበባ") == "ETH"
+    assert detect_script_country("กรุงเทพมหานคร") == "THA"
+    assert detect_script_country("Београд Ђорђа") == "SRB"
+    assert detect_script_country("гр. София, ул. Витоша") == "BGR"
+    assert split_script_single_line("", "JPN") is None
+    assert split_script_single_line("10 Main St", "USA") is None
+    assert split_script_single_line("東京都", "JPN") is None
+    assert split_script_single_line("广东省深圳市科技路1号", "CHN") is not None
+    assert split_script_single_line("Москва, Московская область, ул. Ленина 5, 101000", "RUS") is not None
+
+

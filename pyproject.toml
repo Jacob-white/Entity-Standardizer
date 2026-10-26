@@ -86,6 +86,7 @@ include = ["entity_standardizer*"]
 testpaths = ["tests"]
 norecursedirs = [".claude", ".hypothesis", "node_modules", ".git", "build", "dist", "target"]
 python_files = ["test_*.py"]
+filterwarnings = ["error"]
 markers = [
     "perf: absolute-throughput/memory SLA tests; run without coverage tracing (pytest -m perf)",
 ]
