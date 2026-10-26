@@ -11,13 +11,20 @@ import re
 import unicodedata
 from typing import Dict, List, Optional, Tuple
 
+from entity_standardizer._native_dispatch import (
+    _damerau_levenshtein_distance_py,
+    damerau_levenshtein_distance_dispatch,
+)
 from entity_standardizer.address.tables import (
-    STREET_SUFFIXES,
+    COMPOUND_ORDINALS,
     DIRECTIONALS,
+    SECONDARY_UNITS,
+    STREET_SUFFIXES,
     US_STATES,
+    WORD_ORDINALS,
     ZIP3_TO_STATE,
 )
-from entity_standardizer.address._patterns import MULTI_WORD_CITIES
+from entity_standardizer.address._patterns import MULTI_WORD_CITIES, ROUTE_PREFIXES
 
 
 @functools.lru_cache(maxsize=16384)
@@ -26,8 +33,6 @@ def _pure_damerau_levenshtein_distance(s1: str, s2: str) -> int:
     Computes true Damerau-Levenshtein edit distance between s1 and s2 in pure Python.
     Supports insertion, deletion, substitution, and transposition of adjacent characters.
     """
-    from entity_standardizer._native_dispatch import _damerau_levenshtein_distance_py
-
     return _damerau_levenshtein_distance_py(s1, s2)
 
 
@@ -36,8 +41,6 @@ def damerau_levenshtein_distance(s1: str, s2: str) -> int:
 
     Accelerated by native Rust extension if loaded, with pure Python fallback.
     """
-    from entity_standardizer._native_dispatch import damerau_levenshtein_distance_dispatch
-
     return damerau_levenshtein_distance_dispatch(s1, s2)
 
 
@@ -246,14 +249,6 @@ def heal_street_name(name_raw: str, max_distance: int = 1) -> Optional[str]:
 
     if clean_name in PROTECTED_STREET_WORDS:
         return None
-
-    from entity_standardizer.address.tables import (
-        WORD_ORDINALS,
-        COMPOUND_ORDINALS,
-        SECONDARY_UNITS,
-        US_STATES,
-    )
-    from entity_standardizer.address._patterns import ROUTE_PREFIXES
 
     if (
         clean_name in DIRECTIONALS

@@ -123,20 +123,29 @@ def _numberize_unit_words(tokens: list) -> list:
     return out
 
 
+_RE_LEADING_STE_BEFORE_UNIT = re.compile(
+    r"^(?:STE|SUITE)\s+(?=(?:\d+(?:ST|ND|RD|TH)\s+)?(?:FL|FLOOR|FLR|APT|APARTMENT|UNIT|DEPT|DEPARTMENT|PH|PENTHOUSE|SUITE|STE)\b)",
+    re.IGNORECASE,
+)
+_RE_SEP_PUNCT = re.compile(r"[,;]+")
+_RE_SPACED_DASH_SLASH = re.compile(r"\s+[\-–—\/]\s+")
+_RE_ORDINAL_OR_DIGITS = re.compile(r"^(\d+)(?:ST|ND|RD|TH)?$")
+_RE_ORDINAL_SUFFIX = re.compile(r"(?:ST|ND|RD|TH)$")
+_RE_STE_PREPENDED = re.compile(r"^(?:STE|SUITE)\s+(FL|APT|UNIT|DEPT|PH)\b")
+_RE_NO_NUM_UNIT = re.compile(
+    r"^(?:STE\s+)?(?:NO|NUM|NUMBER)\s+(?=[A-Z0-9\-]*\d|[A-Z]$)([A-Z0-9\-]+)$"
+)
+
+
 def _standardize_secondary_unit(sec: str) -> str:
     """Standardizes secondary units according to USPS Pub 28, deduplicates repeated tokens, and enforces FL <num>."""
     if not sec:
         return ""
     # Strip any leading STE or SUITE if followed by other unit types (FL, APT, UNIT, DEPT, PH, SUITE, STE) or ordinal floor
-    s = re.sub(
-        r"^(?:STE|SUITE)\s+(?=(?:\d+(?:ST|ND|RD|TH)\s+)?(?:FL|FLOOR|FLR|APT|APARTMENT|UNIT|DEPT|DEPARTMENT|PH|PENTHOUSE|SUITE|STE)\b)",
-        "",
-        sec.strip().upper(),
-        flags=re.IGNORECASE,
-    )
+    s = _RE_LEADING_STE_BEFORE_UNIT.sub("", sec.strip().upper())
     # Clean separator punctuation between tokens, preserving hyphens in unit identifiers like 4-B or PH-A
-    s = re.sub(r"[,;]+", " ", s)
-    s = re.sub(r"\s+[\-–—\/]\s+", " ", s)
+    s = _RE_SEP_PUNCT.sub(" ", s)
+    s = _RE_SPACED_DASH_SLASH.sub(" ", s)
     raw_tokens = s.split()
     if not raw_tokens:
         return ""
@@ -164,11 +173,11 @@ def _standardize_secondary_unit(sec: str) -> str:
 
     # Floor normalization: Pub 28 strict format FL <num>
     if len(tokens) == 2 and tokens[1] in ("FL", "FLOOR", "FLR"):
-        m = re.match(r"^(\d+)(?:ST|ND|RD|TH)?$", tokens[0])
+        m = _RE_ORDINAL_OR_DIGITS.match(tokens[0])
         if m:
             tokens = ["FL", m.group(1)]
     elif len(tokens) == 2 and tokens[0] in ("FL", "FLOOR", "FLR"):
-        m = re.match(r"^(\d+)(?:ST|ND|RD|TH)?$", tokens[1])
+        m = _RE_ORDINAL_OR_DIGITS.match(tokens[1])
         if m:
             tokens = ["FL", m.group(1)]
     else:
@@ -177,14 +186,14 @@ def _standardize_secondary_unit(sec: str) -> str:
         while i < len(tokens):
             if i + 1 < len(tokens) and tokens[i+1] in ("FL", "FLOOR", "FLR"):
                 is_preceded_by_unit = (i > 0 and tokens[i-1] in ("STE", "APT", "UNIT", "DEPT", "RM", "ROOM", "BLDG", "PH"))
-                is_ordinal = bool(re.search(r"(?:ST|ND|RD|TH)$", tokens[i]))
-                m = re.match(r"^(\d+)(?:ST|ND|RD|TH)?$", tokens[i])
+                is_ordinal = bool(_RE_ORDINAL_SUFFIX.search(tokens[i]))
+                m = _RE_ORDINAL_OR_DIGITS.match(tokens[i])
                 if m and (not is_preceded_by_unit or is_ordinal):
                     new_toks.extend(["FL", m.group(1)])
                     i += 2
                     continue
             if tokens[i] in ("FL", "FLOOR", "FLR") and i + 1 < len(tokens):
-                m = re.match(r"^(\d+)(?:ST|ND|RD|TH)?$", tokens[i+1])
+                m = _RE_ORDINAL_OR_DIGITS.match(tokens[i+1])
                 if m:
                     new_toks.extend(["FL", m.group(1)])
                     i += 2
@@ -203,9 +212,9 @@ def _standardize_secondary_unit(sec: str) -> str:
 
     res = " ".join(tokens)
     # Strip any STE or SUITE prepended to FL, APT, UNIT, DEPT, PH
-    res = re.sub(r"^(?:STE|SUITE)\s+(FL|APT|UNIT|DEPT|PH)\b", r"\1", res)
+    res = _RE_STE_PREPENDED.sub(r"\1", res)
     # "No. 5" / "Number 5" / "Num 5" is the same thing as "#5": a bare unit identifier (USPS form here: STE <id>).
-    res = re.sub(r"^(?:STE\s+)?(?:NO|NUM|NUMBER)\s+(?=[A-Z0-9\-]*\d|[A-Z]$)([A-Z0-9\-]+)$", r"STE \1", res)
+    res = _RE_NO_NUM_UNIT.sub(r"STE \1", res)
     return res
 
 

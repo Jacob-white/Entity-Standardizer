@@ -734,4 +734,125 @@ def test_batch_streaming_and_worker_exhaustive(tmp_path: Path, monkeypatch: pyte
     assert json_audit.is_file()
 
 
+def test_sqlite_lifecycle_and_cache_audit_branches(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import gc
+    import sqlite3
+
+    from entity_standardizer.address.audit import (
+        ActionType,
+        ReviewStatus,
+        StewardshipAuditLedger,
+    )
+    from entity_standardizer.address.cache import (
+        CACHE_URL_ENV,
+        LRUCache,
+        MultiTierCache,
+        SQLiteCache as AddrSQLiteCache,
+        configure_cache,
+        make_cache_key,
+    )
+    from entity_standardizer.address.offline_index import OfflineReferenceIndex
+    from entity_standardizer.address.spatial.engine import SpatialEngine
+    from entity_standardizer.audit import PhoneStewardshipLedger
+    from entity_standardizer.cache import SQLiteCache as PhoneSQLiteCache
+
+    # 1. Failed __init__ (OperationalError / TypeError) followed by GC must not raise AttributeError in __del__
+    for cls in (PhoneSQLiteCache, PhoneStewardshipLedger, AddrSQLiteCache, StewardshipAuditLedger):
+        with pytest.raises(sqlite3.OperationalError):
+            cls("/nonexistent_dir_xyz_999/db.sqlite")
+    for cls2 in (OfflineReferenceIndex, SpatialEngine):
+        with pytest.raises(TypeError):
+            cls2(1, 2, 3)  # type: ignore[call-arg]
+    gc.collect()
+
+    # 2. address/cache.py branches
+    key = make_cache_key(
+        "100 Main St",
+        "",
+        "Boston",
+        "MA",
+        "02110",
+        is_vacant=False,
+        correct_state_from_zip=True,
+        enable_fuzzy=False,
+        enable_geocoding=True,
+        allow_locality=True,
+    )
+    assert "NOT_VACANT" in key and "NO_FUZZY" in key and "ALLOW_LOCALITY" in key
+
+    lru = LRUCache(maxsize=2)
+    lru.set("k1", 1)
+    lru.set("k1", 2)
+    assert lru.get("k1") == 2
+
+    l2 = AddrSQLiteCache(max_entries=1)
+    l2._pid = -1
+    l2.set("a", {"v": 1})
+    l2.set("b", {"v": 2})
+    assert l2.stats()["evictions"] >= 1
+    with l2._get_conn() as conn:
+        conn.execute("INSERT OR REPLACE INTO l2_address_cache (cache_key, payload) VALUES ('corrupt', '{bad json')")
+    assert l2.get("corrupt") is None
+    l2.close()
+
+    mt = MultiTierCache(enabled=True)
+    mt.disable()
+    assert mt.is_enabled() is False
+    mt.set("x", 1)
+    assert mt.get("x") is None
+    mt.enable()
+    assert mt.is_enabled() is True
+    mt.close()
+
+    monkeypatch.setenv(CACHE_URL_ENV, "invalid://scheme")
+    assert configure_cache(enabled=True).is_enabled() is True
+    monkeypatch.delenv(CACHE_URL_ENV, raising=False)
+    c_redis = configure_cache(enabled=True, backend="redis://localhost:6379/0")
+    c_redis.close()
+    configure_cache(enabled=True)
+
+    # 3. address/audit.py branches
+    monkeypatch.setenv("ENTITY_STANDARDIZER_AUDIT_MAX_ROWS", "not-an-int")
+    ledger = StewardshipAuditLedger(max_rows=None)
+    assert ledger._max_rows == 100000
+    monkeypatch.delenv("ENTITY_STANDARDIZER_AUDIT_MAX_ROWS", raising=False)
+
+    ledger._pid = -1
+    std_err = standardize_address("INVALID", finalize=True, use_cache=False)
+    assert std_err.audit_record is not None
+    rec = ledger.ensure_recorded(std_err.audit_record)
+    assert rec.to_sql_insert().startswith("INSERT INTO")
+
+    # Prune bounded ledger and file-backed unbounded ledger
+    bounded = StewardshipAuditLedger(max_rows=1)
+    bounded._inserts_since_prune = 255
+    bounded.record(rec)
+    bounded.close()
+
+    unbounded = StewardshipAuditLedger(db_path=str(tmp_path / "audit.sqlite"))
+    unbounded.record(rec)
+    assert len(unbounded.list_records(review_status=ReviewStatus.PENDING, action_type=rec.action_type, limit=5)) == 1
+    with pytest.raises(ValueError):
+        unbounded.list_records(limit=-1)
+    with pytest.raises(KeyError):
+        unbounded.apply_manual_override("missing-id", "steward-1", {"city": "BOSTON"})
+
+    overridden = unbounded.apply_manual_override(
+        rec.audit_id,
+        "steward-1",
+        {"street1": "100 MAIN ST", "city": "BOSTON", "state": "MA", "postal_code": "02110", "country": "USA"},
+        commentary="fixed",
+    )
+    assert overridden.action_type == ActionType.MANUAL_OVERRIDE
+    assert len(unbounded.history(rec.audit_id)) == 1
+    assert isinstance(unbounded.export("json"), str)
+    assert isinstance(unbounded.export("sql"), str)
+    assert isinstance(unbounded.export("dict"), list)
+    unbounded.clear()
+    unbounded.close()
+
+
+
 

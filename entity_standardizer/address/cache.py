@@ -134,7 +134,6 @@ class SQLiteCache:
     """Thread-safe L2 Embedded Persistent Cache using SQLite WAL mode."""
 
     def __init__(self, db_path: Optional[str] = None, max_entries: int = 50000):
-        import os
         self.db_path = db_path or ":memory:"
         self.max_entries = max_entries
         self._lock = threading.RLock()
@@ -154,7 +153,6 @@ class SQLiteCache:
         return self._last_stamp
 
     def _get_conn(self) -> sqlite3.Connection:
-        import os
         current_pid = os.getpid()
         if current_pid != self._pid:
             if self._conn is not None:
@@ -362,6 +360,12 @@ class MultiTierCache:
         """``CacheBackend``-style alias of :meth:`get_stats`."""
         return self.get_stats()
 
+    def close(self) -> None:
+        """Close the underlying L2 backend if it exposes a close method."""
+        close_fn = getattr(self._l2, "close", None)
+        if close_fn is not None:
+            close_fn()
+
 
 CACHE_URL_ENV = "ENTITY_STANDARDIZER_CACHE_URL"
 LEGACY_CACHE_URL_ENV = "ADDRESS_STANDARDIZER_CACHE_URL"
@@ -408,6 +412,8 @@ def configure_cache(
         backend = backend_from_url(backend)
     elif backend is None:
         backend = _backend_from_env()
+    if _DEFAULT_CACHE is not None:
+        _DEFAULT_CACHE.close()
     _DEFAULT_CACHE = MultiTierCache(
         l1_maxsize=l1_maxsize,
         l2_db_path=l2_db_path,

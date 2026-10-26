@@ -64,8 +64,9 @@ class PhoneStewardshipLedger:
 
     def __init__(self, db_path: str | Path = ":memory:") -> None:
         self.db_path = str(db_path)
-        self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self._lock = threading.Lock()
+        self._closed = True
+        self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self._closed = False
         with self._lock:
             self._conn.execute(

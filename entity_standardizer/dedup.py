@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass
 import re
 from typing import Any
 
+from entity_standardizer._native_dispatch import damerau_levenshtein_distance_dispatch
 from entity_standardizer.address.models import StandardizedAddress
 from entity_standardizer.models import StandardizedPhone
 from entity_standardizer.standardizer import standardize_phone
@@ -47,6 +48,7 @@ _IE_POSTAL_RE = re.compile(
 )
 _PL_POSTAL_RE = re.compile(r"^\d{2}-\d{3}$")
 _US_ZIP_RE = re.compile(r"^\d{5}(?:-\d{4})?$")
+_LEADING_PLUS_RE = re.compile(r"^[^\d+]*\+")
 
 
 def infer_country_from_postal_code(postal_code: str | None) -> str | None:
@@ -90,8 +92,6 @@ def are_keypad_adjacent(digit_a: str, digit_b: str) -> bool:
 
 def damerau_levenshtein_distance(s1: str, s2: str) -> int:
     """Compute Optimal String Alignment (Damerau-Levenshtein) distance between two strings."""
-    from entity_standardizer._native_dispatch import damerau_levenshtein_distance_dispatch
-
     return damerau_levenshtein_distance_dispatch(s1, s2)
 
 
@@ -211,10 +211,10 @@ def compare_phones(
         )
 
     # 2. Identical NSN across ambiguous country context (only when at least one lacked explicit +CC)
-    has_intl_a = bool(re.match(r"^[^\d+]*\+", pa.raw_input.strip())) or (
+    has_intl_a = bool(_LEADING_PLUS_RE.match(pa.raw_input.strip())) or (
         "IDD_EXIT_PREFIX_STRIPPED" in pa.healing_actions
     )
-    has_intl_b = bool(re.match(r"^[^\d+]*\+", pb.raw_input.strip())) or (
+    has_intl_b = bool(_LEADING_PLUS_RE.match(pb.raw_input.strip())) or (
         "IDD_EXIT_PREFIX_STRIPPED" in pb.healing_actions
     )
     if nsn_a == nsn_b and len(nsn_a) >= 7 and not (has_intl_a and has_intl_b):
@@ -729,8 +729,6 @@ def compare_addresses(
     fuzzy_threshold: float = 0.85,
 ) -> AddressComparisonResult:
     """Compare two physical/mailing addresses across normalized keys, building keys, phonetic keys, and rooftop edit distance."""
-    from entity_standardizer._native_dispatch import damerau_levenshtein_distance_dispatch
-
     a = _coerce_address(address_a, country=country)
     b = _coerce_address(address_b, country=country)
 
