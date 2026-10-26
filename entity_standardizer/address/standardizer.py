@@ -14,6 +14,7 @@ Standardizes US and International addresses to USPS Publication 28 and ISO stand
 
 import copy
 import logging
+import os
 import re
 import unicodedata
 from dataclasses import dataclass, field
@@ -24,7 +25,10 @@ from entity_standardizer.address.confidence import (
     RoutingTier,
     compute_confidence_score,
 )
+from entity_standardizer.address import audit as _addr_audit
 from entity_standardizer.address.audit import get_audit_ledger
+from entity_standardizer.address.delivery import evaluate_delivery_intelligence
+from entity_standardizer.address.registry import evaluate_corporate_risk
 from entity_standardizer.address.cache import (
     get_default_cache,
     make_cache_key,
@@ -51,10 +55,29 @@ from entity_standardizer.address.phonetics import (
 )
 from entity_standardizer.address.fast_path import fast_path_parse
 from entity_standardizer.address.explain import _RECORDER as _explain_recorder
-from entity_standardizer.address.tables import US_DOMESTIC_ISO3
+from entity_standardizer.address.tables import CANADIAN_PROVINCES, US_DOMESTIC_ISO3
 from entity_standardizer.address.international import (
     CountryGrammarRegistry,
     fold_to_ascii_key,
+)
+from entity_standardizer.address.international.australia import AU_STATES
+from entity_standardizer.address.international.base import split_single_line_locality
+from entity_standardizer.address.international.india import IN_STATES
+from entity_standardizer.address.international.latin_america import BR_STATES, MX_STATES
+from entity_standardizer.address.international.postal import validate_postal_code
+from entity_standardizer.address.international.scripts import (
+    country_matches_script,
+    detect_script_country,
+    split_script_single_line,
+)
+from entity_standardizer.address.fuzzy import (
+    heal_city_token,
+    heal_postal_code_transposition,
+)
+from entity_standardizer.address.reference.us_zip5 import get_default_us_zip5_provider
+from entity_standardizer.address.reference.validation import (
+    apply_reference_validation,
+    get_env_reference_provider,
 )
 
 logger = logging.getLogger(__name__)
@@ -156,9 +179,6 @@ def _finalize_standardized_address(
     cache_key: Optional[str] = None,
     enable_geocoding: bool = False,
 ) -> StandardizedAddress:
-    from entity_standardizer.address.delivery import evaluate_delivery_intelligence
-    from entity_standardizer.address.registry import evaluate_corporate_risk
-
     if raw_input and raw_input.get("care_of"):
         std.care_of = raw_input["care_of"]
 
@@ -191,9 +211,6 @@ def _finalize_standardized_address(
         or std.is_registered_agent_hub
         or std.address_status == "parse_failed"
     ):
-        import os
-        from entity_standardizer.address import audit as _addr_audit
-
         _audit_env = (
             os.environ.get("ENTITY_STANDARDIZER_AUDIT_ENABLED")
             or os.environ.get("ADDRESS_STANDARDIZER_AUDIT_ENABLED")
@@ -248,6 +265,19 @@ def _finalize_standardized_address(
 
 
 _GARBAGE_TOKENS = frozenset({"N/A", "NONE", "NULL", "UNKNOWN", "-", ".", "NO ADDRESS"})
+_RE_WORD_TOKENS = re.compile(r"\w+")
+_RE_NEWLINES = re.compile(r"[\r\n]+")
+_RE_CONTROL_WS = re.compile(r"[\r\n\t]+")
+_RE_CITY_LINE_UNIT = re.compile(
+    r"^(?:(?:TH|ST|ND|RD|\d+(?:TH|ST|ND|RD)?)\s+(?:FLOOR|FL)|SUITE|STE|APT|UNIT|ROOM|RM|BLDG|BUILDING)\b"
+)
+_RE_CITY_LINE_FLOOR = re.compile(r"^(?:FLOOR|FLR|FL)\s+[A-Z0-9]+$")
+_RE_S1_LINE_UNIT = re.compile(
+    r"^(?:(?:TH|ST|ND|RD|\d+(?:TH|ST|ND|RD)?)\s+(?:FLOOR|FL)|SUITE|STE|APT|UNIT|ROOM|RM)\b"
+)
+_RE_BARE_OFFICE_LINE = re.compile(r"(?:(?:MAIN|BRANCH|HOME|HEAD|CORPORATE|REGIONAL)\s+)?OFFICE")
+_RE_PO_BOX_TOKEN = re.compile(r"\b(?:P\.?\s*O\.?\s*BOX|POB|POST\s+OFFICE\s+BOX|APO|FPO|DPO)\b")
+_RE_DUAL_PHYSICAL_START = re.compile(r"^(?:\d+|PR-|CARR-|KM\b)")
 
 
 def _is_unit_phrase(text: str) -> bool:
@@ -255,7 +285,7 @@ def _is_unit_phrase(text: str) -> bool:
     if not RE_SEC_UNIT.match(text):
         return False
     rest = RE_SEC_UNIT.sub(" ", text)
-    return all(len(tok) <= 2 for tok in re.findall(r"\w+", rest))
+    return all(len(tok) <= 2 for tok in _RE_WORD_TOKENS.findall(rest))
 
 
 _RE_TRAILING_STATE_ZIP = re.compile(r"(?<![A-Za-z])(?P<state>[A-Za-z]{2})[ ,]+(?P<zip>\d{5}(?:-\d{4})?)\s*$")
@@ -306,9 +336,6 @@ def standardize_address(
     ``std.alternatives`` (next-best readings of an ambiguous input). Both bypass the result cache and are off by default.
     """
     if reference_provider is None and enable_reference_validation:
-        from entity_standardizer.address.reference.us_zip5 import get_default_us_zip5_provider
-        from entity_standardizer.address.reference.validation import get_env_reference_provider
-
         reference_provider = get_env_reference_provider() or get_default_us_zip5_provider()
 
     if explain or alternatives:
@@ -321,15 +348,12 @@ def standardize_address(
             reference_provider=reference_provider, enable_reference_validation=enable_reference_validation, **kwargs,
         ))
     if reference_provider is not None:
-        from entity_standardizer.address.reference.validation import apply_reference_validation
-
         base = standardize_address(
             street1=street1, street2=street2, city=city, state=state, postal_code=postal_code, country=country,
             is_vacant=is_vacant, enable_fuzzy=enable_fuzzy, enable_geocoding=enable_geocoding, use_cache=use_cache,
             allow_locality=allow_locality, finalize=finalize, correct_state_from_zip=correct_state_from_zip, **kwargs,
         )
         return apply_reference_validation(base, reference_provider)
-    import os
 
     _xr = _explain_recorder.get()  # None on every default call; set only inside an explain=True call
 
@@ -444,17 +468,17 @@ def standardize_address(
     country_in = str(country).strip() if country is not None else ""
 
     # Embedded Newline / Multiline Field Bleed Cleaner
-    s1_lines_u = [line.strip().upper() for line in re.split(r"[\r\n]+", s1_in) if line.strip()]
     if "\n" in city_in or "\r" in city_in:
-        c_lines = [line.strip() for line in re.split(r"[\r\n]+", city_in) if line.strip()]
+        s1_lines_u = [line.strip().upper() for line in _RE_NEWLINES.split(s1_in) if line.strip()]
+        c_lines = [line.strip() for line in _RE_NEWLINES.split(city_in) if line.strip()]
         if len(c_lines) > 1:  # pragma: no branch  (city_in is stripped, so an embedded newline always separates 2+ lines)
             cleaned_city_parts = []
             for cline in c_lines:
                 cline_u = cline.upper()
                 if (
-                    re.match(r"^(?:(?:TH|ST|ND|RD|\d+(?:TH|ST|ND|RD)?)\s+(?:FLOOR|FL)|SUITE|STE|APT|UNIT|ROOM|RM|BLDG|BUILDING)\b", cline_u)
+                    _RE_CITY_LINE_UNIT.match(cline_u)
                     or cline_u.endswith((" FLOOR", " FL", " STE", " SUITE"))
-                    or re.match(r"^(?:FLOOR|FLR|FL)\s+[A-Z0-9]+$", cline_u)
+                    or _RE_CITY_LINE_FLOOR.match(cline_u)
                 ):
                     if not s2_in:
                         s2_in = cline
@@ -478,17 +502,17 @@ def standardize_address(
     city_in = city_in.strip()
 
     if "\n" in s1_in or "\r" in s1_in:
-        s1_lines = [line.strip() for line in re.split(r"[\r\n]+", s1_in) if line.strip()]
+        s1_lines = [line.strip() for line in _RE_NEWLINES.split(s1_in) if line.strip()]
         if len(s1_lines) > 1:  # pragma: no branch  (s1_in is stripped, so an embedded newline always separates 2+ lines)
             cleaned_s1_parts = []
             for sline in s1_lines:
                 sline_u = sline.upper()
-                if re.match(r"^(?:(?:TH|ST|ND|RD|\d+(?:TH|ST|ND|RD)?)\s+(?:FLOOR|FL)|SUITE|STE|APT|UNIT|ROOM|RM)\b", sline_u):
+                if _RE_S1_LINE_UNIT.match(sline_u):
                     if not s2_in:
                         s2_in = sline
                     elif sline_u not in s2_in.upper():
                         s2_in = f"{s2_in} {sline}".strip()
-                elif re.fullmatch(r"(?:(?:MAIN|BRANCH|HOME|HEAD|CORPORATE|REGIONAL)\s+)?OFFICE", sline_u) or (
+                elif _RE_BARE_OFFICE_LINE.fullmatch(sline_u) or (
                     city_in and re.fullmatch(re.escape(city_in.upper()) + r"\s+(?:(?:MAIN|BRANCH)\s+)?OFFICE", sline_u)
                 ):
                     pass  # a bare office label line, not a street line that merely contains the word
@@ -521,8 +545,8 @@ def standardize_address(
         s1_in = s2_in
         s2_in = ""
 
-    s1_raw = re.sub(r"[\r\n\t]+", " ", unicodedata.normalize('NFKC', s1_in)).strip()
-    s2_raw = re.sub(r"[\r\n\t]+", " ", unicodedata.normalize('NFKC', s2_in)).strip()
+    s1_raw = _RE_CONTROL_WS.sub(" ", unicodedata.normalize('NFKC', s1_in)).strip()
+    s2_raw = _RE_CONTROL_WS.sub(" ", unicodedata.normalize('NFKC', s2_in)).strip()
     s1_raw = normalize_po_box_spelling(s1_raw)
     s2_raw = normalize_po_box_spelling(s2_raw)
     if s2_raw.upper() in _GARBAGE_TOKENS and s1_raw:
@@ -531,10 +555,10 @@ def standardize_address(
     s1_raw = RE_GLUED_HOUSE_NUM.sub(r"\1 \2", s1_raw)
     if s2_raw:
         s2_raw = clean_repetitive_cycles(s2_raw)
-    city_raw = re.sub(r"[\r\n\t]+", " ", unicodedata.normalize('NFKC', city_in)).strip()
-    state_raw = re.sub(r"[\r\n\t]+", " ", unicodedata.normalize('NFKC', state_in)).strip()
-    postal_raw = re.sub(r"[\r\n\t]+", " ", unicodedata.normalize('NFKC', postal_in)).strip()
-    country_raw = re.sub(r"[\r\n\t]+", " ", unicodedata.normalize('NFKC', country_in)).strip()
+    city_raw = _RE_CONTROL_WS.sub(" ", unicodedata.normalize('NFKC', city_in)).strip()
+    state_raw = _RE_CONTROL_WS.sub(" ", unicodedata.normalize('NFKC', state_in)).strip()
+    postal_raw = _RE_CONTROL_WS.sub(" ", unicodedata.normalize('NFKC', postal_in)).strip()
+    country_raw = _RE_CONTROL_WS.sub(" ", unicodedata.normalize('NFKC', country_in)).strip()
 
     raw_components = [v for v in [s1_raw, s2_raw, city_raw, state_raw, postal_raw, country_raw] if v]
     raw_street_address = ", ".join(raw_components)
@@ -594,12 +618,6 @@ def standardize_address(
         city_raw=city_raw,
     )
     if not country_raw:
-        from entity_standardizer.address.international.scripts import (
-            country_matches_script,
-            detect_script_country,
-            split_script_single_line,
-        )
-
         _script_iso = detect_script_country(raw_street_address)
         if _script_iso:
             if not country_matches_script(country_iso, _script_iso):
@@ -617,11 +635,6 @@ def standardize_address(
     if is_us:
         city_raw, state_raw = swap_us_city_state(city_raw, state_raw)
     elif country_iso in ("CAN", "AUS", "BRA", "IND", "MEX"):
-        from entity_standardizer.address.international.australia import AU_STATES
-        from entity_standardizer.address.international.india import IN_STATES
-        from entity_standardizer.address.international.latin_america import BR_STATES, MX_STATES
-        from entity_standardizer.address.tables import CANADIAN_PROVINCES
-
         if country_iso == "CAN":
             regs = CANADIAN_PROVINCES
         elif country_iso == "AUS":
@@ -701,7 +714,6 @@ def standardize_address(
         norm_state = normalize_us_state(state_raw, zip5)
 
         if enable_fuzzy:
-            from entity_standardizer.address.fuzzy import heal_city_token, heal_postal_code_transposition
             if norm_city:
                 healed_city = heal_city_token(norm_city, state=norm_state, zip3=zip5[:3] if zip5 else None)
                 if healed_city:
@@ -769,8 +781,8 @@ def standardize_address(
                 raw_street=raw_street_address,
             )
 
-        has_po = bool(re.search(r"\b(?:P\.?\s*O\.?\s*BOX|POB|POST\s+OFFICE\s+BOX|APO|FPO|DPO)\b", f"{norm_s1} {norm_s2} {raw_street_address}".upper()))
-        is_dual_physical = has_po and bool(norm_s1 and re.match(r"^(?:\d+|PR-|CARR-|KM\b)", norm_s1))
+        has_po = bool(_RE_PO_BOX_TOKEN.search(f"{norm_s1} {norm_s2} {raw_street_address}".upper()))
+        is_dual_physical = has_po and bool(norm_s1 and _RE_DUAL_PHYSICAL_START.match(norm_s1))
         rooftop_addr = None if (is_priv or (has_po and not is_dual_physical) or not norm_s1 or status != "standardized") else clean_rooftop_address(norm_s1)
 
         std_us = StandardizedAddress(
@@ -828,9 +840,6 @@ def standardize_address(
             # "Street, City, Postal, Country" written on one line: when the grammar did not isolate a valid postal
             # code, split the locality off generically and parse the street and locality separately.
             if not city_raw and not postal_raw and not state_raw and "," in s1_raw:
-                from entity_standardizer.address.international.base import split_single_line_locality
-                from entity_standardizer.address.international.postal import validate_postal_code
-
                 has_valid_postal = bool(parsed.postal_code) and bool(validate_postal_code(parsed.postal_code, country_iso))
                 split = None if has_valid_postal else split_single_line_locality(s1_raw, country_iso)
                 if split is not None:
@@ -930,8 +939,8 @@ def standardize_address(
                 raw_street=raw_street_address,
             )
 
-        has_po = bool(re.search(r"\b(?:P\.?\s*O\.?\s*BOX|POB|POST\s+OFFICE\s+BOX|APO|FPO|DPO)\b", f"{norm_s1} {norm_s2} {raw_street_address}".upper()))
-        is_dual_physical = has_po and bool(norm_s1 and re.match(r"^(?:\d+|PR-|CARR-|KM\b)", norm_s1))
+        has_po = bool(_RE_PO_BOX_TOKEN.search(f"{norm_s1} {norm_s2} {raw_street_address}".upper()))
+        is_dual_physical = has_po and bool(norm_s1 and _RE_DUAL_PHYSICAL_START.match(norm_s1))
         rooftop_addr = None if (is_priv or (has_po and not is_dual_physical) or not norm_s1 or status != "standardized") else clean_rooftop_address(norm_s1)
 
         std_intl = StandardizedAddress(

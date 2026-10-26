@@ -46,10 +46,17 @@ class PostalRule:
 # Country-Specific Formatting Helpers
 # ---------------------------------------------------------------------------
 
+_RE_WHITESPACE = re.compile(r"\s+")
+_RE_NON_DIGITS = re.compile(r"[^\d]")
+_RE_SPACE_HYPHEN = re.compile(r"[\s\-]")
+_RE_NON_ASCII_ALNUM = re.compile(r"[^\dA-Za-z]")
+_RE_CAYMAN_ISLAND = re.compile(r"^KY([123])(\d{4})$")
+_RE_CAYMAN_4 = re.compile(r"^KY(\d{4})$")
+
 
 def _format_uk(code: str) -> str:
     """Canonical Royal Mail format: outward + inward separated by a single space."""
-    clean = re.sub(r"\s+", "", code).upper()
+    clean = _RE_WHITESPACE.sub("", code).upper()
     if clean == "GIR0AA":
         return "GIR 0AA"
     if len(clean) >= 5:
@@ -59,7 +66,7 @@ def _format_uk(code: str) -> str:
 
 def _format_canada(code: str) -> str:
     """Canonical Canada Post format: A1A 1A1."""
-    clean = re.sub(r"\s+", "", code).upper()
+    clean = _RE_WHITESPACE.sub("", code).upper()
     if len(clean) == 6:
         return f"{clean[:3]} {clean[3:]}"
     return clean
@@ -67,7 +74,7 @@ def _format_canada(code: str) -> str:
 
 def _format_netherlands(code: str) -> str:
     """Canonical PostNL format: 1234 AB."""
-    clean = re.sub(r"\s+", "", code).upper()
+    clean = _RE_WHITESPACE.sub("", code).upper()
     if len(clean) == 6:
         return f"{clean[:4]} {clean[4:]}"
     return clean
@@ -75,7 +82,7 @@ def _format_netherlands(code: str) -> str:
 
 def _format_japan(code: str) -> str:
     """Canonical Japan Post format: 123-4567."""
-    clean = re.sub(r"[^\d]", "", code)
+    clean = _RE_NON_DIGITS.sub("", code)
     if len(clean) == 7:
         return f"{clean[:3]}-{clean[3:]}"
     return clean
@@ -83,7 +90,7 @@ def _format_japan(code: str) -> str:
 
 def _format_poland(code: str) -> str:
     """Canonical Poczta Polska format: 12-345."""
-    clean = re.sub(r"[^\d]", "", code)
+    clean = _RE_NON_DIGITS.sub("", code)
     if len(clean) == 5:
         return f"{clean[:2]}-{clean[2:]}"
     return clean
@@ -91,7 +98,7 @@ def _format_poland(code: str) -> str:
 
 def _format_portugal(code: str) -> str:
     """Canonical CTT Portugal format: 1234-567 or 1234."""
-    clean = re.sub(r"[^\d]", "", code)
+    clean = _RE_NON_DIGITS.sub("", code)
     if len(clean) == 7:
         return f"{clean[:4]}-{clean[4:]}"
     return clean
@@ -99,7 +106,7 @@ def _format_portugal(code: str) -> str:
 
 def _format_brazil(code: str) -> str:
     """Canonical Correios Brazil format: 12345-678."""
-    clean = re.sub(r"[^\d]", "", code)
+    clean = _RE_NON_DIGITS.sub("", code)
     if len(clean) == 8:
         return f"{clean[:5]}-{clean[5:]}"
     return clean
@@ -107,7 +114,7 @@ def _format_brazil(code: str) -> str:
 
 def _format_sweden(code: str) -> str:
     """Canonical PostNord Sweden format: 123 45."""
-    clean = re.sub(r"[^\d]", "", code)
+    clean = _RE_NON_DIGITS.sub("", code)
     if len(clean) == 5:
         return f"{clean[:3]} {clean[3:]}"
     return clean
@@ -115,7 +122,7 @@ def _format_sweden(code: str) -> str:
 
 def _format_czech_slovak(code: str) -> str:
     """Canonical Czech/Slovak format: 123 45."""
-    clean = re.sub(r"[^\d]", "", code)
+    clean = _RE_NON_DIGITS.sub("", code)
     if len(clean) == 5:
         return f"{clean[:3]} {clean[3:]}"
     return clean
@@ -123,7 +130,7 @@ def _format_czech_slovak(code: str) -> str:
 
 def _format_greece(code: str) -> str:
     """Canonical ELTA Greece format: 123 45."""
-    clean = re.sub(r"[^\d]", "", code)
+    clean = _RE_NON_DIGITS.sub("", code)
     if len(clean) == 5:
         return f"{clean[:3]} {clean[3:]}"
     return clean
@@ -131,7 +138,7 @@ def _format_greece(code: str) -> str:
 
 def _format_usa(code: str) -> str:
     """Canonical USPS format: 12345 or 12345-6789."""
-    clean = re.sub(r"[^\d]", "", code)
+    clean = _RE_NON_DIGITS.sub("", code)
     if len(clean) == 9:
         return f"{clean[:5]}-{clean[5:]}"
     return clean
@@ -139,7 +146,7 @@ def _format_usa(code: str) -> str:
 
 def _format_saudi(code: str) -> str:
     """Canonical Saudi Post format: 12345 or 12345-6789."""
-    clean = re.sub(r"[^\d]", "", code)
+    clean = _RE_NON_DIGITS.sub("", code)
     if len(clean) == 9:
         return f"{clean[:5]}-{clean[5:]}"
     return clean
@@ -147,7 +154,7 @@ def _format_saudi(code: str) -> str:
 
 def _format_korea(code: str) -> str:
     """Canonical Korea Post format: 12345 or legacy 123-456."""
-    clean = re.sub(r"[^\d]", "", code)
+    clean = _RE_NON_DIGITS.sub("", code)
     if len(clean) == 6:
         return f"{clean[:3]}-{clean[3:]}"
     return clean
@@ -155,7 +162,7 @@ def _format_korea(code: str) -> str:
 
 def _format_ireland(code: str) -> str:
     """Canonical Eircode format: D02 X285."""
-    clean = re.sub(r"[\s\-]", "", code).upper()
+    clean = _RE_SPACE_HYPHEN.sub("", code).upper()
     if len(clean) == 7:
         return f"{clean[:3]} {clean[3:]}"
     return clean
@@ -163,13 +170,13 @@ def _format_ireland(code: str) -> str:
 
 def _format_cayman(code: str) -> str:
     """Canonical Cayman Islands format: KY1-1104."""
-    clean = re.sub(r"[^\dA-Za-z]", "", code).upper()
+    clean = _RE_NON_ASCII_ALNUM.sub("", code).upper()
     if clean.startswith("CYM"):
         clean = clean[3:]
-    m = re.match(r"^KY([123])(\d{4})$", clean)
+    m = _RE_CAYMAN_ISLAND.match(clean)
     if m:
         return f"KY{m.group(1)}-{m.group(2)}"
-    m2 = re.match(r"^KY(\d{4})$", clean)
+    m2 = _RE_CAYMAN_4.match(clean)
     if m2:
         return f"KY1-{m2.group(1)}"
     if len(clean) == 4 and clean.isdigit():
@@ -181,7 +188,7 @@ def _format_cayman(code: str) -> str:
 
 def _format_vgb(code: str) -> str:
     """Canonical British Virgin Islands format: VG1110."""
-    clean = re.sub(r"[^\dA-Za-z]", "", code).upper()
+    clean = _RE_NON_ASCII_ALNUM.sub("", code).upper()
     if clean.startswith("VG"):
         return clean
     if len(clean) == 4 and clean.isdigit():
@@ -191,7 +198,7 @@ def _format_vgb(code: str) -> str:
 
 def _format_malta(code: str) -> str:
     """Canonical MaltaPost format: VLT 1115."""
-    clean = re.sub(r"\s+", "", code).upper()
+    clean = _RE_WHITESPACE.sub("", code).upper()
     if len(clean) >= 5:
         return f"{clean[:3]} {clean[3:]}"
     return clean
@@ -199,7 +206,7 @@ def _format_malta(code: str) -> str:
 
 def _format_bermuda(code: str) -> str:
     """Canonical Bermuda format: HM 11."""
-    clean = re.sub(r"\s+", "", code).upper()
+    clean = _RE_WHITESPACE.sub("", code).upper()
     if len(clean) == 4:
         return f"{clean[:2]} {clean[2:]}"
     return clean
@@ -229,7 +236,7 @@ _RE_NLD_EXACT = re.compile(
 
 def _validate_uk_semantics(code: str) -> bool:
     """Validate Royal Mail outward and inward character constraints."""
-    clean = re.sub(r"\s+", " ", code.strip().upper())
+    clean = _RE_WHITESPACE.sub(" ", code.strip().upper())
     if clean == "GIR 0AA":
         return True
     m = _RE_UK_EXACT.match(clean)
@@ -249,14 +256,14 @@ def _validate_uk_semantics(code: str) -> bool:
 
 def _validate_canadian_semantics(code: str) -> bool:
     """Validate Canada Post FSA/LDU character constraints."""
-    clean = re.sub(r"\s+", " ", code.strip().upper())
+    clean = _RE_WHITESPACE.sub(" ", code.strip().upper())
     m = _RE_CAN_EXACT.match(clean)
     return m is not None
 
 
 def _validate_dutch_semantics(code: str) -> bool:
     """Validate PostNL 4-digit + 2-letter constraints excluding SA/SD/SS."""
-    clean = re.sub(r"\s+", " ", code.strip().upper())
+    clean = _RE_WHITESPACE.sub(" ", code.strip().upper())
     m = _RE_NLD_EXACT.match(clean)
     if not m:
         return False
@@ -570,6 +577,62 @@ DEPRECATED_POSTAL_RULES: Dict[str, PostalRule] = {
 # Public Functions: validate_postal_code and extract_postal_code
 # ---------------------------------------------------------------------------
 
+_RE_VG_SPACE_4 = re.compile(r"^VG\s+(\d{4})$", re.IGNORECASE)
+_RE_KY_SPACE_4 = re.compile(r"^KY\s+(\d{4})$", re.IGNORECASE)
+_RE_KY_HYPHEN_4 = re.compile(r"^KY-(\d{4})$", re.IGNORECASE)
+_RE_KY_ISLAND_SPACE_4 = re.compile(r"^KY([1-3])\s+(\d{4})$", re.IGNORECASE)
+_RE_KY_ISLAND_4 = re.compile(r"^KY([1-3])(\d{4})$", re.IGNORECASE)
+_RE_EXACT_4_DIGITS = re.compile(r"^\d{4}$")
+_RE_JE_HYPHEN = re.compile(r"^JE-(\d)", re.IGNORECASE)
+_RE_GY_HYPHEN = re.compile(r"^GY-(\d)", re.IGNORECASE)
+_RE_IM_HYPHEN = re.compile(r"^IM-(\d)", re.IGNORECASE)
+_RE_ALPHA_CHAR = re.compile(r"[A-Za-z]")
+_RE_NON_DIGIT_SPACE_HYPHEN = re.compile(r"[^\d\s\-]")
+_RE_NON_WORD_SPACE_HYPHEN = re.compile(r"[^\w\s\-]")
+_RE_EXTRACT_CAN = re.compile(
+    r"\b([A-CEGHJ-NPR-TVXY]\d[A-CEGHJ-NPR-TV-Z]\s*\d[A-CEGHJ-NPR-TV-Z]\d)\b",
+    re.IGNORECASE,
+)
+_RE_EXTRACT_UK = re.compile(
+    r"\b(GIR\s*0AA|[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2})\b",
+    re.IGNORECASE,
+)
+_RE_EXTRACT_NLD = re.compile(r"\b(\d{4}\s*[A-Z]{2})\b", re.IGNORECASE)
+_RE_EXTRACT_IRL = re.compile(r"\b([A-Za-z]\d[0-9A-Za-z]\s*[0-9A-Za-z]{4})\b")
+_RE_EXTRACT_JPN = re.compile(r"(?:〒\s*)?(?<!\d)(\d{3}-\d{4})\b")
+_RE_WORD_7_DIGITS = re.compile(r"\b(\d{7})\b")
+_RE_EXTRACT_BRA = re.compile(r"(?:CEP\s*)?(\d{5}-?\d{3})\b", re.IGNORECASE)
+_RE_EXTRACT_BRA_STRICT = re.compile(r"(?:CEP\s*)?(\d{5}-\d{3})\b", re.IGNORECASE)
+_RE_EXTRACT_POL = re.compile(r"\b(\d{2}-\d{3})\b")
+_RE_EXTRACT_PRT = re.compile(r"\b(\d{4}-\d{3})\b")
+_RE_EXTRACT_ARG = re.compile(r"\b([A-Z]\d{4}[A-Z]{3})\b")
+_RE_EXTRACT_SGP = re.compile(r"\b(?:SGP|SG|S)\s*(\d{6})\b", re.IGNORECASE)
+_RE_WORD_6_DIGITS = re.compile(r"\b(\d{6})\b")
+_RE_EXTRACT_AUS = re.compile(
+    r"\b(?:NSW|VIC|QLD|SA|WA|TAS|ACT|NT|AU|AUS)\s*(\d{4})\b",
+    re.IGNORECASE,
+)
+_RE_WORD_4_DIGITS = re.compile(r"\b(\d{4})\b")
+_RE_EXTRACT_VGB = re.compile(
+    r"\b(?:BVI[- ]*)?(?:VG[- ]*|\bBVI[- ]*)(\d{4})\b",
+    re.IGNORECASE,
+)
+_RE_EXTRACT_CYM = re.compile(
+    r"\b(?:CYM[- ]*)?(?:KY[1-3]?[- ]*)(\d{4})\b",
+    re.IGNORECASE,
+)
+_RE_EXTRACT_US_STATE_ZIP = re.compile(r"\b[A-Z]{2}\s+(\d{5}(?:-\d{4})?)\b")
+_RE_EXTRACT_US_ZIP4 = re.compile(r"\b(\d{5}-\d{4})\b")
+_RE_WORD_5_DIGITS = re.compile(r"\b(\d{5})\b")
+_RE_EXTRACT_EU_PREFIX_5 = re.compile(r"\b(?:[A-Z]{1,3}-)(\d{5})\b")
+_RE_EXTRACT_3_SPACE_2 = re.compile(r"\b(\d{3}\s\d{2})\b")
+_RE_EXTRACT_POSTAL_KW = re.compile(
+    r"\b(?:ZIP(?:\s+CODE)?|POSTAL(?:\s+CODE)?|POSTCODE|PLZ|CEP|C\.?P\.?|CAP)\s*[:#]?\s*([A-Z0-9\- ]{3,10})\b",
+    re.IGNORECASE,
+)
+_RE_EXTRACT_EU_PREFIX_45 = re.compile(r"\b(?:[A-Z]{1,3}-)(\d{4,5})\b")
+_RE_EXTRACT_STATE_ZIP5 = re.compile(r"\b[A-Z]{2}\s+(\d{5})\b")
+
 
 def validate_postal_code(
     postal_code: Optional[str],
@@ -636,7 +699,7 @@ def validate_postal_code(
     rule = POSTAL_RULES.get(c_info.alpha3)
     if rule is None:
         # Fallback for country with postal codes not in explicit catalog
-        clean = re.sub(r"\s+", " ", raw_pc).upper()
+        clean = _RE_WHITESPACE.sub(" ", raw_pc).upper()
         res = PostalValidationResult(
             is_valid=True,
             postal_code=raw_pc,
@@ -658,25 +721,25 @@ def validate_postal_code(
     # Jurisdictional normalization before regex validation
     if c_info.alpha3 == "VGB":
         # British Virgin Islands: normalize "VG 1110" -> "VG1110"
-        check_code = re.sub(r"^VG\s+(\d{4})$", r"VG\1", check_code, flags=re.IGNORECASE)
+        check_code = _RE_VG_SPACE_4.sub(r"VG\1", check_code)
     elif c_info.alpha3 == "CYM":
         # Cayman Islands: normalize "KY 1104", "KY-1104", "KY1 1104", "1104", "CYM 1104"
-        check_code = re.sub(r"^KY\s+(\d{4})$", r"KY1-\1", check_code, flags=re.IGNORECASE)
-        check_code = re.sub(r"^KY-(\d{4})$", r"KY1-\1", check_code, flags=re.IGNORECASE)
-        check_code = re.sub(r"^KY([1-3])\s+(\d{4})$", r"KY\1-\2", check_code, flags=re.IGNORECASE)
-        check_code = re.sub(r"^KY([1-3])(\d{4})$", r"KY\1-\2", check_code, flags=re.IGNORECASE)
-        if re.match(r"^\d{4}$", check_code):
+        check_code = _RE_KY_SPACE_4.sub(r"KY1-\1", check_code)
+        check_code = _RE_KY_HYPHEN_4.sub(r"KY1-\1", check_code)
+        check_code = _RE_KY_ISLAND_SPACE_4.sub(r"KY\1-\2", check_code)
+        check_code = _RE_KY_ISLAND_4.sub(r"KY\1-\2", check_code)
+        if _RE_EXACT_4_DIGITS.match(check_code):
             check_code = f"KY1-{check_code}"
     elif c_info.alpha3 == "JEY":
-        check_code = re.sub(r"^JE-(\d)", r"JE\1", check_code, flags=re.IGNORECASE)
+        check_code = _RE_JE_HYPHEN.sub(r"JE\1", check_code)
     elif c_info.alpha3 == "GGY":
-        check_code = re.sub(r"^GY-(\d)", r"GY\1", check_code, flags=re.IGNORECASE)
+        check_code = _RE_GY_HYPHEN.sub(r"GY\1", check_code)
     elif c_info.alpha3 == "IMN":
-        check_code = re.sub(r"^IM-(\d)", r"IM\1", check_code, flags=re.IGNORECASE)
+        check_code = _RE_IM_HYPHEN.sub(r"IM\1", check_code)
 
     # Character validity checks
     if not rule.allows_alphanumeric:
-        if re.search(r"[A-Za-z]", check_code):
+        if _RE_ALPHA_CHAR.search(check_code):
             res = PostalValidationResult(
                 is_valid=False,
                 postal_code=raw_pc,
@@ -686,7 +749,7 @@ def validate_postal_code(
                 is_non_postal_country=False,
             )
             return res if return_details else False
-        if re.search(r"[^\d\s\-]", check_code):
+        if _RE_NON_DIGIT_SPACE_HYPHEN.search(check_code):
             res = PostalValidationResult(
                 is_valid=False,
                 postal_code=raw_pc,
@@ -697,7 +760,7 @@ def validate_postal_code(
             )
             return res if return_details else False
     else:
-        if re.search(r"[^\w\s\-]", check_code):
+        if _RE_NON_WORD_SPACE_HYPHEN.search(check_code):
             res = PostalValidationResult(
                 is_valid=False,
                 postal_code=raw_pc,
@@ -709,7 +772,7 @@ def validate_postal_code(
             return res if return_details else False
 
     # Length bounds check (alphanumeric characters only)
-    alnum_code = re.sub(r"[^A-Za-z0-9]", "", check_code)
+    alnum_code = _RE_NON_ASCII_ALNUM.sub("", check_code)
     if len(alnum_code) < rule.min_length:
         res = PostalValidationResult(
             is_valid=False,
@@ -739,7 +802,7 @@ def validate_postal_code(
         return res if return_details else False
 
     # Regex pattern check
-    norm_check = re.sub(r"\s+", " ", check_code.strip()).upper()
+    norm_check = _RE_WHITESPACE.sub(" ", check_code.strip()).upper()
     if not rule.pattern.match(norm_check):
         res = PostalValidationResult(
             is_valid=False,
@@ -817,11 +880,7 @@ def _extract_for_country(text: str, c_info: CountryInfo) -> Optional[str]:
 
     # Canada
     if alpha3 == "CAN":
-        m = re.search(
-            r"\b([A-CEGHJ-NPR-TVXY]\d[A-CEGHJ-NPR-TV-Z]\s*\d[A-CEGHJ-NPR-TV-Z]\d)\b",
-            text,
-            re.IGNORECASE,
-        )
+        m = _RE_EXTRACT_CAN.search(text)
         if m:
             res = validate_postal_code(m.group(1), "CAN", return_details=True)
             if isinstance(res, PostalValidationResult) and res.is_valid:
@@ -830,11 +889,7 @@ def _extract_for_country(text: str, c_info: CountryInfo) -> Optional[str]:
 
     # United Kingdom
     if alpha3 in ("GBR", "GGY", "JEY", "IMN"):
-        m = re.search(
-            r"\b(GIR\s*0AA|[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2})\b",
-            text,
-            re.IGNORECASE,
-        )
+        m = _RE_EXTRACT_UK.search(text)
         if m:
             res = validate_postal_code(m.group(1), alpha3, return_details=True)
             if isinstance(res, PostalValidationResult) and res.is_valid:
@@ -843,7 +898,7 @@ def _extract_for_country(text: str, c_info: CountryInfo) -> Optional[str]:
 
     # Netherlands
     if alpha3 == "NLD":
-        m = re.search(r"\b(\d{4}\s*[A-Z]{2})\b", text, re.IGNORECASE)
+        m = _RE_EXTRACT_NLD.search(text)
         if m:
             res = validate_postal_code(m.group(1), "NLD", return_details=True)
             if isinstance(res, PostalValidationResult) and res.is_valid:
@@ -852,7 +907,7 @@ def _extract_for_country(text: str, c_info: CountryInfo) -> Optional[str]:
 
     # Ireland
     if alpha3 == "IRL":
-        m = re.search(r"\b([A-Za-z]\d[0-9A-Za-z]\s*[0-9A-Za-z]{4})\b", text)
+        m = _RE_EXTRACT_IRL.search(text)
         if m:
             res = validate_postal_code(m.group(1), "IRL", return_details=True)
             if isinstance(res, PostalValidationResult) and res.is_valid:
@@ -861,12 +916,12 @@ def _extract_for_country(text: str, c_info: CountryInfo) -> Optional[str]:
 
     # Japan
     if alpha3 == "JPN":
-        m = re.search(r"(?:〒\s*)?(?<!\d)(\d{3}-\d{4})\b", text)
+        m = _RE_EXTRACT_JPN.search(text)
         if m:
             res = validate_postal_code(m.group(1), "JPN", return_details=True)
             if isinstance(res, PostalValidationResult) and res.is_valid:
                 return res.formatted_code
-        m7 = re.findall(r"\b(\d{7})\b", text)
+        m7 = _RE_WORD_7_DIGITS.findall(text)
         if m7:
             res = validate_postal_code(m7[-1], "JPN", return_details=True)
             if isinstance(res, PostalValidationResult) and res.is_valid:
@@ -875,7 +930,7 @@ def _extract_for_country(text: str, c_info: CountryInfo) -> Optional[str]:
 
     # Brazil
     if alpha3 == "BRA":
-        m = re.search(r"(?:CEP\s*)?(\d{5}-?\d{3})\b", text, re.IGNORECASE)
+        m = _RE_EXTRACT_BRA.search(text)
         if m:
             res = validate_postal_code(m.group(1), "BRA", return_details=True)
             if isinstance(res, PostalValidationResult) and res.is_valid:
@@ -884,7 +939,7 @@ def _extract_for_country(text: str, c_info: CountryInfo) -> Optional[str]:
 
     # Poland
     if alpha3 == "POL":
-        m = re.search(r"\b(\d{2}-\d{3})\b", text)
+        m = _RE_EXTRACT_POL.search(text)
         if m:
             res = validate_postal_code(m.group(1), "POL", return_details=True)
             if isinstance(res, PostalValidationResult) and res.is_valid:
@@ -893,7 +948,7 @@ def _extract_for_country(text: str, c_info: CountryInfo) -> Optional[str]:
 
     # Portugal
     if alpha3 == "PRT":
-        m = re.search(r"\b(\d{4}-\d{3})\b", text)
+        m = _RE_EXTRACT_PRT.search(text)
         if m:
             res = validate_postal_code(m.group(1), "PRT", return_details=True)
             if isinstance(res, PostalValidationResult) and res.is_valid:
@@ -902,7 +957,7 @@ def _extract_for_country(text: str, c_info: CountryInfo) -> Optional[str]:
 
     # Argentina
     if alpha3 == "ARG":
-        m = re.search(r"\b([A-Z]\d{4}[A-Z]{3})\b", text)
+        m = _RE_EXTRACT_ARG.search(text)
         if m:
             res = validate_postal_code(m.group(1), "ARG", return_details=True)
             if isinstance(res, PostalValidationResult) and res.is_valid:
@@ -911,12 +966,12 @@ def _extract_for_country(text: str, c_info: CountryInfo) -> Optional[str]:
 
     # Singapore
     if alpha3 == "SGP":
-        m_sg = re.search(r"\b(?:SGP|SG|S)\s*(\d{6})\b", text, re.IGNORECASE)
+        m_sg = _RE_EXTRACT_SGP.search(text)
         if m_sg:
             res = validate_postal_code(m_sg.group(0), "SGP", return_details=True)
             if isinstance(res, PostalValidationResult) and res.is_valid:
                 return res.formatted_code
-        matches_sg = list(re.finditer(r"\b(\d{6})\b", text))
+        matches_sg = list(_RE_WORD_6_DIGITS.finditer(text))
         for m in reversed(matches_sg):
             res = validate_postal_code(m.group(1), "SGP", return_details=True)
             if isinstance(res, PostalValidationResult) and res.is_valid:
@@ -925,12 +980,12 @@ def _extract_for_country(text: str, c_info: CountryInfo) -> Optional[str]:
 
     # Australia
     if alpha3 == "AUS":
-        m_au = re.search(r"\b(?:NSW|VIC|QLD|SA|WA|TAS|ACT|NT|AU|AUS)\s*(\d{4})\b", text, re.IGNORECASE)
+        m_au = _RE_EXTRACT_AUS.search(text)
         if m_au:
             res = validate_postal_code(m_au.group(0), "AUS", return_details=True)
             if isinstance(res, PostalValidationResult) and res.is_valid:
                 return res.formatted_code
-        matches_au = list(re.finditer(r"\b(\d{4})\b", text))
+        matches_au = list(_RE_WORD_4_DIGITS.finditer(text))
         for m in reversed(matches_au):
             res = validate_postal_code(m.group(1), "AUS", return_details=True)
             if isinstance(res, PostalValidationResult) and res.is_valid:
@@ -939,12 +994,12 @@ def _extract_for_country(text: str, c_info: CountryInfo) -> Optional[str]:
 
     # British Virgin Islands
     if alpha3 == "VGB":
-        m_vg = re.search(r"\b(?:BVI[- ]*)?(?:VG[- ]*|\bBVI[- ]*)(\d{4})\b", text, re.IGNORECASE)
+        m_vg = _RE_EXTRACT_VGB.search(text)
         if m_vg:
             res = validate_postal_code(m_vg.group(0), "VGB", return_details=True)
             if isinstance(res, PostalValidationResult) and res.is_valid:
                 return res.formatted_code
-        matches_vg = list(re.finditer(r"\b(\d{4})\b", text))
+        matches_vg = list(_RE_WORD_4_DIGITS.finditer(text))
         for m in reversed(matches_vg):
             res = validate_postal_code(m.group(1), "VGB", return_details=True)
             if isinstance(res, PostalValidationResult) and res.is_valid:
@@ -953,12 +1008,12 @@ def _extract_for_country(text: str, c_info: CountryInfo) -> Optional[str]:
 
     # Cayman Islands
     if alpha3 == "CYM":
-        m_ky = re.search(r"\b(?:CYM[- ]*)?(?:KY[1-3]?[- ]*)(\d{4})\b", text, re.IGNORECASE)
+        m_ky = _RE_EXTRACT_CYM.search(text)
         if m_ky:
             res = validate_postal_code(m_ky.group(0), "CYM", return_details=True)
             if isinstance(res, PostalValidationResult) and res.is_valid:
                 return res.formatted_code
-        matches_ky = list(re.finditer(r"\b(\d{4})\b", text))
+        matches_ky = list(_RE_WORD_4_DIGITS.finditer(text))
         for m in reversed(matches_ky):
             res = validate_postal_code(m.group(1), "CYM", return_details=True)
             if isinstance(res, PostalValidationResult) and res.is_valid:
@@ -968,19 +1023,19 @@ def _extract_for_country(text: str, c_info: CountryInfo) -> Optional[str]:
     # United States & Territories
     if alpha3 in ("USA", "PRI", "VIR", "GUM", "ASM", "MNP", "UMI", "FSM", "MHL", "PLW"):
         # Check State + ZIP first
-        m_sz = re.search(r"\b[A-Z]{2}\s+(\d{5}(?:-\d{4})?)\b", text)
+        m_sz = _RE_EXTRACT_US_STATE_ZIP.search(text)
         if m_sz:
             res = validate_postal_code(m_sz.group(1), alpha3, return_details=True)
             if isinstance(res, PostalValidationResult) and res.is_valid:
                 return res.formatted_code
         # Check ZIP+4
-        m_z4 = re.search(r"\b(\d{5}-\d{4})\b", text)
+        m_z4 = _RE_EXTRACT_US_ZIP4.search(text)
         if m_z4:
             res = validate_postal_code(m_z4.group(1), alpha3, return_details=True)
             if isinstance(res, PostalValidationResult) and res.is_valid:
                 return res.formatted_code
         # Check all 5-digit tokens, prioritizing the last (trailing) token
-        matches = list(re.finditer(r"\b(\d{5})\b", text))
+        matches = list(_RE_WORD_5_DIGITS.finditer(text))
         for m in reversed(matches):
             res = validate_postal_code(m.group(1), alpha3, return_details=True)
             if isinstance(res, PostalValidationResult) and res.is_valid:
@@ -990,18 +1045,18 @@ def _extract_for_country(text: str, c_info: CountryInfo) -> Optional[str]:
     # Standard 5-digit European / Global countries
     rule = POSTAL_RULES.get(alpha3)
     if rule and rule.min_length == 5 and rule.max_length == 5 and not rule.allows_alphanumeric:
-        m_pfx = re.search(r"\b(?:[A-Z]{1,3}-)(\d{5})\b", text)
+        m_pfx = _RE_EXTRACT_EU_PREFIX_5.search(text)
         if m_pfx:
             res = validate_postal_code(m_pfx.group(0), alpha3, return_details=True)
             if isinstance(res, PostalValidationResult) and res.is_valid:
                 return res.formatted_code
-        matches = list(re.finditer(r"\b(\d{5})\b", text))
+        matches = list(_RE_WORD_5_DIGITS.finditer(text))
         for m in reversed(matches):
             res = validate_postal_code(m.group(1), alpha3, return_details=True)
             if isinstance(res, PostalValidationResult) and res.is_valid:
                 return res.formatted_code
         # Space-separated 3+2 groups as written in CZ, SK, SE, GR ("111 51")
-        for m in reversed(list(re.finditer(r"\b(\d{3}\s\d{2})\b", text))):
+        for m in reversed(list(_RE_EXTRACT_3_SPACE_2.finditer(text))):
             res = validate_postal_code(m.group(1), alpha3, return_details=True)
             if isinstance(res, PostalValidationResult) and res.is_valid:
                 return res.formatted_code
@@ -1009,7 +1064,7 @@ def _extract_for_country(text: str, c_info: CountryInfo) -> Optional[str]:
 
     # Standard 6-digit countries (China, India, Russia, Singapore, Colombia, etc.)
     if rule and rule.min_length == 6 and rule.max_length == 6 and not rule.allows_alphanumeric:
-        matches = list(re.finditer(r"\b(\d{6})\b", text))
+        matches = list(_RE_WORD_6_DIGITS.finditer(text))
         for m in reversed(matches):
             res = validate_postal_code(m.group(1), alpha3, return_details=True)
             if isinstance(res, PostalValidationResult) and res.is_valid:
@@ -1018,7 +1073,7 @@ def _extract_for_country(text: str, c_info: CountryInfo) -> Optional[str]:
 
     # Standard 4-digit countries (Australia, Austria, Switzerland, Belgium, South Africa, etc.)
     if rule and rule.min_length == 4 and rule.max_length == 4 and not rule.allows_alphanumeric:
-        matches = list(re.finditer(r"\b(\d{4})\b", text))
+        matches = list(_RE_WORD_4_DIGITS.finditer(text))
         for m in reversed(matches):
             res = validate_postal_code(m.group(1), alpha3, return_details=True)
             if isinstance(res, PostalValidationResult) and res.is_valid:
@@ -1039,117 +1094,105 @@ def _extract_for_country(text: str, c_info: CountryInfo) -> Optional[str]:
 def _extract_candidate_any(text: str) -> Optional[str]:
     """Candidate matchers across prioritized international postal formats."""
     # 1. Canada Post
-    m_can = re.search(
-        r"\b([A-CEGHJ-NPR-TVXY]\d[A-CEGHJ-NPR-TV-Z]\s*\d[A-CEGHJ-NPR-TV-Z]\d)\b",
-        text,
-        re.IGNORECASE,
-    )
+    m_can = _RE_EXTRACT_CAN.search(text)
     if m_can:
         res = validate_postal_code(m_can.group(1), "CAN", return_details=True)
         if isinstance(res, PostalValidationResult) and res.is_valid:
             return res.formatted_code
 
     # 2. Royal Mail UK
-    m_uk = re.search(
-        r"\b(GIR\s*0AA|[A-Z]{1,2}\d[A-Z\d]?\s*\d[A-Z]{2})\b",
-        text,
-        re.IGNORECASE,
-    )
+    m_uk = _RE_EXTRACT_UK.search(text)
     if m_uk:
         res = validate_postal_code(m_uk.group(1), "GBR", return_details=True)
         if isinstance(res, PostalValidationResult) and res.is_valid:
             return res.formatted_code
 
     # 3. Netherlands PostNL
-    m_nld = re.search(r"\b(\d{4}\s*[A-Z]{2})\b", text, re.IGNORECASE)
+    m_nld = _RE_EXTRACT_NLD.search(text)
     if m_nld:
         res = validate_postal_code(m_nld.group(1), "NLD", return_details=True)
         if isinstance(res, PostalValidationResult) and res.is_valid:
             return res.formatted_code
 
     # 4. Ireland Eircode
-    m_irl = re.search(r"\b([A-Za-z]\d[0-9A-Za-z]\s*[0-9A-Za-z]{4})\b", text)
+    m_irl = _RE_EXTRACT_IRL.search(text)
     if m_irl:
         res = validate_postal_code(m_irl.group(1), "IRL", return_details=True)
         if isinstance(res, PostalValidationResult) and res.is_valid:
             return res.formatted_code
 
     # 5. Japan 3+4
-    m_jpn = re.search(r"(?:〒\s*)?(?<!\d)(\d{3}-\d{4})\b", text)
+    m_jpn = _RE_EXTRACT_JPN.search(text)
     if m_jpn:
         res = validate_postal_code(m_jpn.group(1), "JPN", return_details=True)
         if isinstance(res, PostalValidationResult) and res.is_valid:
             return res.formatted_code
 
     # 6. Brazil CEP
-    m_bra = re.search(r"(?:CEP\s*)?(\d{5}-\d{3})\b", text, re.IGNORECASE)
+    m_bra = _RE_EXTRACT_BRA_STRICT.search(text)
     if m_bra:
         res = validate_postal_code(m_bra.group(1), "BRA", return_details=True)
         if isinstance(res, PostalValidationResult) and res.is_valid:
             return res.formatted_code
 
     # 7. Poland 2+3
-    m_pol = re.search(r"\b(\d{2}-\d{3})\b", text)
+    m_pol = _RE_EXTRACT_POL.search(text)
     if m_pol:
         res = validate_postal_code(m_pol.group(1), "POL", return_details=True)
         if isinstance(res, PostalValidationResult) and res.is_valid:
             return res.formatted_code
 
     # 8. Portugal 4+3
-    m_prt = re.search(r"\b(\d{4}-\d{3})\b", text)
+    m_prt = _RE_EXTRACT_PRT.search(text)
     if m_prt:
         res = validate_postal_code(m_prt.group(1), "PRT", return_details=True)
         if isinstance(res, PostalValidationResult) and res.is_valid:
             return res.formatted_code
 
     # 9. Argentina CPA
-    m_arg = re.search(r"\b([A-Z]\d{4}[A-Z]{3})\b", text)
+    m_arg = _RE_EXTRACT_ARG.search(text)
     if m_arg:
         res = validate_postal_code(m_arg.group(1), "ARG", return_details=True)
         if isinstance(res, PostalValidationResult) and res.is_valid:
             return res.formatted_code
 
     # 10. US ZIP+4
-    m_z4 = re.search(r"\b(\d{5}-\d{4})\b", text)
+    m_z4 = _RE_EXTRACT_US_ZIP4.search(text)
     if m_z4:
         res = validate_postal_code(m_z4.group(1), "USA", return_details=True)
         if isinstance(res, PostalValidationResult) and res.is_valid:
             return res.formatted_code
 
     # 11. Explicit postal keyword prefix
-    m_kw = re.search(
-        r"\b(?:ZIP(?:\s+CODE)?|POSTAL(?:\s+CODE)?|POSTCODE|PLZ|CEP|C\.?P\.?|CAP)\s*[:#]?\s*([A-Z0-9\- ]{3,10})\b",
-        text,
-        re.IGNORECASE,
-    )
+    m_kw = _RE_EXTRACT_POSTAL_KW.search(text)
     if m_kw:
         cand = m_kw.group(1).strip()
-        alnum = re.sub(r"[^A-Za-z0-9]", "", cand)
+        alnum = _RE_NON_ASCII_ALNUM.sub("", cand)
         if 3 <= len(alnum) <= 10:
-            return re.sub(r"\s+", " ", cand).upper()
+            return _RE_WHITESPACE.sub(" ", cand).upper()
 
     # 12. European country prefix (e.g. D-10115, F-75008, CH-8001)
-    m_ep = re.search(r"\b(?:[A-Z]{1,3}-)(\d{4,5})\b", text)
+    m_ep = _RE_EXTRACT_EU_PREFIX_45.search(text)
     if m_ep:
         return m_ep.group(1)
 
     # 13. State + 5-digit ZIP
-    m_sz = re.search(r"\b[A-Z]{2}\s+(\d{5})\b", text)
+    m_sz = _RE_EXTRACT_STATE_ZIP5.search(text)
     if m_sz:
         return m_sz.group(1)
 
     # 14. Trailing 5-digit number
-    matches_5 = list(re.finditer(r"\b(\d{5})\b", text))
+    matches_5 = list(_RE_WORD_5_DIGITS.finditer(text))
     if matches_5:
         return matches_5[-1].group(1)
 
     # 15. Trailing 6-digit number
-    matches_6 = list(re.finditer(r"\b(\d{6})\b", text))
+    matches_6 = list(_RE_WORD_6_DIGITS.finditer(text))
     if matches_6:
         return matches_6[-1].group(1)
 
     # 16. Trailing 4-digit number
-    matches_4 = list(re.finditer(r"\b(\d{4})\b", text))
+    matches_4 = list(_RE_WORD_4_DIGITS.finditer(text))
     if matches_4:
         return matches_4[-1].group(1)
 

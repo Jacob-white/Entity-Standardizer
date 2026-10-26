@@ -11,12 +11,17 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any
 
+from entity_standardizer.address.offline_index import get_default_offline_index
 from entity_standardizer.address.registry import (
     lookup_corporate_registry,
     RegistryCategory,
 )
 from entity_standardizer.address.tables import ZIP3_TO_STATE, US_STATES
 from entity_standardizer.address._patterns import SPANISH_PREFIX_THOROUGHFARES
+
+_RE_NON_DIGITS = re.compile(r"[^\d]")
+_RE_NON_WORD = re.compile(r"[^\w]")
+_WORD_NUMBERS_1_TO_10 = frozenset({"ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE", "TEN"})
 
 __all__ = [
     "DPVFootnote",
@@ -177,6 +182,8 @@ def evaluate_delivery_intelligence(
 
     # 2. CMRA Evaluation
     is_cmra = False
+    reg_entry = None
+    reg_looked_up = False
     if (
         _RE_PMB_WORD.search(st1)
         or _RE_PMB_WORD.search(st2)
@@ -196,6 +203,7 @@ def evaluate_delivery_intelligence(
             country="USA",
             raw_street=raw_combined,
         )
+        reg_looked_up = True
         if reg_entry is not None and reg_entry.category in (
             RegistryCategory.MAIL_DROP_CMRA,
             RegistryCategory.VIRTUAL_OFFICE,
@@ -227,7 +235,7 @@ def evaluate_delivery_intelligence(
 
     # AA / A1: Postal code concordance
     norm_st = US_STATES.get(state, state)
-    zip_digits = re.sub(r"[^\d]", "", postal_code)
+    zip_digits = _RE_NON_DIGITS.sub("", postal_code)
     z3 = zip_digits[:3] if len(zip_digits) >= 3 else ""
 
     valid_zip_state = bool(
@@ -262,34 +270,30 @@ def evaluate_delivery_intelligence(
             or first_tok in SPANISH_PREFIX_THOROUGHFARES
         ) and len(tokens) > 1:
             for tok in tokens[1:]:
-                tok_clean = re.sub(r"[^\w]", "", tok)
-                if any(ch.isdigit() for ch in tok_clean) or tok_clean in {
-                    "ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE", "TEN"
-                }:
+                tok_clean = _RE_NON_WORD.sub("", tok)
+                if any(ch.isdigit() for ch in tok_clean) or tok_clean in _WORD_NUMBERS_1_TO_10:
                     first_tok = tok_clean
                     break
 
-        first_digits = re.sub(r"[^\d]", "", first_tok)
+        first_digits = _RE_NON_DIGITS.sub("", first_tok)
         is_all_zero = bool(first_digits and all(c == "0" for c in first_digits))
-        has_num = not is_all_zero and (any(ch.isdigit() for ch in first_tok) or first_tok in {
-            "ONE", "TWO", "THREE", "FOUR", "FIVE", "SIX", "SEVEN", "EIGHT", "NINE", "TEN"
-        })
+        has_num = not is_all_zero and (any(ch.isdigit() for ch in first_tok) or first_tok in _WORD_NUMBERS_1_TO_10)
 
         if is_all_zero:
             footnotes.append(DPVFootnote.M3)
         elif has_num:
             footnotes.append(DPVFootnote.BB)
             # Check secondary unit presence vs necessity
-            reg_entry = lookup_corporate_registry(
-                street1=st1,
-                street2=st2,
-                city=city,
-                state=state,
-                postal_code=postal_code,
-                country="USA",
-                raw_street=raw_combined,
-            )
-            from entity_standardizer.address.offline_index import get_default_offline_index
+            if not reg_looked_up:
+                reg_entry = lookup_corporate_registry(
+                    street1=st1,
+                    street2=st2,
+                    city=city,
+                    state=state,
+                    postal_code=postal_code,
+                    country="USA",
+                    raw_street=raw_combined,
+                )
             offline_rec = get_default_offline_index().resolve_coordinates(std_address)
             is_multi_unit_hub = is_hub or (reg_entry is not None) or (offline_rec is not None and getattr(offline_rec, "is_multi_unit", False))
 

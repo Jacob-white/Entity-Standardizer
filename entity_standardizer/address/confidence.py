@@ -115,6 +115,22 @@ DUAL_ADDR_STREET_INDICATORS = [
     " PL", " PLACE", " HWY", " HIGHWAY", " RTE", " ROUTE", " RT"
 ]
 
+_RE_NON_WORD = re.compile(r"[^\w]")
+_RE_UPPER_ALNUM_WORD = re.compile(r"\b[A-Z0-9]+\b")
+_RE_NON_WORD_SPACE = re.compile(r"[^\w\s]")
+_RE_LEADING_DIGITS = re.compile(r"^\d+")
+_RE_MULTI_DIGIT_WORD = re.compile(r"\b\d{2,}\b")
+_RE_NON_DIGITS = re.compile(r"[^\d]")
+_RE_ORDINAL_THOROUGHFARE = re.compile(r"^\d+(?:ST|ND|RD|TH)$")
+
+_ALL_US_STATE_TOKENS = frozenset(US_STATES) | frozenset(US_STATES.values())
+_ALL_STREET_SUFFIX_TOKENS = frozenset(STREET_SUFFIXES) | frozenset(STREET_SUFFIXES.values())
+_ALL_DIRECTIONAL_VALUES = frozenset(DIRECTIONALS.values())
+_SPANISH_THOROUGHFARE_TOKENS = frozenset(
+    {"CALLE", "AVENIDA", "CARR", "PASEO", "CAMINO", "CALZADA", "CARRETERA", "RUTA"}
+)
+_SHORT_SUFFIX_WORDS = frozenset({"WAY", "WALK", "MALL", "LOOP", "PASS", "ROW", "RUN"})
+
 
 class ConfidenceScorer:
     """Calculates composite confidence scores and routing decisions for standardized addresses."""
@@ -239,14 +255,14 @@ class ConfidenceScorer:
                 first_tok = tokens[0] if tokens else ""
                 if first_tok in ("URB", "URB.", "URBANIZACION") and len(tokens) > 1:
                     for tok in tokens[1:]:
-                        tok_clean = re.sub(r"[^\w]", "", tok)
+                        tok_clean = _RE_NON_WORD.sub("", tok)
                         if any(ch.isdigit() for ch in tok_clean) or tok_clean in WORD_NUMBERS:
                             first_tok = tok_clean
                             break
                 has_num = any(ch.isdigit() for ch in first_tok) or first_tok.upper() in WORD_NUMBERS
                 if not has_num:
-                    st1_tokens = set(re.findall(r"\b[A-Z0-9]+\b", st1.upper()))
-                    raw_tokens = set(re.findall(r"\b[A-Z0-9]+\b", raw_combined.upper()))
+                    st1_tokens = set(_RE_UPPER_ALNUM_WORD.findall(st1.upper()))
+                    raw_tokens = set(_RE_UPPER_ALNUM_WORD.findall(raw_combined.upper()))
                     if bool((st1_tokens | raw_tokens) & LANDMARK_CAMPUS_KEYWORDS):
                         is_landmark_campus = True
                         s_parse -= 0.15
@@ -265,8 +281,8 @@ class ConfidenceScorer:
 
             # Check for typo healing (e.g. state abbreviation healed, suffix fuzzy matched)
             if raw_s1 and std_address.street1 and not has_dual_address:
-                norm_raw_s1 = re.sub(r"[^\w\s]", "", raw_s1.upper()).strip()
-                norm_std_s1 = re.sub(r"[^\w\s]", "", std_address.street1.upper()).strip()
+                norm_raw_s1 = _RE_NON_WORD_SPACE.sub("", raw_s1.upper()).strip()
+                norm_std_s1 = _RE_NON_WORD_SPACE.sub("", std_address.street1.upper()).strip()
                 if norm_raw_s1 and norm_std_s1 and norm_raw_s1 != norm_std_s1:
                     raw_words = norm_raw_s1.split()
                     std_words = norm_std_s1.split()
@@ -278,7 +294,7 @@ class ConfidenceScorer:
                         reason_codes.append(WARN_TYPO_HEALED)
         else:
             # International parse
-            if std_address.city and (re.match(r"^\d+", std_address.city.strip()) or (not std_address.postal_code and bool(re.search(r"\b\d{2,}\b", std_address.city)))):
+            if std_address.city and (_RE_LEADING_DIGITS.match(std_address.city.strip()) or (not std_address.postal_code and bool(_RE_MULTI_DIGIT_WORD.search(std_address.city)))):
                 s_parse -= 0.25
                 reason_codes.append(WARN_POSTAL_IN_CITY)
 
@@ -288,12 +304,12 @@ class ConfidenceScorer:
         s_ref = 1.0
         if std_address.is_us:
             # Check state validity
-            if std_address.state not in US_STATES.values() and std_address.state not in US_STATES:
+            if std_address.state not in _ALL_US_STATE_TOKENS:
                 s_ref -= 0.40
             # Check postal code format
-            zip_clean = re.sub(r"[^\d]", "", std_address.postal_code or "")
+            zip_clean = _RE_NON_DIGITS.sub("", std_address.postal_code or "")
             if len(zip_clean) != 5 and len(zip_clean) != 9:
-                is_valid_state = std_address.state in US_STATES.values() or std_address.state in US_STATES
+                is_valid_state = std_address.state in _ALL_US_STATE_TOKENS
                 has_city = bool(std_address.city and len(std_address.city.strip()) >= 2)
                 if is_valid_state and has_city:
                     s_ref -= 0.15
@@ -317,19 +333,18 @@ class ConfidenceScorer:
                 # 2. Well-known thoroughfares without suffixes (Broadway, Bowery, Embarcadero)
                 # 3. Thoroughfare type appears as prefix or intermediate token (Highway 101, Route 66, Avenue of the Americas)
                 is_ordinal_thoroughfare = bool(
-                    re.match(r"^\d+(?:ST|ND|RD|TH)$", last_tok)
-                    or (last_tok in DIRECTIONALS.values() and re.match(r"^\d+(?:ST|ND|RD|TH)$", prev_tok))
+                    _RE_ORDINAL_THOROUGHFARE.match(last_tok)
+                    or (last_tok in _ALL_DIRECTIONAL_VALUES and _RE_ORDINAL_THOROUGHFARE.match(prev_tok))
                 )
                 has_valid_suf = (
                     is_ordinal_thoroughfare
-                    or last_tok in STREET_SUFFIXES.values()
-                    or last_tok in STREET_SUFFIXES
-                    or (last_tok in DIRECTIONALS.values() and (prev_tok in STREET_SUFFIXES.values() or prev_tok in STREET_SUFFIXES))
+                    or last_tok in _ALL_STREET_SUFFIX_TOKENS
+                    or (last_tok in _ALL_DIRECTIONAL_VALUES and prev_tok in _ALL_STREET_SUFFIX_TOKENS)
                     or any(name in st1 for name in PROPER_THOROUGHFARES_NO_SUFFIX)
-                    or any(t in STREET_SUFFIXES.values() or t in STREET_SUFFIXES for t in st1_tokens[1:])
-                    or any(t in ["WAY", "WALK", "MALL", "LOOP", "PASS", "ROW", "RUN"] for t in st1_tokens)
+                    or any(t in _ALL_STREET_SUFFIX_TOKENS for t in st1_tokens[1:])
+                    or any(t in _SHORT_SUFFIX_WORDS for t in st1_tokens)
                     or any(t in LANDMARK_CAMPUS_KEYWORDS for t in st1_tokens)
-                    or any(t in {"CALLE", "AVENIDA", "CARR", "PASEO", "CAMINO", "CALZADA", "CARRETERA", "RUTA"} for t in st1_tokens)
+                    or any(t in _SPANISH_THOROUGHFARE_TOKENS for t in st1_tokens)
                 )
                 if not has_valid_suf:
                     s_ref -= 0.20
@@ -374,7 +389,7 @@ class ConfidenceScorer:
             if std_address.city and (any(ch.isdigit() for ch in std_address.city) or std_address.city.strip().upper() in _BARE_DIRECTIONALS):
                 s_geo = max(0.0, s_geo - 0.30)
         else:
-            if std_address.city and (re.match(r"^\d+", std_address.city.strip()) or (not std_address.postal_code and bool(re.search(r"\b\d{2,}\b", std_address.city)))):
+            if std_address.city and (_RE_LEADING_DIGITS.match(std_address.city.strip()) or (not std_address.postal_code and bool(_RE_MULTI_DIGIT_WORD.search(std_address.city)))):
                 s_geo = 0.50
             else:
                 s_geo = 0.90 if std_address.city and std_address.country else 0.60
@@ -416,7 +431,7 @@ class ConfidenceScorer:
             else:
                 s_cross = 0.80
         else:
-            if std_address.city and (re.match(r"^\d+", std_address.city.strip()) or (not std_address.postal_code and bool(re.search(r"\b\d{2,}\b", std_address.city)))):
+            if std_address.city and (_RE_LEADING_DIGITS.match(std_address.city.strip()) or (not std_address.postal_code and bool(_RE_MULTI_DIGIT_WORD.search(std_address.city)))):
                 s_cross = 0.50
             else:
                 s_cross = 1.0
@@ -631,7 +646,7 @@ def compute_field_confidence(
     state = (getattr(std_address, "state", "") or "").strip()
     if not state:
         st = 0.0 if is_us else 1.0  # outside the US a missing state is normal for most countries
-    elif is_us and state not in US_STATES.values() and state not in US_STATES:
+    elif is_us and state not in _ALL_US_STATE_TOKENS:
         st = 0.20
     elif has("state", "state_corrected_from_zip"):
         st = 0.80

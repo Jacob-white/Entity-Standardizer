@@ -25,9 +25,14 @@ from entity_standardizer.address._patterns import (
     RE_UK_POSTCODE,
     RE_CAN_POSTCODE,
     FROZEN_US_STATE_CODES,
+    _drop_from_first_numeric_token,
 )
+from entity_standardizer.address.international.countries import CountryRegistry
 
 logger = logging.getLogger(__name__)
+
+_RE_LEADING_DIGITS_SPACE = re.compile(r"^\d+\s+")
+_ALL_STREET_SUFFIX_TOKENS = frozenset(STREET_SUFFIXES) | frozenset(STREET_SUFFIXES.values())
 
 
 def num_to_ordinal(n: int) -> str:
@@ -71,18 +76,6 @@ _COUNTRY_PLACEHOLDERS = frozenset(
 # A bare "NA" is Namibia's ISO code and is deliberately not a placeholder.
 
 
-def _drop_from_first_numeric_token(text: str) -> str:
-    """"LEEDS 4 EXTRA" -> "LEEDS": everything from the first digit-initial word (after the first word) onwards is dropped.
-
-    Linear-time replacement for the regex ``\\s+\\d+.*$``, which backtracks quadratically on long whitespace runs.
-    """
-    words = text.split()
-    for i, word in enumerate(words):
-        if i > 0 and word[:1].isdigit():
-            return " ".join(words[:i])
-    return text.strip()
-
-
 _RE_CROWN_POSTCODE = re.compile(r"\b(JE|GY|IM)\d[A-Z0-9]?\s*\d[A-Z]{2}\b")
 _CROWN_PREFIX_ISO = {"JE": "JEY", "GY": "GGY", "IM": "IMN"}
 _CROWN_NAME_ISO = {"JERSEY": "JEY", "GUERNSEY": "GGY", "ISLE OF MAN": "IMN"}
@@ -118,8 +111,6 @@ def normalize_country_code(
         elif len(c_clean_alphanumeric) == 3 and c_clean_alphanumeric.isascii() and c_clean_alphanumeric.isalpha():
             country_cand = c_clean_alphanumeric
         else:
-            from entity_standardizer.address.international.countries import CountryRegistry
-
             info = CountryRegistry.get(country_raw)
             if info:
                 country_cand = info.alpha3
@@ -156,7 +147,7 @@ def normalize_country_code(
         c_no_num = _drop_from_first_numeric_token(c_clean)
         if c_no_num and c_no_num != c_clean:
             candidates.append(c_no_num)
-        c_no_lead = re.sub(r"^\d+\s+", "", c_clean).strip()
+        c_no_lead = _RE_LEADING_DIGITS_SPACE.sub("", c_clean).strip()
         if c_no_lead and c_no_lead != c_clean:
             candidates.append(c_no_lead)
         if "," in city_raw:
@@ -231,8 +222,6 @@ def normalize_country_code(
         if len(raw_parts) >= 2:
             trailing = raw_parts[-1].strip()
             if 3 <= len(trailing) <= 40 and not any(ch.isdigit() for ch in trailing):
-                from entity_standardizer.address.international.countries import CountryRegistry
-
                 info = CountryRegistry.get(trailing)
                 if info is not None and info.alpha3 != "USA":
                     return info.alpha3
@@ -244,7 +233,7 @@ def normalize_country_code(
             p_alphanumeric = RE_NON_ALPHANUMERIC.sub("", part).strip().upper()
             if p_alphanumeric in FROZEN_US_STATE_CODES or p_alphanumeric.isdigit():
                 continue
-            if p_alphanumeric in STREET_SUFFIXES or p_alphanumeric in STREET_SUFFIXES.values():
+            if p_alphanumeric in _ALL_STREET_SUFFIX_TOKENS:
                 continue
             if p_clean in _COUNTRY_NAME_MAP and _COUNTRY_NAME_MAP[p_clean] != "USA":
                 return _COUNTRY_NAME_MAP[p_clean]
@@ -260,8 +249,7 @@ def normalize_country_code(
             if (
                 (len(raw_words[-1]) > 2 or raw_words[-1] not in FROZEN_US_STATE_CODES)
                 and not raw_words[-1].isdigit()
-                and raw_words[-1] not in STREET_SUFFIXES
-                and raw_words[-1] not in STREET_SUFFIXES.values()
+                and raw_words[-1] not in _ALL_STREET_SUFFIX_TOKENS
             ):
                 return _COUNTRY_NAME_MAP[raw_words[-1]]
         elif len(raw_words) >= 2 and raw_words[-1].isdigit():
@@ -270,8 +258,7 @@ def normalize_country_code(
                 prev_w in _COUNTRY_NAME_MAP
                 and _COUNTRY_NAME_MAP[prev_w] != "USA"
                 and (len(prev_w) > 2 or prev_w not in FROZEN_US_STATE_CODES)
-                and prev_w not in STREET_SUFFIXES
-                and prev_w not in STREET_SUFFIXES.values()
+                and prev_w not in _ALL_STREET_SUFFIX_TOKENS
             ):
                 return _COUNTRY_NAME_MAP[prev_w]
 
@@ -293,7 +280,7 @@ def normalize_country_code(
                     return GLOBAL_METRO_TO_COUNTRY[p_no_num]
                 if p_no_num in _COUNTRY_NAME_MAP and _COUNTRY_NAME_MAP[p_no_num] != "USA":
                     return _COUNTRY_NAME_MAP[p_no_num]
-            p_no_lead = re.sub(r"^\d+\s+", "", p_clean).strip()
+            p_no_lead = _RE_LEADING_DIGITS_SPACE.sub("", p_clean).strip()
             if p_no_lead and p_no_lead != p_clean:
                 if p_no_lead in GLOBAL_METRO_TO_COUNTRY:
                     return GLOBAL_METRO_TO_COUNTRY[p_no_lead]

@@ -14,7 +14,9 @@ import multiprocessing
 import os
 from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple, Union
 
+from entity_standardizer.address._inputs import CORRECT_STATE_ENV
 from entity_standardizer.address._native_dispatch import standardize_batch_dispatch
+from entity_standardizer.address.audit import StewardshipAuditRecord, get_audit_ledger
 from entity_standardizer.address.geocoder import CensusGeocoder
 from entity_standardizer.address.models import StandardizedAddress
 from entity_standardizer.address.standardizer import standardize_address
@@ -371,7 +373,6 @@ def _with_zip_state_option(func):
     setting that variable for the duration of the call (workers are started inside the call and inherit it) and
     restoring it afterwards. ``None`` leaves the ambient setting alone.
     """
-    from entity_standardizer.address._inputs import CORRECT_STATE_ENV
 
     @functools.wraps(func)
     def wrapper(*args, correct_state_from_zip: Optional[bool] = None, **kwargs):
@@ -473,9 +474,6 @@ def stream_standardize_csv(
     Strictly enforces resource throttling rules: max_workers is capped at 2.
     Returns total number of rows processed.
     """
-    import json
-    from entity_standardizer.address.audit import get_audit_ledger, StewardshipAuditRecord
-
     if mapping:
         street_col, street2_col, city_col, state_col, zip_col, country_col = resolve_column_mappings(
             mapping, street_col, street2_col, city_col, state_col, zip_col, country_col
@@ -674,8 +672,6 @@ def stream_standardize_jsonl(
     Strictly enforces resource throttling rules: max_workers is capped at 2.
     Returns total number of rows processed.
     """
-    from entity_standardizer.address.audit import get_audit_ledger, StewardshipAuditRecord
-
     if mapping:
         street_col, street2_col, city_col, state_col, zip_col, country_col = resolve_column_mappings(
             mapping, street_col, street2_col, city_col, state_col, zip_col, country_col
@@ -862,8 +858,6 @@ def stream_standardize_json(
     JSON array cannot be parsed incrementally with the standard library; use JSONL for very large inputs.
     Returns total number of rows processed.
     """
-    from entity_standardizer.address.audit import get_audit_ledger, StewardshipAuditRecord
-
     if mapping:
         street_col, street2_col, city_col, state_col, zip_col, country_col = resolve_column_mappings(
             mapping, street_col, street2_col, city_col, state_col, zip_col, country_col

@@ -5,7 +5,8 @@ import os
 import re
 from typing import Any, Optional, Tuple
 
-from entity_standardizer.address._patterns import RE_PRIVATE_RESIDENCE
+from entity_standardizer.address._patterns import FROZEN_US_STATE_CODES, RE_PRIVATE_RESIDENCE
+from entity_standardizer.address.international.scripts import strip_zero_width
 from entity_standardizer.address.tables import US_STATES, ZIP3_TO_STATE
 
 # No real address line is anywhere near this long; longer inputs would only feed quadratic regexes and parsers.
@@ -33,8 +34,6 @@ def coerce_text(value: Any) -> str:
         text.encode("utf-8")
     except UnicodeEncodeError:  # lone surrogates (e.g. from JSON "\ud800") cannot be stored or logged
         text = text.encode("utf-8", errors="replace").decode("utf-8")
-    from entity_standardizer.address.international.scripts import strip_zero_width
-
     return strip_zero_width(text)
 
 
@@ -99,6 +98,6 @@ def correct_state_from_zip(
         return state, None
     raw = state.strip().upper().replace(".", "")
     current = US_STATES.get(raw, raw)
-    if current not in set(US_STATES.values()) or current == expected:
+    if current not in FROZEN_US_STATE_CODES or current == expected:
         return state, None
     return expected, state

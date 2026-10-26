@@ -19,12 +19,15 @@ from entity_standardizer.address._patterns import (
     RE_UK_POSTCODE,
     RE_WHITESPACE,
     FROZEN_US_STATE_CODES,
+    _drop_from_first_numeric_token,
 )
+from entity_standardizer.address.international.countries import CountryRegistry
 from entity_standardizer.address.international.gazetteer import known_city_suffix_length
 from entity_standardizer.address.international.diacritics import (
     fold_to_ascii_key,
     normalize_to_canonical_unicode,
 )
+from entity_standardizer.address.international.postal import extract_postal_code
 from entity_standardizer.address.tables import (
     CANADIAN_PROVINCES,
     COUNTRY_MAP,
@@ -44,9 +47,6 @@ def split_single_line_locality(text: str, country_iso: str) -> Optional[Tuple[st
     Used as a fallback when a country grammar returned neither a city nor a postal code for a single-line address.
     Returns None when no postal code or locality can be identified.
     """
-    from entity_standardizer.address.international.countries import CountryRegistry
-    from entity_standardizer.address.international.postal import extract_postal_code
-
     parts = [p.strip() for p in (text or "").split(",") if p.strip()]
     if len(parts) >= 2:
         info = CountryRegistry.get(parts[-1]) if not any(ch.isdigit() for ch in parts[-1]) else None
@@ -91,32 +91,36 @@ _ARG_COUNTRIES = ("ARG", "AR", "ARGENTINA")
 _PRT_COUNTRIES = ("PRT", "PT", "PORTUGAL")
 _RE_ARG_CPA_WORD = re.compile(r"[A-Za-z]\d{4}(?:[A-Za-z]{3})?")
 _RE_NUMBER_WORD = re.compile(r"\d+[A-Za-z]?")
+_RE_PRT_POSTAL_RUN = re.compile(r"\d{4} \d{3}")
+_RE_IND_PIN_RUN = re.compile(r"[1-9]\d{2} \d{3}")
+_RE_FOUR_DIGITS = re.compile(r"\d{4}")
+_RE_THREE_DIGITS = re.compile(r"\d{3}")
+_RE_NON_ALNUM_CHAR = re.compile(r"[\W_]")
+_RE_ANY_LETTER = re.compile(r"[^\W\d_]")
 _IND_COUNTRIES = ("IND", "IN", "INDIA")
 
 
 def _postal_run(run: str, country_iso: str, prev: str = "", nxt: str = "") -> Optional[str]:
     """Postal code recognised in a short word run: the country's pattern, plus Portugal's space-separated "1150 011",
     Argentina's "X5000" CPA and the bare four-digit Argentine/Portuguese codes (only right after a house number)."""
-    from entity_standardizer.address.international.postal import extract_postal_code
-
-    if country_iso in _PRT_COUNTRIES and re.fullmatch(r"\d{4} \d{3}", run):
+    if country_iso in _PRT_COUNTRIES and _RE_PRT_POSTAL_RUN.fullmatch(run):
         return run
-    if country_iso in _IND_COUNTRIES and re.fullmatch(r"[1-9]\d{2} \d{3}", run):  # PIN written "560 001"
+    if country_iso in _IND_COUNTRIES and _RE_IND_PIN_RUN.fullmatch(run):  # PIN written "560 001"
         return run
     found = extract_postal_code(run, country_iso)
     if found:
         return found
     if country_iso in _ARG_COUNTRIES and _RE_ARG_CPA_WORD.fullmatch(run):
         return run
-    if country_iso in _ARG_COUNTRIES + _PRT_COUNTRIES and re.fullmatch(r"\d{4}", run) and (
-        _RE_NUMBER_WORD.fullmatch(prev) and not re.fullmatch(r"\d{3}", nxt)  # ("1150 011" is one postal code)
+    if country_iso in _ARG_COUNTRIES + _PRT_COUNTRIES and _RE_FOUR_DIGITS.fullmatch(run) and (
+        _RE_NUMBER_WORD.fullmatch(prev) and not _RE_THREE_DIGITS.fullmatch(nxt)  # ("1150 011" is one postal code)
     ):
         return run
     return None
 
 
 def _squash(value: str) -> str:
-    return re.sub(r"[\W_]", "", value).upper()
+    return _RE_NON_ALNUM_CHAR.sub("", value).upper()
 
 
 _RE_HOUSE_NUMBER_WORD = re.compile(r"^\d+[A-Za-z]?(?:[/-](?:\d+[A-Za-z]?|[A-Za-z]))?$")
@@ -138,7 +142,7 @@ def _split_trailing_postal_locality(words: List[str], country_iso: str) -> Optio
         # ("83 Tilok Utis 2 road ...": a street-type word right after the number means the number is part of the name)
         if RE_NON_ALPHANUMERIC.sub("", city_words[0]).upper() in _SUFFIX_TYPE_WORDS:
             continue
-        if city_words[0].upper() in _LOCALITY_CONNECTORS or not re.search(r"[^\W\d_]", " ".join(rest[:numbers[-1]])):
+        if city_words[0].upper() in _LOCALITY_CONNECTORS or not _RE_ANY_LETTER.search(" ".join(rest[:numbers[-1]])):
             continue
         return " ".join(rest[:numbers[-1] + 1]), " ".join(city_words), " ".join(run)
     return None
@@ -228,7 +232,7 @@ def _split_postal_first(words: List[str], country_iso: str) -> Optional[Tuple[st
     if (
         _is_city_word(city)
         and _RE_HOUSE_NUMBER_WORD.match(street[-1])
-        and re.search(r"[^\W\d_]", " ".join(street[:-1]))
+        and _RE_ANY_LETTER.search(" ".join(street[:-1]))
     ):
         return " ".join(street), city, " ".join(run)
     return None
@@ -243,7 +247,7 @@ def _split_known_city_postal_last(words: List[str], country_iso: str) -> Optiona
     rest, run = ends
     count = known_city_suffix_length(country_iso, rest)
     street = rest[:-count] if count else []
-    if not street or not re.search(r"[^\W\d_]", " ".join(street)):
+    if not street or not _RE_ANY_LETTER.search(" ".join(street)):
         return None
     if street[-1] in _PREFIX_TYPE_WORDS or street[-1] in _THAI_PREFIX_TYPES or street[-1].upper() in _LATIN_PREFIX_TYPES:
         return None  # "10 Soi Pattaya": a bare type word means the "city" is really the street's name
@@ -280,7 +284,7 @@ def split_commaless_locality(text: str, country_iso: str) -> Optional[Tuple[str,
             if not pc or _squash(pc) != _squash("".join(run)):
                 continue
             street = " ".join(words[:start])
-            if re.search(r"[^\W\d_]", street) and re.search(r"[^\W\d_]", " ".join(locality)):
+            if _RE_ANY_LETTER.search(street) and _RE_ANY_LETTER.search(" ".join(locality)):
                 return street, " ".join(locality), " ".join(run)
     return _split_number_first_postal_last(words, country_iso) or _split_postal_first(words, country_iso)
 
@@ -335,6 +339,22 @@ def may_abbreviate_street_type(clean_word: str, idx: int, type_indices: Set[int]
 
 
 _LEADING_STREET_TYPES = frozenset({"AV", "AVE", "AVENUE", "AVDA", "AVENIDA", "AVN", "BLVD", "BOULEVARD", "BLV"})
+_RE_INTL_FLOOR_PREFIX = re.compile(r"^([B]?\d+)F\b\s+(.*)$", re.IGNORECASE)
+_RE_INTL_BLDG_INDICATOR = re.compile(
+    r"^\d|\b(?:BLDG|BUILDING|TOWER|MANSION|CTR|CENTER|PLAZA|HALL|CORP|ANNEX|WING|BLK|BLOCK)\b",
+    re.IGNORECASE,
+)
+_RE_INTL_ORD_FLOOR = re.compile(
+    r"^(\d+(?:ST|ND|RD|TH)|\d+)\s+(?:FLOOR|FL|FLR)\b(?:\s+(WEST|EAST|NORTH|SOUTH))?(?:[,\s]+(.*))?$",
+    re.IGNORECASE,
+)
+_RE_UNIV_NUM_STREET = re.compile(r"^(\d+[A-Za-z0-9\-\/]*)\s+(.*)$")
+_RE_DUTCH_LN_SUFFIX = re.compile(r"(?<=[A-Za-zÄÖÜäöüËëÏï])[Ll]n\.(?=[\s,0-9]|$)")
+_RE_DUTCH_LN_WORD = re.compile(r"(?<![\w])[Ll]n\.(?=[\s,0-9]|$)")
+_RE_DUTCH_STR_SUFFIX = re.compile(r"(?<=[A-Za-zÄÖÜäöüËëÏï])[Ss]tr\.(?=[\s,0-9]|$)")
+_RE_UNIV_PC_CITY = re.compile(r"^(\d{3,6})\s+([^\d].*)$")
+_RE_HUN_PC_CITY = re.compile(r"^(\d{4})\s+([A-Za-zÀ-ÿ].*)$")
+_RE_LEADING_DIGITS_SPACE = re.compile(r"^\d+\s+")
 
 
 def split_intl_secondary_unit(street1: str, street2: str, *, native_types: bool = False) -> Tuple[str, str]:
@@ -362,14 +382,14 @@ def split_intl_secondary_unit(street1: str, street2: str, *, native_types: bool 
         st2 = f"{st2_cand} {st2}".strip() if st2 else st2_cand
 
     # Pre-split leading Asian/International floor numbers: "8F SHIN-OTEMACHI BLDG" -> st1="SHIN-OTEMACHI BLDG", st2="FL 8"
-    m_floor = re.match(r"^([B]?\d+)F\b\s+(.*)$", st1, re.IGNORECASE)
-    if m_floor and re.search(r"^\d|\b(?:BLDG|BUILDING|TOWER|MANSION|CTR|CENTER|PLAZA|HALL|CORP|ANNEX|WING|BLK|BLOCK)\b", m_floor.group(2), re.IGNORECASE):
+    m_floor = _RE_INTL_FLOOR_PREFIX.match(st1)
+    if m_floor and _RE_INTL_BLDG_INDICATOR.search(m_floor.group(2)):
         st2_cand = f"FL {m_floor.group(1).upper()}"
         st2 = f"{st2_cand} {st2}".strip() if st2 else st2_cand
         st1 = m_floor.group(2).strip()
 
     # Pre-split leading ordinal floor numbers: "9TH FLOOR WEST" -> st1="", st2="FL 9TH WEST"
-    m_ord_floor = re.match(r"^(\d+(?:ST|ND|RD|TH)|\d+)\s+(?:FLOOR|FL|FLR)\b(?:\s+(WEST|EAST|NORTH|SOUTH))?(?:[,\s]+(.*))?$", st1, re.IGNORECASE)
+    m_ord_floor = _RE_INTL_ORD_FLOOR.match(st1)
     if m_ord_floor:
         fl_num = m_ord_floor.group(1).upper()
         wing = f" {m_ord_floor.group(2).upper()}" if m_ord_floor.group(2) else ""
@@ -590,7 +610,7 @@ class UniversalInternationalGrammar(CountryGrammar):
     ) -> Tuple[Optional[str], Optional[str], Optional[str]]:
         if not street_line:
             return None, None, None
-        m = re.match(r"^(\d+[A-Za-z0-9\-\/]*)\s+(.*)$", street_line.strip())
+        m = _RE_UNIV_NUM_STREET.match(street_line.strip())
         if m:
             return None, m.group(1), m.group(2)
         return None, None, street_line.strip()
@@ -604,9 +624,9 @@ class UniversalInternationalGrammar(CountryGrammar):
         country_iso = metadata.get("country", self.country_iso3)
 
         if country_iso in ("BEL", "NLD") and s1_raw:
-            s1_raw = re.sub(r"(?<=[A-Za-zÄÖÜäöüËëÏï])[Ll]n\.(?=[\s,0-9]|$)", "laan", s1_raw)
-            s1_raw = re.sub(r"(?<![\w])[Ll]n\.(?=[\s,0-9]|$)", "LAAN", s1_raw)
-            s1_raw = re.sub(r"(?<=[A-Za-zÄÖÜäöüËëÏï])[Ss]tr\.(?=[\s,0-9]|$)", "straat", s1_raw)
+            s1_raw = _RE_DUTCH_LN_SUFFIX.sub("laan", s1_raw)
+            s1_raw = _RE_DUTCH_LN_WORD.sub("LAAN", s1_raw)
+            s1_raw = _RE_DUTCH_STR_SUFFIX.sub("straat", s1_raw)
 
         norm_s1 = ""
         norm_s2 = ""
@@ -623,7 +643,6 @@ class UniversalInternationalGrammar(CountryGrammar):
                 parts_comma = parts_comma[:-1]
 
             if len(parts_comma) >= 3:
-                from entity_standardizer.address.international.countries import CountryRegistry
                 has_pc = CountryRegistry.has_postal_codes(country_iso)
                 if RE_PO_BOX.search(parts_comma[1]):
                     norm_s1 = parts_comma[0].upper()
@@ -650,7 +669,7 @@ class UniversalInternationalGrammar(CountryGrammar):
                     norm_s1_base, norm_s2_base = split_intl_secondary_unit(parts_comma[0], "")
                     norm_s1 = norm_s1_base
                     norm_s2 = norm_s2_base
-                    m_pc = re.match(r"^(\d{3,6})\s+([^\d].*)$", parts_comma[1])
+                    m_pc = _RE_UNIV_PC_CITY.match(parts_comma[1])
                     if m_pc and not postal_raw:
                         postal_raw = m_pc.group(1)
                         city_raw = m_pc.group(2)
@@ -680,7 +699,7 @@ class UniversalInternationalGrammar(CountryGrammar):
                     postal_raw = parts_comma[1]
                     norm_s1 = ""
                 else:
-                    m_pc_city = re.match(r"^(\d{4})\s+([A-Za-zÀ-ÿ].*)$", parts_comma[0])
+                    m_pc_city = _RE_HUN_PC_CITY.match(parts_comma[0])
                     if m_pc_city and country_iso == "HUN":
                         postal_raw = m_pc_city.group(1)
                         city_raw = m_pc_city.group(2)
@@ -820,10 +839,10 @@ class CountryGrammarRegistry:
             c_clean = RE_NON_ALPHANUMERIC.sub(" ", city_raw).strip().upper()
             c_clean = " ".join(c_clean.split())
             candidates = [c_clean]
-            c_no_num = re.sub(r"\s+\d+.*$", "", c_clean).strip()
+            c_no_num = _drop_from_first_numeric_token(c_clean)
             if c_no_num and c_no_num != c_clean:
                 candidates.append(c_no_num)
-            c_no_lead = re.sub(r"^\d+\s+", "", c_clean).strip()
+            c_no_lead = _RE_LEADING_DIGITS_SPACE.sub("", c_clean).strip()
             if c_no_lead and c_no_lead != c_clean:
                 candidates.append(c_no_lead)
             if "," in city_raw:

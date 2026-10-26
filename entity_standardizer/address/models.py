@@ -4,6 +4,10 @@ from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, List
 import re
 
+_RE_PO_BOX_POST_INIT = re.compile(r"\b(?:P\.?\s*O\.?\s*BOX|POB|POST\s+OFFICE\s+BOX|APO|FPO|DPO)\b")
+_RE_DUAL_PHYSICAL_START = re.compile(r"^(?:\d+|PR-|CARR-|KM\b)")
+_RE_HOUSE_NUMBER_PREFIX = re.compile(r"^(\d+[A-Z]?(?:-\d+)?)\b")
+
 
 @dataclass(slots=True)
 class SpatialResolutionResult:
@@ -94,11 +98,10 @@ class StandardizedAddress:
     rooftop_address: Optional[str] = None
 
     def __post_init__(self):
-        has_po = bool(re.search(
-            r"\b(?:P\.?\s*O\.?\s*BOX|POB|POST\s+OFFICE\s+BOX|APO|FPO|DPO)\b",
+        has_po = bool(_RE_PO_BOX_POST_INIT.search(
             f"{self.street1} {self.street2} {self.raw_street_address}".upper()
         ))
-        is_dual_physical = has_po and bool(self.street1 and re.match(r"^(?:\d+|PR-|CARR-|KM\b)", self.street1))
+        is_dual_physical = has_po and bool(self.street1 and _RE_DUAL_PHYSICAL_START.match(self.street1))
         if self.is_private_residence or (has_po and not is_dual_physical) or self.address_status in ("locality_only", "city_level", "parse_failed"):
             self.rooftop_address = None
         elif getattr(self, "rooftop_address", None) is None:
@@ -561,7 +564,7 @@ class StandardizedAddress:
 
     @property
     def house_number(self) -> Optional[str]:
-        m = re.match(r"^(\d+[A-Z]?(?:-\d+)?)\b", (self.street1 or "").strip())
+        m = _RE_HOUSE_NUMBER_PREFIX.match((self.street1 or "").strip())
         return m.group(1) if m else None
 
     def to_dict(self) -> Dict[str, Any]:
