@@ -83,6 +83,9 @@ def test_native_dispatch_fatal_and_fallback_branches(monkeypatch: pytest.MonkeyP
         def get_capabilities() -> dict[str, Any]:
             return {"engine": "Rust_PyO3", "native_functions": ["compute_soundex"]}
 
+    monkeypatch.setattr(_native_dispatch, "_NATIVE_MODULE", _native_dispatch._NATIVE_MODULE)
+    monkeypatch.setattr(_native_dispatch, "_NATIVE_AVAILABLE", _native_dispatch._NATIVE_AVAILABLE)
+    monkeypatch.setattr(_native_dispatch, "_FORCE_PURE_PYTHON", _native_dispatch._FORCE_PURE_PYTHON)
     monkeypatch.delenv("ENTITY_STANDARDIZER_FORCE_PURE", raising=False)
     monkeypatch.delenv("ADDRESS_STANDARDIZER_FORCE_PURE", raising=False)
     monkeypatch.setitem(sys.modules, "_entity_standardizer_rs", _GoodModule)  # type: ignore[arg-type]
@@ -116,9 +119,6 @@ def test_native_dispatch_fatal_and_fallback_branches(monkeypatch: pytest.MonkeyP
     monkeypatch.setattr(_native_dispatch, "_NATIVE_MODULE", _FatalModule)
     with pytest.raises(KeyboardInterrupt):
         _native_dispatch._native_function_names()
-
-    monkeypatch.delitem(sys.modules, "_entity_standardizer_rs", raising=False)
-    _native_dispatch._init_native()
 
 
 def test_patterns_two_word_alpha_and_plural_intersection() -> None:
@@ -154,6 +154,7 @@ def test_audit_ledger_edge_branches() -> None:
     logged = ledger.record_standardized_address(std, conf)
     assert logged.action_type == audit_mod.ActionType.AUTO_HEAL
     assert logged.review_status == audit_mod.ReviewStatus.APPROVED
+    ledger.close()
 
 
 def test_batch_mapping_and_cleanup_branches(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -535,6 +536,7 @@ def test_offline_index_phonetics_reference_registry_spatial(tmp_path: Path, monk
     assert prov._loaded is True
 
     # Registry memo eviction and international/CMRA branches
+    registry_mod._LOOKUP_MEMO.clear()
     monkeypatch.setattr(registry_mod, "_LOOKUP_MEMO_MAX", 1)
     registry_mod.lookup_corporate_registry("1209 Orange St", city="Wilmington", state="DE", postal_code="19801")
     assert (
