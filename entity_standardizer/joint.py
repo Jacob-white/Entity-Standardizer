@@ -618,7 +618,7 @@ def standardize_contact(
             m_s1 = _EMBEDDED_PHONE_LABEL_RE.search(eff_s1) if eff_s1 else None
             probe_addr = (
                 standardize_address(
-                    street1=eff_s1[: m_s1.start()].strip(" ,;|/-"),
+                    street1=eff_s1[: m_s1.start()].strip(" ,;|/-") if eff_s1 else None,
                     street2=eff_s2,
                     city=city,
                     state=state,
