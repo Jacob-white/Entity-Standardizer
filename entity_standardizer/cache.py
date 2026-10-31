@@ -93,18 +93,22 @@ class SQLiteCache:
         self._conn = self._open_conn()
         self._closed = False
 
-    def _open_conn(self) -> sqlite3.Connection:
-        conn = sqlite3.connect(self.db_path, check_same_thread=False)
-        conn.execute("PRAGMA journal_mode=WAL")
+    def _create_tables(self, conn: sqlite3.Connection) -> None:
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS phone_cache (
+                -- Cache for StandardizedPhone records
                 cache_key TEXT PRIMARY KEY,
                 payload_json TEXT NOT NULL
             )
             """
         )
         conn.commit()
+
+    def _open_conn(self) -> sqlite3.Connection:
+        conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        conn.execute("PRAGMA journal_mode=WAL")
+        self._create_tables(conn)
         return conn
 
     def _get_conn(self) -> sqlite3.Connection:
@@ -264,5 +268,3 @@ def get_cache_stats() -> dict[str, Any]:
             "overall_hit_rate": 0.0,
         }
     return stats
-
-
