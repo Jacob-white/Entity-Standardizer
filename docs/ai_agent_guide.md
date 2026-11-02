@@ -105,4 +105,4 @@ flowchart TD
 4. **Registered Agent & CMRA Address Hubs**:
    - When `address.is_registered_agent_hub` or `address.cmra` is `True` (e.g., `1209 Orange St, Wilmington, DE`), **never** merge two unrelated companies solely because they share `normalized_address_key`. Both `cluster_contact_records()` and `compare_contacts()` enforce this invariant automatically.
 5. **Caching Architecture & Persistence**:
-   - The engine utilizes a two-tier caching architecture (`L1 LRU` + `L2 SQLite WAL`). Table schemas include semantic comments (`-- Cache for StandardizedPhone records`) to ease manual inspection.
+   - The engine utilizes a two-tier caching architecture (`L1 LRU` + `L2 SQLite WAL`). Table schemas include semantic comments (`-- Cache for StandardizedPhone records`, `-- Cache for StandardizedAddress records`, etc.) to ease manual inspection.
