@@ -68,10 +68,14 @@ class PhoneStewardshipLedger:
         self._closed = True
         self._conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self._closed = False
+        self._create_tables(self._conn)
+
+    def _create_tables(self, conn: sqlite3.Connection) -> None:
         with self._lock:
-            self._conn.execute(
+            conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS phone_stewardship_ledger (
+                    -- Audit ledger for tracking and resolving low-confidence phone records
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     raw_input TEXT NOT NULL,
                     e164 TEXT,
@@ -85,7 +89,7 @@ class PhoneStewardshipLedger:
                 )
                 """
             )
-            self._conn.commit()
+            conn.commit()
 
     def record_if_flagged(self, phone: StandardizedPhone) -> int | None:
         """Log a StandardizedPhone record to the ledger if its routing tier is not AUTO_PASS."""

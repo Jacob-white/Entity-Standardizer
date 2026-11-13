@@ -174,6 +174,7 @@ class SQLiteCache:
             self._conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS l2_address_cache (
+                    -- Cache for StandardizedAddress records
                     cache_key TEXT PRIMARY KEY,
                     payload TEXT NOT NULL,
                     created_at REAL NOT NULL DEFAULT (strftime('%s', 'now'))
