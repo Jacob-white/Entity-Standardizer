@@ -216,6 +216,7 @@ def explain_and_score_entities(
     crd_b: str | None = None,
     member_roster_a: Iterable[str] | None = None,
     member_roster_b: Iterable[str] | None = None,
+    switchboard_phones: Iterable[str] | None = None,
     match_threshold: float = 0.70,
     potential_threshold: float = 0.50,
 ) -> ScoredEntityMatch:
@@ -270,10 +271,13 @@ def explain_and_score_entities(
                 )
             )
         else:
+            w_p_conflict = (
+                0.28 if (len(ca.person.first_name) >= 2 and len(cb.person.first_name) >= 2) else 0.12
+            )
             ev.append(
                 SignalEvidence(
                     "PERSON_NAME",
-                    0.12,
+                    w_p_conflict,
                     f"person name differs ('{ca.person.full_name}' vs '{cb.person.full_name}')",
                     is_conflict=True,
                 )
@@ -378,12 +382,21 @@ def explain_and_score_entities(
                     )
                 )
 
-    # 5. Phone (with Toll-Free Guard) & Fax
+    # 5. Phone (with Toll-Free & Shared Local Switchboard Guards) & Fax
+    switchboard_set = frozenset(switchboard_phones) if switchboard_phones else frozenset()
     if ca.phone.is_valid and cb.phone.is_valid:
         ph_cmp = compare_phones(ca.phone, cb.phone)
         if ph_cmp.is_exact_match or ph_cmp.is_extension_variant:
             if ca.phone.is_toll_free or cb.phone.is_toll_free:
                 ev.append(SignalEvidence("TOLL_FREE_PHONE", 0.10, f"shared toll-free phone ({ca.phone.e164})"))
+            elif ca.phone.e164 in switchboard_set or cb.phone.e164 in switchboard_set:
+                ev.append(
+                    SignalEvidence(
+                        "SHARED_BRANCH_SWITCHBOARD",
+                        0.10,
+                        f"shared branch switchboard phone ({ca.phone.e164})",
+                    )
+                )
             else:
                 ev.append(SignalEvidence("DIRECT_PHONE", 0.38, f"matching local phone ({ca.phone.e164})"))
         else:
