@@ -271,9 +271,12 @@ def explain_and_score_entities(
                 )
             )
         else:
-            w_p_conflict = (
-                0.28 if (len(ca.person.first_name) >= 2 and len(cb.person.first_name) >= 2) else 0.12
-            )
+            if len(ca.person.first_name) >= 2 and len(cb.person.first_name) >= 2:
+                w_p_conflict = 0.28
+            elif ca.person.first_name[0] != cb.person.first_name[0]:
+                w_p_conflict = 0.22
+            else:
+                w_p_conflict = 0.12
             ev.append(
                 SignalEvidence(
                     "PERSON_NAME",

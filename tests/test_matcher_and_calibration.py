@@ -18,6 +18,7 @@ from entity_standardizer import (
     evaluate_scoring_calibration,
     explain_and_score_entities,
     get_registry_snapshot,
+    is_synthetic_or_test_record,
     load_registry_overrides,
     recommend_threshold_adjustments,
     register_brand_lineage_overrides,
@@ -281,12 +282,21 @@ def test_switchboard_guard_and_conflicting_first_name_scoring() -> None:
     assert coworker_res.disposition == MatchDisposition.NO_MATCH.value
     assert "SHARED_BRANCH_SWITCHBOARD" in coworker_res.matched_signals
 
-    # Initial vs mismatching full first name still exercises the smaller 0.12 conflict path cleanly
-    init_conflict = explain_and_score_entities(
+    # Disjoint initial vs same-initial name conflict + DEMO/SANDBOX synthetic guards
+    disjoint_init_conflict = explain_and_score_entities(
         {"person_name": "J Carver", "organization": "Oakridge Wealth Partners LLC"},
         {"person_name": "Robert Carver", "organization": "Oakridge Wealth Partners LLC"},
     )
-    assert init_conflict.is_match is False
+    assert disjoint_init_conflict.is_match is False
+
+    same_init_diff_surname = explain_and_score_entities(
+        {"person_name": "D Miller", "organization": "Oakridge Wealth Partners LLC"},
+        {"person_name": "David Carter", "organization": "Oakridge Wealth Partners LLC"},
+    )
+    assert same_init_diff_surname.is_match is False
+
+    assert is_synthetic_or_test_record(name="DEMO Parent Northbridge Firm") is True
+    assert is_synthetic_or_test_record(name="SANDBOX Advisory LLC") is True
 
 
 class _PyListTable:
