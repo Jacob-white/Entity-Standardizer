@@ -125,6 +125,28 @@ _INTL_STREET_TOKEN_MAP = {
     "CRESCENT": "CRES",
 }
 _RE_INTL_POSTAL_CLEAN = re.compile(r"[^A-Z0-9]")
+_ISO3_TO_ISO2_PREFIX = {
+    "CAN": "CA-",
+    "GBR": "GB-",
+    "CHE": "CH-",
+    "DEU": "DE-",
+    "FRA": "FR-",
+}
+_CAN_PROVINCE_NAME_TO_CODE = {
+    "ONTARIO": "ON",
+    "QUEBEC": "QC",
+    "BRITISH COLUMBIA": "BC",
+    "ALBERTA": "AB",
+    "MANITOBA": "MB",
+    "SASKATCHEWAN": "SK",
+    "NOVA SCOTIA": "NS",
+    "NEW BRUNSWICK": "NB",
+    "NEWFOUNDLAND AND LABRADOR": "NL",
+    "PRINCE EDWARD ISLAND": "PE",
+    "NORTHWEST TERRITORIES": "NT",
+    "YUKON": "YT",
+    "NUNAVUT": "NU",
+}
 _COMPASS_2LETTER = frozenset({"NE", "NW", "SE", "SW"})
 _COMPASS_ALL = frozenset({"N", "S", "E", "W", "NE", "NW", "SE", "SW", "NORTH", "SOUTH", "EAST", "WEST"})
 _WORD_HOUSE_NUMBERS = {
@@ -331,6 +353,18 @@ def canonicalize_intl_city(city: str, country_code: str) -> str:
     return _INTL_CITY_METRO_MAP.get(iso3, {}).get(cleaned, cleaned)
 
 
+def canonicalize_intl_state(state: str, country_code: str) -> str:
+    """Strip ISO-3166-2 country prefixes ('CA-ON' -> 'ON') and fold Canadian province full names."""
+    st = fold_latin_diacritics(state or "").strip().upper()
+    iso3 = _INTL_COUNTRY_ALIAS_TO_ISO3.get((country_code or "").strip().upper(), "")
+    pref = _ISO3_TO_ISO2_PREFIX.get(iso3, "")
+    if pref and st.startswith(pref):
+        st = st[len(pref):].strip()
+    if iso3 == "CAN":
+        return _CAN_PROVINCE_NAME_TO_CODE.get(st, st)
+    return st
+
+
 def canonicalize_intl_street_for_postal_key(
     street1: str,
     country_code: str,
@@ -498,11 +532,12 @@ class StandardizedAddress:
                         else ""
                     )
                     p_city = self.postal_city or canonicalize_intl_city(self.city, intl_iso3)
+                    eff_state = canonicalize_intl_state(self.state, intl_iso3)
                     eff_zip = canonicalize_intl_postal_code(self.postal_code, intl_iso3)
                     if self.postal_address_key is None:
-                        self.postal_address_key = f"{p_s1}|{self.street2}|{p_city}|{self.state}|{eff_zip}|{intl_iso3}"
+                        self.postal_address_key = f"{p_s1}|{self.street2}|{p_city}|{eff_state}|{eff_zip}|{intl_iso3}"
                     if self.postal_building_key is None:
-                        self.postal_building_key = f"{p_bldg_s1}||{p_city}|{self.state}|{eff_zip}|{intl_iso3}"
+                        self.postal_building_key = f"{p_bldg_s1}||{p_city}|{eff_state}|{eff_zip}|{intl_iso3}"
         if not hasattr(self, "_confidence_score"):
             self._confidence_score: Optional[float] = None
         if not hasattr(self, "_routing_tier"):
