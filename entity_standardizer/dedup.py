@@ -532,6 +532,7 @@ def cluster_contact_records(
     parsed_phones: list[StandardizedPhone] = []
     addr_keys: list[str | None] = []
     addr_hub_flags: list[bool] = []
+    identity_tags: list[str | None] = []
     email_buckets: dict[str, list[int]] = {}
     person_org_buckets: dict[str, list[int]] = {}
 
@@ -577,15 +578,29 @@ def cluster_contact_records(
 
         raw_org = rec.get("organization") or rec.get("company")
         raw_per = rec.get("person_name") or rec.get("name")
-        if raw_org and raw_per:
+        id_tag: str | None = None
+        if raw_per:
+            persons_parsed = [p for p in split_compound_persons(str(raw_per)) if p.is_valid and p.person_root_key]
+            if persons_parsed:
+                id_tag = f"PER:{persons_parsed[0].person_root_key}"
+        if raw_org:
             comp = standardize_company(str(raw_org))
             if comp.is_valid and comp.company_key:
-                for per in split_compound_persons(str(raw_per)):
-                    if per.is_valid and per.person_root_key:
-                        po_key = f"{comp.company_key}||{per.person_root_key}"
-                        person_org_buckets.setdefault(po_key, []).append(idx)
+                if id_tag is None:
+                    id_tag = f"ORG:{comp.company_key}"
+                if raw_per:
+                    for per in split_compound_persons(str(raw_per)):
+                        if per.is_valid and per.person_root_key:
+                            po_key = f"{comp.company_key}||{per.person_root_key}"
+                            person_org_buckets.setdefault(po_key, []).append(idx)
+        identity_tags.append(id_tag)
 
     dsu = DisjointSet(range(n))
+
+    def _can_link_by_phone(i: int, j: int) -> bool:
+        if not (parsed_phones[i].is_toll_free or parsed_phones[j].is_toll_free):
+            return True
+        return not (identity_tags[i] and identity_tags[j] and identity_tags[i] != identity_tags[j])
 
     # 1. Pre-group identical (e164, extension, nsn) in O(N), then link by phone blocking keys + fuzzy comparison
     exact_phone_reps: dict[tuple[str | None, str | None, str | None], int] = {}
@@ -593,11 +608,11 @@ def cluster_contact_records(
     for idx, p in enumerate(parsed_phones):
         if p.e164 or p.national_significant_number:
             exact_key = (p.e164, p.extension, p.national_significant_number)
-            if exact_key in exact_phone_reps:
+            if exact_key in exact_phone_reps and _can_link_by_phone(exact_phone_reps[exact_key], idx):
                 reason = "PHONE_EXACT_MATCH" if p.e164 else "PHONE_NATIONAL_EQUIVALENT"
                 dsu.union(exact_phone_reps[exact_key], idx, reason)
                 continue
-            exact_phone_reps[exact_key] = idx
+            exact_phone_reps.setdefault(exact_key, idx)
         for key in generate_phone_blocking_keys(p):
             phone_buckets.setdefault(key, []).append(idx)
 
@@ -610,6 +625,8 @@ def cluster_contact_records(
                 if pair in compared:
                     continue
                 compared.add(pair)
+                if not _can_link_by_phone(a_idx, b_idx):
+                    continue
                 cmp_res = compare_phones(
                     parsed_phones[a_idx],
                     parsed_phones[b_idx],
@@ -738,10 +755,18 @@ def compare_addresses(
     if a.normalized_address_key and a.normalized_address_key == b.normalized_address_key:
         return AddressComparisonResult(True, 1.0, "EXACT_ADDRESS_KEY", a, b)
 
+    if a.postal_address_key and a.postal_address_key == b.postal_address_key:
+        return AddressComparisonResult(True, 0.98, "POSTAL_ADDRESS_KEY_MATCH", a, b)
+
     if a.building_key and a.building_key == b.building_key:
         if a.secondary_unit and b.secondary_unit and a.secondary_unit != b.secondary_unit:
             return AddressComparisonResult(False, 0.75, "DIFFERENT_UNIT_SAME_BUILDING", a, b)
         return AddressComparisonResult(True, 0.94, "BUILDING_KEY_MATCH", a, b)
+
+    if a.postal_building_key and a.postal_building_key == b.postal_building_key:
+        if a.secondary_unit and b.secondary_unit and a.secondary_unit != b.secondary_unit:
+            return AddressComparisonResult(False, 0.75, "DIFFERENT_UNIT_SAME_BUILDING", a, b)
+        return AddressComparisonResult(True, 0.93, "POSTAL_BUILDING_KEY_MATCH", a, b)
 
     if (
         a.phonetic_address_key
@@ -791,8 +816,12 @@ def deduplicate_addresses(
             continue
         if addr.normalized_address_key:
             buckets.setdefault(("nak", addr.normalized_address_key), []).append(idx)
+        if addr.postal_address_key:
+            buckets.setdefault(("pak", addr.postal_address_key), []).append(idx)
         if addr.building_key:
             buckets.setdefault(("bk", addr.building_key), []).append(idx)
+        if addr.postal_building_key:
+            buckets.setdefault(("pbk", addr.postal_building_key), []).append(idx)
         if addr.phonetic_address_key:
             buckets.setdefault(("pk", addr.phonetic_address_key), []).append(idx)
         if addr.house_number:

@@ -116,6 +116,8 @@ def standardize_arrow(
     default_country: str = "US",
     output_prefix: str = "phone_",
     as_struct: bool = False,
+    *,
+    include_matching_keys: bool = False,
 ) -> Any:
     """Standardize phone numbers in an Apache Arrow Table or RecordBatch."""
     table, is_batch = _unwrap_arrow_input(table_or_batch)
@@ -139,6 +141,7 @@ def standardize_arrow(
     out_region: list[str | None] = []
     out_line_type: list[str] = []
     out_ext: list[str | None] = []
+    out_toll_free: list[bool] = []
     out_valid: list[bool] = []
     out_confidence: list[float] = []
     out_tier: list[str] = []
@@ -153,6 +156,7 @@ def standardize_arrow(
         out_region.append(res.region_code)
         out_line_type.append(res.line_type)
         out_ext.append(res.extension)
+        out_toll_free.append(res.is_toll_free)
         out_valid.append(res.is_valid)
         out_confidence.append(res.confidence)
         out_tier.append(res.routing_tier)
@@ -170,6 +174,8 @@ def standardize_arrow(
         ("confidence", pa.array(out_confidence, type=pa.float64())),
         ("routing_tier", pa.array(out_tier, type=pa.string())),
     ]
+    if include_matching_keys:
+        arrays_map.append(("is_toll_free", pa.array(out_toll_free, type=pa.bool_())))
 
     return _finalize_arrow_output(table, is_batch, output_prefix, arrays_map, as_struct)
 
@@ -319,9 +325,12 @@ def standardize_addresses_arrow(
     default_country: str = "US",
     output_prefix: str = "address_",
     as_struct: bool = False,
+    *,
+    include_matching_keys: bool = False,
 ) -> Any:
     """Standardize physical/mailing addresses in an Apache Arrow Table or RecordBatch."""
     table, is_batch = _unwrap_arrow_input(table_or_batch)
+    from entity_standardizer.address.models import extract_street_core_key
     from entity_standardizer.address.standardizer import standardize_address
     from entity_standardizer.registry import normalize_country_iso2
 
@@ -353,6 +362,15 @@ def standardize_addresses_arrow(
         ("key", pa.array([r.normalized_address_key for r in records], type=pa.string())),
         ("is_valid", pa.array([r.address_status == "standardized" for r in records], type=pa.bool_())),
     ]
+    if include_matching_keys:
+        arrays_map.extend(
+            [
+                ("postal_city", pa.array([r.postal_city or None for r in records], type=pa.string())),
+                ("postal_address_key", pa.array([r.postal_address_key or None for r in records], type=pa.string())),
+                ("postal_building_key", pa.array([r.postal_building_key or None for r in records], type=pa.string())),
+                ("street_core_key", pa.array([extract_street_core_key(r.street1) for r in records], type=pa.string())),
+            ]
+        )
 
     return _finalize_arrow_output(table, is_batch, output_prefix, arrays_map, as_struct)
 
@@ -383,10 +401,18 @@ def standardize_companies_arrow(
     country_col: str | None = None,
     output_prefix: str = "company_",
     as_struct: bool = False,
+    *,
+    include_matching_keys: bool = False,
 ) -> Any:
     """Standardize company/organization names in an Apache Arrow Table or RecordBatch."""
     table, is_batch = _unwrap_arrow_input(table_or_batch)
-    from entity_standardizer.company import standardize_company
+    from entity_standardizer.company import (
+        classify_company_role,
+        compact_company_key,
+        extract_company_acronym,
+        resolve_brand_lineage,
+        standardize_company,
+    )
 
     col_names = table.column_names
     if company_col not in col_names:
@@ -411,6 +437,16 @@ def standardize_companies_arrow(
         ("is_valid", pa.array([r.is_valid for r in records], type=pa.bool_())),
         ("confidence", pa.array([r.confidence for r in records], type=pa.float64())),
     ]
+    if include_matching_keys:
+        arrays_map.extend(
+            [
+                ("brand_key", pa.array([r.brand_key for r in records], type=pa.string())),
+                ("brand_lineage", pa.array([resolve_brand_lineage(r) for r in records], type=pa.string())),
+                ("acronym", pa.array([extract_company_acronym(r) for r in records], type=pa.string())),
+                ("compact_key", pa.array([compact_company_key(r) for r in records], type=pa.string())),
+                ("role", pa.array([classify_company_role(r) for r in records], type=pa.string())),
+            ]
+        )
 
     return _finalize_arrow_output(table, is_batch, output_prefix, arrays_map, as_struct)
 
@@ -433,15 +469,18 @@ def standardize_companies_polars(
     return out_df.lazy() if is_lazy else out_df  # type: ignore[union-attr]
 
 
+
 def standardize_persons_arrow(
     table_or_batch: Any,
     person_col: str = "person",
     output_prefix: str = "person_",
     as_struct: bool = False,
+    *,
+    include_matching_keys: bool = False,
 ) -> Any:
     """Standardize person full names in an Apache Arrow Table or RecordBatch."""
     table, is_batch = _unwrap_arrow_input(table_or_batch)
-    from entity_standardizer.person import standardize_person
+    from entity_standardizer.person import canonicalize_surname_variants, standardize_person
 
     col_names = table.column_names
     if person_col not in col_names:
@@ -459,6 +498,20 @@ def standardize_persons_arrow(
         ("is_valid", pa.array([r.is_valid for r in records], type=pa.bool_())),
         ("confidence", pa.array([r.confidence for r in records], type=pa.float64())),
     ]
+    if include_matching_keys:
+        arrays_map.extend(
+            [
+                ("middle_name", pa.array([r.middle_name for r in records], type=pa.string())),
+                ("alt_keys", pa.array(["|".join(r.person_alt_keys) or None for r in records], type=pa.string())),
+                (
+                    "surname_variants",
+                    pa.array(
+                        ["|".join(canonicalize_surname_variants(r.last_name)) or None for r in records],
+                        type=pa.string(),
+                    ),
+                ),
+            ]
+        )
 
     return _finalize_arrow_output(table, is_batch, output_prefix, arrays_map, as_struct)
 
@@ -477,6 +530,7 @@ def standardize_persons_polars(
     )
     out_df = pl.from_arrow(std_tbl)
     return out_df.lazy() if is_lazy else out_df  # type: ignore[union-attr]
+
 
 
 def standardize_emails_arrow(
@@ -525,6 +579,7 @@ def standardize_emails_polars(
     return out_df.lazy() if is_lazy else out_df  # type: ignore[union-attr]
 
 
+
 def standardize_urls_arrow(
     table_or_batch: Any,
     url_col: str = "url",
@@ -567,6 +622,7 @@ def standardize_urls_polars(
     )
     out_df = pl.from_arrow(std_tbl)
     return out_df.lazy() if is_lazy else out_df  # type: ignore[union-attr]
+
 
 
 def standardize_socials_arrow(
@@ -624,6 +680,7 @@ def standardize_socials_polars(
     )
     out_df = pl.from_arrow(std_tbl)
     return out_df.lazy() if is_lazy else out_df  # type: ignore[union-attr]
+
 
 
 def standardize_contacts_arrow(
@@ -747,3 +804,90 @@ def standardize_contacts_polars(
     )
     out_df = pl.from_arrow(std_tbl)
     return out_df.lazy() if is_lazy else out_df  # type: ignore[union-attr]
+
+
+def prepare_matching_arrow(
+    table_or_batch: Any,
+    *,
+    phone_col: str | None = "phone",
+    country_col: str | None = "country",
+    address_col: str | None = "address",
+    company_col: str | None = "company",
+    person_col: str | None = "person_name",
+    email_col: str | None = "email",
+    url_col: str | None = "website",
+    default_country: str = "US",
+) -> Any:
+    """Apply symmetric pre-match standardization + matching keys across every present pillar in an Arrow Table/Batch."""
+    table, is_batch = _unwrap_arrow_input(table_or_batch)
+    cols = set(table.column_names)
+    has_country = bool(country_col and country_col in cols)
+    c_col = country_col if has_country else None
+    cur = table
+    if phone_col and phone_col in cols:
+        cur = standardize_arrow(
+            cur,
+            phone_col=phone_col,
+            country_col=c_col,
+            default_country=default_country,
+            include_matching_keys=True,
+        )
+    if address_col and address_col in cols:
+        cur = standardize_addresses_arrow(
+            cur,
+            column=address_col,
+            country_column=c_col,
+            default_country=default_country,
+            include_matching_keys=True,
+        )
+    if company_col and company_col in cols:
+        cur = standardize_companies_arrow(
+            cur,
+            company_col=company_col,
+            country_col=c_col,
+            include_matching_keys=True,
+        )
+    if person_col and person_col in cols:
+        cur = standardize_persons_arrow(
+            cur,
+            person_col=person_col,
+            include_matching_keys=True,
+        )
+    if email_col and email_col in cols:
+        cur = standardize_emails_arrow(cur, email_col=email_col)
+    if url_col and url_col in cols:
+        cur = standardize_urls_arrow(cur, url_col=url_col)
+    if is_batch:
+        batches = cur.to_batches()
+        return batches[0]
+    return cur
+
+
+def prepare_matching_polars(
+    df_or_lazy: Any,
+    *,
+    phone_col: str | None = "phone",
+    country_col: str | None = "country",
+    address_col: str | None = "address",
+    company_col: str | None = "company",
+    person_col: str | None = "person_name",
+    email_col: str | None = "email",
+    url_col: str | None = "website",
+    default_country: str = "US",
+) -> Any:
+    """Apply symmetric pre-match standardization + matching keys across all present pillars on a Polars DataFrame/LazyFrame."""
+    df, is_lazy = _unwrap_polars_input(df_or_lazy)
+    std_tbl = prepare_matching_arrow(
+        df.to_arrow(),
+        phone_col=phone_col,
+        country_col=country_col,
+        address_col=address_col,
+        company_col=company_col,
+        person_col=person_col,
+        email_col=email_col,
+        url_col=url_col,
+        default_country=default_country,
+    )
+    out_df = pl.from_arrow(std_tbl)
+    return out_df.lazy() if is_lazy else out_df  # type: ignore[union-attr]
+

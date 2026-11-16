@@ -20,7 +20,11 @@ import unicodedata
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Union
 
-from entity_standardizer.address.models import StandardizedAddress, LocalityOnlyStatus
+from entity_standardizer.address.models import (
+    LocalityOnlyStatus,
+    StandardizedAddress,
+    canonicalize_us_city_prefix,
+)
 from entity_standardizer.address.confidence import (
     RoutingTier,
     compute_confidence_score,
@@ -709,7 +713,9 @@ def standardize_address(
         if not postal_raw and p_zip:
             postal_raw = p_zip
 
-        norm_city = RE_WHITESPACE.sub(" ", RE_NON_ALPHANUMERIC.sub("", city_raw).strip().upper())
+        norm_city = canonicalize_us_city_prefix(
+            RE_WHITESPACE.sub(" ", RE_NON_ALPHANUMERIC.sub("", city_raw).strip().upper())
+        )
         norm_postal, zip5 = normalize_us_postal_code(postal_raw)
         norm_state = normalize_us_state(state_raw, zip5)
 
@@ -717,7 +723,7 @@ def standardize_address(
             if norm_city:
                 healed_city = heal_city_token(norm_city, state=norm_state, zip3=zip5[:3] if zip5 else None)
                 if healed_city:
-                    norm_city = healed_city
+                    norm_city = canonicalize_us_city_prefix(healed_city)
 
             # Guarded postal code healing: only when norm_s1 is valid and non-empty, and city/state are valid
             if norm_s1 and norm_s1 != "PRIVATE RESIDENCE" and norm_city and norm_state in FROZEN_US_STATE_CODES:

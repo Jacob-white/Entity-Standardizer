@@ -53,6 +53,7 @@ type StandardizedPhone struct {
 	VanityAlias               *string  `json:"vanity_alias"`
 	RegionCode                *string  `json:"region_code"`
 	LineType                  string   `json:"line_type"`
+	IsTollFree                bool     `json:"is_toll_free"`
 	IsValid                   bool     `json:"is_valid"`
 	IsPossible                bool     `json:"is_possible"`
 	PhoneKey                  *string  `json:"phone_key"`
@@ -425,11 +426,14 @@ type StandardizedAddress struct {
 	Street1              string  `json:"street1"`
 	Street2              string  `json:"street2"`
 	City                 string  `json:"city"`
+	PostalCity           *string `json:"postal_city"`
 	State                string  `json:"state"`
 	PostalCode           string  `json:"postal_code"`
 	Country              string  `json:"country"`
 	NormalizedAddressKey *string `json:"normalized_address_key"`
 	BuildingKey          *string `json:"building_key"`
+	PostalAddressKey     *string `json:"postal_address_key"`
+	PostalBuildingKey    *string `json:"postal_building_key"`
 	PhoneticKey          *string `json:"phonetic_key"`
 	AddressStatus        string  `json:"address_status"`
 	RawStreetAddress     string  `json:"raw_street_address"`
@@ -480,6 +484,7 @@ type StandardizedPerson struct {
 	FullName           *string  `json:"full_name"`
 	PersonKey          *string  `json:"person_key"`
 	PersonRootKey      *string  `json:"person_root_key"`
+	PersonAltKeys      []string `json:"person_alt_keys"`
 	PhoneticKey        *string  `json:"phonetic_key"`
 	IsOrganization     bool     `json:"is_organization"`
 	IsValid            bool     `json:"is_valid"`

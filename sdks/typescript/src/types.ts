@@ -253,11 +253,14 @@ export interface StandardizedAddress {
   street1: string;
   street2: string;
   city: string;
+  postal_city: string | null;
   state: string;
   postal_code: string;
   country: string;
   normalized_address_key: string | null;
   building_key: string | null;
+  postal_address_key: string | null;
+  postal_building_key: string | null;
   phonetic_key: string | null;
   address_status: string;
   raw_street_address: string;
@@ -305,6 +308,7 @@ export interface StandardizedPerson {
   full_name: string | null;
   person_key: string | null;
   person_root_key: string | null;
+  person_alt_keys: string[];
   phonetic_key: string | null;
   is_organization: boolean;
   is_valid: boolean;
@@ -422,6 +426,7 @@ export interface StandardizedPhone {
   vanity_alias: string | null;
   region_code: string | null;
   line_type: PhoneLineType;
+  is_toll_free: boolean;
   is_valid: boolean;
   is_possible: boolean;
   phone_key: string | null;

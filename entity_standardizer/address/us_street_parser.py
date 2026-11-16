@@ -54,6 +54,7 @@ from entity_standardizer.address._patterns import (
 
 logger = logging.getLogger(__name__)
 
+from entity_standardizer.address.models import collapse_street_initialisms  # noqa: E402
 from entity_standardizer.address.normalization import (  # noqa: E402
     _clean_token,
     get_state_from_zip3,
@@ -183,6 +184,16 @@ def _rule_based_us_street_parse(address_str: str, enable_fuzzy: bool = True) -> 
         i = 1
 
     rem_tokens = tokens[i:]
+    if len(rem_tokens) >= 3:
+        tail_cnt = 1
+        if len(rem_tokens) >= 4 and (rem_tokens[-1] in DIRECTIONALS or rem_tokens[-1] in FROZEN_DIRECTIONAL_VALUES):
+            tail_cnt = 2
+        lead_cnt = 1 if (rem_tokens[0] in DIRECTIONALS or rem_tokens[0] in FROZEN_DIRECTIONAL_VALUES) and len(rem_tokens) - tail_cnt > 2 else 0
+        rem_tokens = (
+            rem_tokens[:lead_cnt]
+            + collapse_street_initialisms(rem_tokens[lead_cnt : len(rem_tokens) - tail_cnt])
+            + rem_tokens[len(rem_tokens) - tail_cnt :]
+        )
     norm_tokens = list(house_num_tokens)
 
     # Positional Directional Grammar:
@@ -235,6 +246,11 @@ def _rule_based_us_street_parse(address_str: str, enable_fuzzy: bool = True) -> 
             norm_tokens.append(WORD_ORDINALS[t])
         elif t in DIRECTIONALS:
             norm_tokens.append(DIRECTIONALS[t])
+        elif t in ("CTR", "CNTR", "CENTER") and j + 1 < len(rem_tokens) and (
+            rem_tokens[-1] in _ALL_STREET_SUFFIX_TOKENS
+            or (len(rem_tokens) >= 2 and rem_tokens[-2] in _ALL_STREET_SUFFIX_TOKENS)
+        ):
+            norm_tokens.append("CENTER")
         elif t in STREET_SUFFIXES:
             norm_tokens.append(STREET_SUFFIXES[t])
         elif norm_tokens and norm_tokens[-1] in ("&", "AND", "/", "-", "TO"):

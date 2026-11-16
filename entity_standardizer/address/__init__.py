@@ -86,7 +86,12 @@ from entity_standardizer.address.international import (
     format_upu_address,
     validate_postal_code,
 )
-from entity_standardizer.address.models import SpatialResolutionResult, StandardizedAddress
+from entity_standardizer.address.models import (
+    SpatialResolutionResult,
+    StandardizedAddress,
+    extract_street_core_key,
+    split_glued_house_unit,
+)
 from entity_standardizer.address.offline_index import (
     OfflineReferenceIndex,
     ParcelValidationResult,
@@ -198,6 +203,7 @@ __all__ = [
     "evaluate_corporate_risk",
     "evaluate_delivery_intelligence",
     "extract_postal_code",
+    "extract_street_core_key",
     "format_upu_address",
     "generate_building_key",
     "generate_normalized_address_key",
@@ -231,6 +237,7 @@ __all__ = [
     "resolve_offline_coordinates",
     "resolve_spatial_coordinates",
     "resolve_verification_cascade",
+    "split_glued_house_unit",
     "standardize_address",
     "standardize_batch_dispatch",
     "stream_standardize_csv",

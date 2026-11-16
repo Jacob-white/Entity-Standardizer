@@ -965,8 +965,25 @@ def compare_contacts(
         ):
             pillar_scores["address"] = 1.0
             matched_pillars.append("address")
+        elif (
+            ca.address.postal_address_key
+            and ca.address.postal_address_key == cb.address.postal_address_key
+        ):
+            pillar_scores["address"] = 0.98
+            matched_pillars.append("address")
         elif ca.address.building_key and ca.address.building_key == cb.address.building_key:
             pillar_scores["address"] = 0.92
+            matched_pillars.append("address")
+        elif (
+            ca.address.postal_building_key
+            and ca.address.postal_building_key == cb.address.postal_building_key
+            and not (
+                ca.address.secondary_unit
+                and cb.address.secondary_unit
+                and ca.address.secondary_unit != cb.address.secondary_unit
+            )
+        ):
+            pillar_scores["address"] = 0.90
             matched_pillars.append("address")
         else:
             pillar_scores["address"] = 0.0
@@ -988,6 +1005,21 @@ def compare_contacts(
             score=0.45,
             match_type="PERSON_GENERATIONAL_CONFLICT",
             matched_pillars=matched_pillars,
+            pillar_scores=pillar_scores,
+            contact_a=ca,
+            contact_b=cb,
+        )
+
+    if (
+        matched_pillars == ["phone"]
+        and (ca.phone.is_toll_free or cb.phone.is_toll_free)
+        and ("person" in pillar_scores or "organization" in pillar_scores)
+    ):
+        return ContactComparisonResult(
+            is_match=False,
+            score=0.4,
+            match_type="SHARED_TOLL_FREE_SWITCHBOARD",
+            matched_pillars=[],
             pillar_scores=pillar_scores,
             contact_a=ca,
             contact_b=cb,

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import html
+import html.entities
 import re
 import unicodedata
 
@@ -367,3 +369,21 @@ def _fold_latin_diacritics_py(text: str) -> str:
 def fold_latin_diacritics(text: str) -> str:
     """Fold Latin diacritics and stroked characters (ø, ł, đ, ħ) to ASCII letters."""
     return _native_dispatch.fold_latin_diacritics_dispatch(text)
+
+
+_STRICT_HTML_ENTITY_RE = re.compile(r"&(?:#\d+|#x[0-9a-fA-F]+|([A-Za-z][A-Za-z0-9]+));")
+
+
+def _replace_strict_html_entity(match: re.Match[str]) -> str:
+    named = match.group(1)
+    if named is not None:
+        return html.entities.html5.get(f"{named};", match.group(0))
+    return html.unescape(match.group(0))
+
+
+def unescape_html_entities(text: str) -> tuple[str, bool]:
+    """Decode semicolon-terminated HTML character references without corrupting bare ampersand prefixes."""
+    if "&" not in text or ";" not in text:
+        return text, False
+    decoded = _STRICT_HTML_ENTITY_RE.sub(_replace_strict_html_entity, text)
+    return decoded, (decoded != text)

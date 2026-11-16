@@ -1056,6 +1056,7 @@ def standardize_phone(
         vanity_alias=vanity_alias,
         region_code=region_code or eff_addr_state,
         line_type=line_type,
+        is_toll_free=(line_type == PhoneLineType.TOLL_FREE),
         is_valid=is_valid,
         is_possible=is_possible,
         phone_key=phone_key,

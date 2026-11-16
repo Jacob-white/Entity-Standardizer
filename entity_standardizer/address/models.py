@@ -7,6 +7,212 @@ import re
 _RE_PO_BOX_POST_INIT = re.compile(r"\b(?:P\.?\s*O\.?\s*BOX|POB|POST\s+OFFICE\s+BOX|APO|FPO|DPO)\b")
 _RE_DUAL_PHYSICAL_START = re.compile(r"^(?:\d+|PR-|CARR-|KM\b)")
 _RE_HOUSE_NUMBER_PREFIX = re.compile(r"^(\d+[A-Z]?(?:-\d+)?)\b")
+_RE_CITY_CLEAN = re.compile(r"[^A-Z0-9\s]")
+_RE_MULTI_WS = re.compile(r"\s+")
+_US_CITY_PREFIX_MAP = (
+    ("SAINT ", "ST "),
+    ("SAINTE ", "STE "),
+    ("FORT ", "FT "),
+    ("MOUNT ", "MT "),
+)
+_INTERIOR_STREET_CANON_MAP = {
+    "CTR": "CENTER",
+    "CNTR": "CENTER",
+    "PK": "PARK",
+    "PLZ": "PLAZA",
+    "SQ": "SQUARE",
+    "SAINT": "ST",
+    "FORT": "FT",
+    "MOUNT": "MT",
+}
+_COMPASS_2LETTER = frozenset({"NE", "NW", "SE", "SW"})
+_COMPASS_ALL = frozenset({"N", "S", "E", "W", "NE", "NW", "SE", "SW", "NORTH", "SOUTH", "EAST", "WEST"})
+_WORD_HOUSE_NUMBERS = {
+    "ONE": "1",
+    "TWO": "2",
+    "THREE": "3",
+    "FOUR": "4",
+    "FIVE": "5",
+    "SIX": "6",
+    "SEVEN": "7",
+    "EIGHT": "8",
+    "NINE": "9",
+    "TEN": "10",
+}
+_RE_GLUED_UNIT_HOUSE = re.compile(r"^(\d{2,6})([A-HJ-Z])$")
+_STREET_SUFFIX_CANON = {
+    "AVE": "AVE",
+    "AVENUE": "AVE",
+    "ST": "ST",
+    "STREET": "ST",
+    "RD": "RD",
+    "ROAD": "RD",
+    "BLVD": "BLVD",
+    "BOULEVARD": "BLVD",
+    "DR": "DR",
+    "DRIVE": "DR",
+    "PKWY": "PKWY",
+    "PARKWAY": "PKWY",
+    "PLZ": "PLZ",
+    "PLAZA": "PLZ",
+    "LN": "LN",
+    "LANE": "LN",
+    "CT": "CT",
+    "COURT": "CT",
+    "CIR": "CIR",
+    "CIRCLE": "CIR",
+    "TER": "TER",
+    "TERRACE": "TER",
+    "PL": "PL",
+    "PLACE": "PL",
+    "WAY": "WAY",
+    "HWY": "HWY",
+    "HIGHWAY": "HWY",
+    "TRL": "TRL",
+    "TRAIL": "TRL",
+    "LOOP": "LOOP",
+    "PIKE": "PIKE",
+    "SQ": "SQ",
+    "SQUARE": "SQ",
+    "CTR": "CENTER",
+    "CENTER": "CENTER",
+}
+_SEC_OR_BLDG_MARKERS = frozenset(
+    {"STE", "SUITE", "APT", "UNIT", "FL", "FLOOR", "RM", "ROOM", "BLDG", "BUILDING", "TOWER", "TWR", "DEPT", "MAILCODE"}
+)
+
+
+def split_glued_house_unit(street1: str) -> tuple[str, str]:
+    """Normalize leading word house numbers ('ONE ORANGE WAY' -> '1 ORANGE WAY') and split glued unit letters ('3402A TRENT RD' -> ('3402 TRENT RD', 'STE A'))."""
+    if not street1:
+        return "", ""
+    toks = street1.upper().split()
+    if len(toks) < 2:
+        return " ".join(toks), ""
+    first = toks[0]
+    if first in _WORD_HOUSE_NUMBERS and len(toks) >= 3:
+        toks[0] = _WORD_HOUSE_NUMBERS[first]
+        return " ".join(toks), ""
+    m = _RE_GLUED_UNIT_HOUSE.match(first)
+    if m:
+        return " ".join([m.group(1)] + toks[1:]), f"STE {m.group(2)}"
+    return " ".join(toks), ""
+
+
+def extract_street_core_key(street1: str | None) -> Optional[str]:
+    """Extract a direction-agnostic, unit-stripped '{HOUSE_NUM}|{CORE_THOROUGHFARE}' key, rescuing inverted building-before-number strings."""
+    if not street1:
+        return None
+    base_s1, _ = split_glued_house_unit(re.sub(r"[^A-Z0-9\s\-]", " ", street1.upper()))
+    toks = [t for t in base_s1.split() if t]
+    if not toks:
+        return None
+
+    hnum = ""
+    rest_toks: List[str] = []
+    if toks[0][0].isdigit():
+        hnum = toks[0]
+        rest_toks = toks[1:]
+    else:
+        # Rescue inverted 'S BEMISTON AVE BEMISTON TOWER BLDG 231 FL 14' where house number follows BLDG/NO
+        for idx, t in enumerate(toks):
+            if t.isdigit() and idx > 0 and toks[idx - 1] in ("BLDG", "BUILDING", "NO", "NUM"):
+                hnum = t
+                rest_toks = toks[: idx - 1]
+                break
+        if not hnum:
+            return None
+
+    # Truncate at secondary/building noise markers
+    cut_toks: List[str] = []
+    for idx, t in enumerate(rest_toks):
+        if t in _SEC_OR_BLDG_MARKERS:
+            break
+        if t in ("TOWER", "TWR", "PLAZA", "CENTER") and idx >= 2 and cut_toks and cut_toks[-1] in _STREET_SUFFIX_CANON:
+            break
+        cut_toks.append(t)
+
+    # Strip leading/trailing compass directionals
+    while len(cut_toks) > 1 and cut_toks[0] in _COMPASS_ALL:
+        cut_toks.pop(0)
+    while len(cut_toks) > 1 and cut_toks[-1] in _COMPASS_ALL:
+        cut_toks.pop()
+
+    if not cut_toks:
+        return None
+
+    cut_toks = collapse_street_initialisms(cut_toks)
+    if len(cut_toks) >= 2 and cut_toks[-1] in _STREET_SUFFIX_CANON:
+        sfx = _STREET_SUFFIX_CANON[cut_toks[-1]]
+        mid = [_INTERIOR_STREET_CANON_MAP.get(x, x) for x in cut_toks[:-1]]
+        # Deduplicate repeated street root before suffix if inverted ('BEMISTON AVE BEMISTON' -> 'BEMISTON AVE')
+        if len(mid) >= 2 and mid[-1] == mid[0] and len(mid) >= 2 and mid[1] in _STREET_SUFFIX_CANON:
+            return f"{hnum}|{mid[0]} {_STREET_SUFFIX_CANON[mid[1]]}"
+        return f"{hnum}|{' '.join(mid + [sfx])}"
+
+    # Check if an earlier token in cut_toks was already a street suffix followed by building name ('BEMISTON AVE BEMISTON')
+    for idx in range(1, len(cut_toks)):
+        if cut_toks[idx] in _STREET_SUFFIX_CANON:
+            mid = [_INTERIOR_STREET_CANON_MAP.get(x, x) for x in cut_toks[:idx]]
+            return f"{hnum}|{' '.join(mid + [_STREET_SUFFIX_CANON[cut_toks[idx]]])}"
+
+    norm_only = [_INTERIOR_STREET_CANON_MAP.get(x, x) for x in cut_toks]
+    return f"{hnum}|{' '.join(norm_only)}"
+
+
+def canonicalize_us_city_prefix(city: str) -> str:
+    """Normalize US city punctuation/whitespace and canonicalize SAINT/FORT/MOUNT prefixes."""
+    cleaned = _RE_MULTI_WS.sub(" ", _RE_CITY_CLEAN.sub("", (city or "").upper())).strip()
+    for src_pref, dst_pref in _US_CITY_PREFIX_MAP:
+        if cleaned.startswith(src_pref) and len(cleaned) > len(src_pref):
+            return dst_pref + cleaned[len(src_pref):]
+    return cleaned
+
+
+def collapse_street_initialisms(tokens: List[str]) -> List[str]:
+    """Collapse runs of >=2 single-letter tokens (e.g. ['A','D','P'] -> ['ADP']), preserving compass pairs."""
+    out: List[str] = []
+    i = 0
+    n = len(tokens)
+    while i < n:
+        if (
+            len(tokens[i]) == 1
+            and tokens[i].isalpha()
+            and i + 1 < n
+            and len(tokens[i + 1]) == 1
+            and tokens[i + 1].isalpha()
+        ):
+            j = i + 1
+            while j < n and len(tokens[j]) == 1 and tokens[j].isalpha():
+                j += 1
+            joined = "".join(tokens[i:j])
+            if (len(joined) == 2 and joined in _COMPASS_2LETTER) or len(joined) > 4:
+                out.extend(tokens[i:j])
+            else:
+                out.append(joined)
+            i = j
+        else:
+            out.append(tokens[i])
+            i += 1
+    return out
+
+
+def canonicalize_us_street_for_postal_key(street1: str, *, strip_glued_unit: bool = False) -> str:
+    """Canonicalize interior street abbreviations, word house numbers, and spaced initialisms for postal matching keys."""
+    if not street1:
+        return ""
+    base_s1, glued_unit = split_glued_house_unit(street1)
+    toks = base_s1.split() if (strip_glued_unit or not glued_unit) else street1.upper().split()
+    if len(toks) <= 2:
+        return " ".join(toks)
+    # Collapse spaced initialisms in interior tokens (between house number and trailing suffix/directional)
+    head = [toks[0]]
+    tail_count = 1
+    if len(toks) >= 4 and toks[-1] in ("N", "S", "E", "W", "NE", "NW", "SE", "SW"):
+        tail_count = 2
+    mid = collapse_street_initialisms(toks[1 : len(toks) - tail_count])
+    norm_mid = [_INTERIOR_STREET_CANON_MAP.get(t, t) for t in mid]
+    return " ".join(head + norm_mid + toks[len(toks) - tail_count :])
 
 
 @dataclass(slots=True)
@@ -96,6 +302,9 @@ class StandardizedAddress:
     building_name: Optional[str] = None
     care_of: Optional[str] = None  # text of a removed "c/o <name>" / "attn" clause, kept for reference
     rooftop_address: Optional[str] = None
+    postal_city: Optional[str] = None
+    postal_address_key: Optional[str] = None
+    postal_building_key: Optional[str] = None
 
     def __post_init__(self):
         has_po = bool(_RE_PO_BOX_POST_INIT.search(
@@ -107,6 +316,34 @@ class StandardizedAddress:
         elif getattr(self, "rooftop_address", None) is None:
             from entity_standardizer.address._patterns import clean_rooftop_address
             self.rooftop_address = clean_rooftop_address(self.street1)
+        if self.is_us and self.address_status != "parse_failed":
+            zip5 = (self.postal_code or "").strip()[:5]
+            if self.postal_city is None:
+                resolved_city: Optional[str] = None
+                if len(zip5) == 5 and zip5.isdigit():
+                    from entity_standardizer.address.reference.us_zip5 import get_default_us_zip5_provider
+
+                    places = get_default_us_zip5_provider().lookup_postal("US", zip5)
+                    st_up = (self.state or "").strip().upper()
+                    matched_place = next(
+                        (p for p in places if not st_up or p.admin1_code.upper() == st_up),
+                        None,
+                    )
+                    if matched_place is not None and matched_place.place_name:
+                        resolved_city = canonicalize_us_city_prefix(matched_place.place_name)
+                if not resolved_city and self.city:
+                    resolved_city = canonicalize_us_city_prefix(self.city)
+                self.postal_city = resolved_city
+            if self.normalized_address_key:
+                p_s1 = canonicalize_us_street_for_postal_key(self.street1) if self.street1 else ""
+                p_bldg_s1 = canonicalize_us_street_for_postal_key(self.street1, strip_glued_unit=True) if self.street1 else ""
+                p_city = self.postal_city or canonicalize_us_city_prefix(self.city)
+                eff_zip = zip5 if (len(zip5) == 5 and zip5.isdigit()) else (self.postal_code or "")
+                eff_country = self.country or "USA"
+                if self.postal_address_key is None:
+                    self.postal_address_key = f"{p_s1}|{self.street2}|{p_city}|{self.state}|{eff_zip}|{eff_country}"
+                if self.postal_building_key is None:
+                    self.postal_building_key = f"{p_bldg_s1}||{p_city}|{self.state}|{eff_zip}|{eff_country}"
         if not hasattr(self, "_confidence_score"):
             self._confidence_score: Optional[float] = None
         if not hasattr(self, "_routing_tier"):
@@ -485,6 +722,9 @@ class StandardizedAddress:
             "country": self.country,
             "normalized_address_key": self.normalized_address_key,
             "building_key": self.building_key,
+            "postal_city": self.postal_city,
+            "postal_address_key": self.postal_address_key,
+            "postal_building_key": self.postal_building_key,
             "phonetic_key": self.phonetic_key,
             "address_status": self.address_status,
             "raw_street_address": self.raw_street_address,
