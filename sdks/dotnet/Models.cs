@@ -83,6 +83,9 @@ public sealed class StandardizedPhone
     [JsonPropertyName("line_type")]
     public string LineType { get; set; } = "UNKNOWN";
 
+    [JsonPropertyName("is_toll_free")]
+    public bool IsTollFree { get; set; }
+
     [JsonPropertyName("is_valid")]
     public bool IsValid { get; set; }
 
@@ -821,6 +824,9 @@ public sealed class StandardizedAddress
     [JsonPropertyName("city")]
     public string City { get; set; } = "";
 
+    [JsonPropertyName("postal_city")]
+    public string? PostalCity { get; set; }
+
     [JsonPropertyName("state")]
     public string State { get; set; } = "";
 
@@ -835,6 +841,12 @@ public sealed class StandardizedAddress
 
     [JsonPropertyName("building_key")]
     public string? BuildingKey { get; set; }
+
+    [JsonPropertyName("postal_address_key")]
+    public string? PostalAddressKey { get; set; }
+
+    [JsonPropertyName("postal_building_key")]
+    public string? PostalBuildingKey { get; set; }
 
     [JsonPropertyName("phonetic_key")]
     public string? PhoneticKey { get; set; }
@@ -958,6 +970,9 @@ public sealed class StandardizedPerson
 
     [JsonPropertyName("person_root_key")]
     public string? PersonRootKey { get; set; }
+
+    [JsonPropertyName("person_alt_keys")]
+    public List<string> PersonAltKeys { get; set; } = new();
 
     [JsonPropertyName("phonetic_key")]
     public string? PhoneticKey { get; set; }

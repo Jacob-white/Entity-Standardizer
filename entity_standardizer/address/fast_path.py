@@ -9,7 +9,11 @@ Bypasses CRF execution for standard addresses using O(1) table lookups.
 
 import re
 from typing import Optional, Tuple
-from entity_standardizer.address.models import StandardizedAddress
+from entity_standardizer.address.models import (
+    StandardizedAddress,
+    canonicalize_us_city_prefix,
+    collapse_street_initialisms,
+)
 from entity_standardizer.address.tables import (
     DIRECTIONALS,
     STREET_SUFFIXES,
@@ -59,8 +63,8 @@ _RE_FLOOR_TOKEN = re.compile(r"\b(?:FL|FLR|FLOOR)\b")
 
 
 def _normalize_city(text: str) -> str:
-    """Same city normalization as the full pipeline (strip punctuation, collapse whitespace, upper-case)."""
-    return RE_WHITESPACE.sub(" ", RE_NON_ALPHANUMERIC.sub("", text).strip().upper())
+    """Same city normalization as the full pipeline (strip punctuation, collapse whitespace, canonicalize US prefix)."""
+    return canonicalize_us_city_prefix(RE_WHITESPACE.sub(" ", RE_NON_ALPHANUMERIC.sub("", text).strip().upper()))
 
 
 PRIVACY_PLACEHOLDERS: frozenset[str] = frozenset({
@@ -254,6 +258,7 @@ def _normalize_fast_street_phrase(phrase: str, enable_fuzzy: bool = True) -> Opt
     else:
         return None
 
+    name_tokens = collapse_street_initialisms(name_tokens)
     if not name_tokens or len(name_tokens) > 5 or any(len(tok) == 5 and tok.isdigit() for tok in name_tokens):
         return None
 
@@ -262,6 +267,10 @@ def _normalize_fast_street_phrase(phrase: str, enable_fuzzy: bool = True) -> Opt
     k = 0
     while k < len(name_tokens):
         t = name_tokens[k]
+        if t in ("CTR", "CNTR"):
+            norm_name_parts.append("CENTER")
+            k += 1
+            continue
         if k + 1 < len(name_tokens):
             comp = f"{t} {name_tokens[k+1]}"
             if comp in COMPOUND_ORDINALS:

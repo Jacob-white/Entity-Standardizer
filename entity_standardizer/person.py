@@ -14,15 +14,18 @@ from entity_standardizer._native_dispatch import (
 )
 from entity_standardizer.company import _DOTTED_INITIALISM_RE
 from entity_standardizer.dedup import DisjointSet
-from entity_standardizer.normalization import fold_latin_diacritics
+from entity_standardizer.normalization import fold_latin_diacritics, unescape_html_entities
 
 _SALUTATIONS: dict[str, str] = {
     "DR": "DR",
     "DOCTOR": "DR",
+    "DRS": "DRS",
     "MR": "MR",
     "MISTER": "MR",
+    "MESSRS": "MESSRS",
     "MRS": "MRS",
     "MISSUS": "MRS",
+    "MMES": "MMES",
     "MS": "MS",
     "MISS": "MISS",
     "MX": "MX",
@@ -38,19 +41,44 @@ _SALUTATIONS: dict[str, str] = {
     "LADY": "LADY",
     "CAPT": "CAPT",
     "CAPTAIN": "CAPT",
+    "CPT": "CAPT",
+    "CDR": "CDR",
+    "COMMANDER": "CDR",
+    "ADM": "ADM",
+    "ADMIRAL": "ADM",
     "COL": "COL",
     "COLONEL": "COL",
+    "LTC": "LTC",
     "GEN": "GEN",
     "GENERAL": "GEN",
     "MAJ": "MAJ",
     "MAJOR": "MAJ",
     "LT": "LT",
+    "1LT": "LT",
+    "2LT": "LT",
     "LIEUTENANT": "LT",
     "SGT": "SGT",
     "SERGEANT": "SGT",
     "FR": "FR",
     "FATHER": "FR",
+    "MSGR": "MSGR",
+    "MONSIGNOR": "MSGR",
+    "SISTER": "SR",
+    "BROTHER": "BR",
+    "BR": "BR",
+    "PASTOR": "PASTOR",
+    "DEACON": "DEACON",
     "RABBI": "RABBI",
+    "JUDGE": "JUDGE",
+    "JUSTICE": "JUSTICE",
+    "SEN": "SEN",
+    "SENATOR": "SEN",
+    "GOV": "GOV",
+    "GOVERNOR": "GOV",
+    "AMB": "AMB",
+    "AMBASSADOR": "AMB",
+    "ATTY": "ATTY",
+    "ATTORNEY": "ATTY",
 }
 
 _GENERATIONAL_SUFFIXES: dict[str, str] = {
@@ -60,14 +88,24 @@ _GENERATIONAL_SUFFIXES: dict[str, str] = {
     "SR": "SR",
     "SNR": "SR",
     "SENIOR": "SR",
+    "1ST": "I",
     "II": "II",
     "2ND": "II",
+    "2D": "II",
     "III": "III",
     "3RD": "III",
+    "3D": "III",
     "IV": "IV",
     "4TH": "IV",
+    "4D": "IV",
     "V": "V",
     "5TH": "V",
+    "VI": "VI",
+    "6TH": "VI",
+    "VII": "VII",
+    "7TH": "VII",
+    "VIII": "VIII",
+    "8TH": "VIII",
 }
 
 _CREDENTIALS: dict[str, str] = {
@@ -84,6 +122,11 @@ _CREDENTIALS: dict[str, str] = {
     "CPA": "CPA",
     "CFA": "CFA",
     "CFP": "CFP",
+    "CFM": "CFM",
+    "CRFA": "CRFA",
+    "CMT": "CMT",
+    "CFTA": "CFTA",
+    "CHFM": "CHFM",
     "PE": "PE",
     "RN": "RN",
     "NP": "NP",
@@ -104,15 +147,59 @@ _CREDENTIALS: dict[str, str] = {
     "CHFC": "CHFC",
     "CLU": "CLU",
     "AIF": "AIF",
+    "AIFA": "AIFA",
     "CIMA": "CIMA",
     "CPWA": "CPWA",
     "RICP": "RICP",
     "CRPC": "CRPC",
+    "CRPS": "CRPS",
+    "QPFC": "QPFC",
+    "CPFA": "CPFA",
+    "CTFA": "CTFA",
+    "AAMS": "AAMS",
+    "AWMA": "AWMA",
+    "CEPA": "CEPA",
+    "CDFA": "CDFA",
+    "WMCP": "WMCP",
+    "LUTCF": "LUTCF",
+    "CLTC": "CLTC",
+    "CFS": "CFS",
+    "CES": "CES",
+    "CMFC": "CMFC",
+    "MPAS": "MPAS",
+    "ADPA": "ADPA",
+    "CIM": "CIM",
+    "FCSI": "FCSI",
+    "PRM": "PRM",
+    "CMA": "CMA",
+    "FMA": "FMA",
+    "ABV": "ABV",
+    "CSNA": "CSNA",
+    "CIS": "CIS",
+    "CASL": "CASL",
+    "RMA": "RMA",
+    "NSSA": "NSSA",
+    "CWS": "CWS",
+    "ABFP": "ABFP",
+    "CIPFA": "CIPFA",
+    "ACIS": "ACIS",
+    "HRM": "HRM",
+    "MSFS": "MSFS",
+    "MST": "MST",
+    "CGMA": "CGMA",
     "EA": "EA",
     "PFS": "PFS",
     "CAIA": "CAIA",
     "FRM": "FRM",
+    "RET": "RET",
+    "USN": "USN",
+    "USAF": "USAF",
+    "USMC": "USMC",
 }
+
+_AMBIGUOUS_MIXED_CASE_CREDS: frozenset[str] = frozenset(
+    {"CFS", "CES", "CIM", "PRM", "CMA", "FMA", "ABV", "CIS", "RMA", "CWS", "HRM", "MST", "RET"}
+)
 
 _SURNAME_PARTICLES: frozenset[str] = frozenset(
     {
@@ -261,7 +348,138 @@ _NICKNAME_TO_ROOT: dict[str, str] = {
     "ART": "ARTHUR",
     "ARTIE": "ARTHUR",
     "BERNIE": "BERNARD",
+    "MITCH": "MITCHELL",
+    "GABE": "GABRIEL",
+    "KURT": "CURTIS",
+    "CURT": "CURTIS",
+    "KURTIS": "CURTIS",
+    "GARRY": "GARY",
+    "CANDICE": "CANDACE",
+    "BRYAN": "BRIAN",
+    "SHAWN": "SHAUN",
+    "SEAN": "SHAUN",
+    "ERIK": "ERIC",
+    "MARC": "MARK",
+    "JEFFERY": "JEFFREY",
+    "MATHEW": "MATTHEW",
+    "PHILLIP": "PHILIP",
+    "STEWART": "STUART",
+    "STU": "STUART",
+    "TRISH": "PATRICIA",
+    "TRICIA": "PATRICIA",
+    "PATTY": "PATRICIA",
+    "PATTI": "PATRICIA",
+    "CINDY": "CYNTHIA",
+    "SANDY": "SANDRA",
+    "SHERRY": "SHARON",
+    "CHERI": "SHARON",
+    "TERI": "THERESA",
+    "TERRI": "THERESA",
+    "TERRY": "TERENCE",
+    "CONNIE": "CONSTANCE",
+    "CLIFF": "CLIFFORD",
+    "NORM": "NORMAN",
+    "WES": "WESLEY",
+    "BRAD": "BRADLEY",
+    "RUSS": "RUSSELL",
+    "VINCE": "VINCENT",
+    "VINNIE": "VINCENT",
+    "LEN": "LEONARD",
+    "LENNY": "LEONARD",
+    "LES": "LESTER",
+    "MEL": "MELVIN",
+    "SID": "SIDNEY",
+    "STAN": "STANLEY",
+    "CAL": "CALVIN",
+    "CAM": "CAMERON",
+    "MAX": "MAXWELL",
+    "ROD": "RODNEY",
+    "REG": "REGINALD",
+    "REGGIE": "REGINALD",
+    "THEO": "THEODORE",
+    "JAKE": "JACOB",
+    "FRED": "FREDERICK",
+    "FREDDIE": "FREDERICK",
+    "GEORGES": "GEORGE",
+    "HERB": "HERBERT",
+    "ERNIE": "ERNEST",
+    "GEOFF": "GEOFFREY",
+    "KRISTEN": "KRISTIN",
+    "KARIN": "KAREN",
+    "WM": "WILLIAM",
+    "CHAS": "CHARLES",
+    "JAS": "JAMES",
+    "JOS": "JOSEPH",
+    "THOS": "THOMAS",
+    "GEO": "GEORGE",
+    "ROBT": "ROBERT",
+    "BENJ": "BENJAMIN",
+    "JNO": "JOHN",
+    "EDW": "EDWARD",
+    "SAML": "SAMUEL",
+    "RICHD": "RICHARD",
+    "DANL": "DANIEL",
+    "ANTH": "ANTHONY",
 }
+
+_TWO_LETTER_INITIALISMS: frozenset[str] = frozenset(
+    {
+        "TJ", "AJ", "CJ", "DJ", "RJ", "PJ", "BJ", "JJ", "MJ",
+        "JC", "JD", "JP", "KC", "JR", "JW", "JB", "JM", "JT",
+        "JL", "JS", "KP", "KT", "DW", "CW", "TC", "TK",
+    }
+)
+
+_MULTI_ROOT_DIMINUTIVES: dict[str, tuple[str, ...]] = {
+    "JERRY": ("GERALD", "JEROME", "JEREMIAH"),
+    "TERRY": ("TERENCE", "THERESA"),
+    "CHRIS": ("CHRISTOPHER", "CHRISTIAN", "CHRISTINA", "CHRISTINE"),
+    "PAT": ("PATRICK", "PATRICIA"),
+    "ED": ("EDWARD", "EDWIN", "EDMUND", "EDGAR"),
+    "TED": ("EDWARD", "THEODORE"),
+    "AL": ("ALBERT", "ALAN", "ALFRED", "ALEXANDER"),
+    "ALEX": ("ALEXANDER", "ALEXANDRA"),
+    "SAM": ("SAMUEL", "SAMANTHA"),
+    "DAN": ("DANIEL", "DANIELLE"),
+    "DANNY": ("DANIEL", "DANIELLE"),
+    "JOE": ("JOSEPH", "JOSEPHINE"),
+    "TONY": ("ANTHONY", "ANTONIA"),
+    "FRANK": ("FRANCIS", "FRANKLIN"),
+    "FRAN": ("FRANCIS", "FRANCES"),
+    "GENE": ("EUGENE", "EUGENIA"),
+}
+
+_GENDER_PAIR_SUFFIXES: tuple[str, ...] = ("A", "E", "IA", "IE", "INA", "INE", "LA", "LE")
+
+
+def resolve_given_name_roots(first_name: str | None) -> tuple[str, ...]:
+    """Return all canonical root first names associated with a given name or ambiguous diminutive."""
+    if not first_name:
+        return ()
+    tok = _clean_token(first_name)
+    if not tok:
+        return ()
+    if tok in _MULTI_ROOT_DIMINUTIVES:
+        return _MULTI_ROOT_DIMINUTIVES[tok]
+    primary = _NICKNAME_TO_ROOT.get(tok, tok)
+    return (primary,) if primary == tok else (primary, tok)
+
+
+def _is_gender_distinct_given_pair(fa: str, fb: str) -> bool:
+    """Return True if two given names differ purely by a feminine/masculine inflection suffix ('MARIO'/'MARIA', 'PAUL'/'PAULA')."""
+    shorter, longer = (fa, fb) if len(fa) <= len(fb) else (fb, fa)
+    if len(longer) > len(shorter) and any(longer == shorter + sfx for sfx in _GENDER_PAIR_SUFFIXES):
+        return True
+    return {fa[-1], fb[-1]} == {"O", "A"} and fa[:-1] == fb[:-1]
+
+
+def _is_safe_given_name_edit1(fa: str, fb: str) -> bool:
+    """Return True if two >=4-char given names share initial and differ by 1 non-gender-suffix edit."""
+    if len(fa) < 4 or len(fb) < 4 or fa[0] != fb[0] or abs(len(fa) - len(fb)) > 1:
+        return False
+    if _is_gender_distinct_given_pair(fa, fb):
+        return False
+    return damerau_levenshtein_distance_dispatch(fa, fb) == 1
 
 _PAREN_OR_QUOTE_NICK_RE = re.compile(
     r'\(\s*([A-Za-z][A-Za-z.\s\-]{0,24})\s*\)|"([A-Za-z][A-Za-z.\s\-]{0,24})"|(?<=[\s,])\'([A-Za-z][A-Za-z.\s\-]{0,24})\'(?=[\s,]|$)'
@@ -413,13 +631,15 @@ _LEADING_NUMBER_RE = re.compile(r"^\d+\s+")
 _CHIEF_OFFICER_RE = re.compile(r"\bCHIEF\s+[A-Z\s]+OFFICER\b")
 _NON_ALPHA_ASCII_RE = re.compile(r"[^A-Za-z]")
 _TITLE_NON_WORD_RE = re.compile(r"[^\w\s\-]")
+_CURLY_APOS_RE = re.compile(r"[\u2018\u2019`]")
 
 
 def is_organization_name(raw_input: str | None) -> bool:
     """Return True if raw_input represents a corporate entity, fund, or trust rather than a natural person."""
     if not raw_input:
         return False
-    s = str(raw_input).strip()
+    unesc, _ = unescape_html_entities(str(raw_input))
+    s = unesc.strip()
     if not s:
         return False
     if _ORG_SUFFIX_PATTERN_RE.search(s):
@@ -444,6 +664,7 @@ class StandardizedPerson:
     full_name: str | None = None
     person_key: str | None = None
     person_root_key: str | None = None
+    person_alt_keys: list[str] = field(default_factory=list)
     phonetic_key: str | None = None
     is_organization: bool = False
     is_valid: bool = False
@@ -465,6 +686,7 @@ class StandardizedPerson:
             "full_name": self.full_name,
             "person_key": self.person_key,
             "person_root_key": self.person_root_key,
+            "person_alt_keys": list(self.person_alt_keys),
             "phonetic_key": self.phonetic_key,
             "is_organization": self.is_organization,
             "is_valid": self.is_valid,
@@ -501,6 +723,14 @@ class StandardizedJobTitle:
 
 
 _SPACED_DOTTED_CRED_RE = re.compile(r"(?<![A-Za-z0-9])(?:[A-Za-z]{1,2}\.\s*){2,}")
+_JOINT_SALUTATION_RE = re.compile(
+    r"^(?P<lead>MR|DR)\.?\s*(?:&|AND)\s*MRS\.?\s+(?=[A-Za-z])",
+    re.IGNORECASE,
+)
+_SPOUSAL_GIVEN_RE = re.compile(
+    r"^(?P<f1>[A-Za-z]{2,})\s+(?:&|AND)\s+(?P<f2>[A-Za-z]{2,})\s+(?P<rest>[A-Za-z'\-]+(?:\s+[A-Za-z.'\-/]+)*)$",
+    re.IGNORECASE,
+)
 
 
 def _collapse_dotted_cred(match: re.Match[str]) -> str:
@@ -513,20 +743,139 @@ def _collapse_dotted_cred(match: re.Match[str]) -> str:
 def _clean_token(tok: str) -> str:
     """Strip punctuation periods from a single word token and uppercase it."""
     cleaned = _TOKEN_CLEAN_RE.sub("", tok).upper().strip("'-")
-    if cleaned and cleaned not in _GENERATIONAL_SUFFIXES and any(c.isdigit() for c in cleaned):
+    if (
+        cleaned
+        and cleaned not in _GENERATIONAL_SUFFIXES
+        and cleaned not in _SALUTATIONS
+        and any(c.isdigit() for c in cleaned)
+    ):
         return ""
     return cleaned
 
 
-def _tokenize_segment(segment: str) -> list[str]:
-    """Tokenize a name segment into cleaned uppercase tokens."""
+def _tokenize_segment_pairs(segment: str) -> list[tuple[str, str]]:
+    """Tokenize a segment into (cleaned_upper_token, raw_subtoken) pairs, expanding slash-joined credentials."""
     norm_seg = _SPACED_DOTTED_CRED_RE.sub(_collapse_dotted_cred, segment)
-    out: list[str] = []
+    out: list[tuple[str, str]] = []
     for raw_tok in norm_seg.split():
+        if "/" in raw_tok:
+            slash_pairs = [(c, p) for p in raw_tok.split("/") if (c := _clean_token(p))]
+            if len(slash_pairs) >= 2 and all(c in _CREDENTIALS for c, _ in slash_pairs):
+                out.extend(slash_pairs)
+                continue
         cleaned = _clean_token(raw_tok)
         if cleaned:
-            out.append(cleaned)
+            out.append((cleaned, raw_tok))
     return out
+
+
+def canonicalize_surname_variants(last_name: str | None) -> tuple[str, ...]:
+    """Return canonical & space/particle/Gaelic-folded surname equivalents ('VAN DER BEEK' <-> 'VANDERBEEK', 'MCDONALD' <-> 'MACDONALD')."""
+    if not last_name:
+        return ()
+    ln = " ".join(last_name.upper().split()).strip("'- ")
+    if not ln:
+        return ()
+    variants: list[str] = [ln]
+
+    if "'" in ln:
+        variants.append(ln.replace("'", ""))
+
+    parts = ln.split()
+    if len(parts) == 2 and parts[0] == "O" and len(parts[1]) >= 3:
+        variants.append(f"O'{parts[1]}")
+        variants.append(f"O{parts[1]}")
+
+    if len(parts) >= 2 and any(p in _SURNAME_PARTICLES for p in parts[:-1]):
+        collapsed = "".join(parts).replace("-", "")
+        variants.append(collapsed)
+        if parts[0] == "SAINT":
+            rest = " ".join(parts[1:])
+            variants.append(f"ST {rest}")
+            variants.append(f"ST{''.join(parts[1:])}")
+        elif parts[0] == "ST":
+            rest = " ".join(parts[1:])
+            variants.append(f"SAINT {rest}")
+            variants.append(f"ST{''.join(parts[1:])}")
+        elif parts[0] == "MC" and len(parts) == 2 and len(parts[1]) >= 3:
+            variants.append(f"MAC{parts[1]}")
+        elif parts[0] == "MAC" and len(parts) == 2 and len(parts[1]) >= 3:
+            variants.append(f"MC{parts[1]}")
+
+    base_single = ln.replace(" ", "")
+    if base_single.startswith("MC") and len(base_single) >= 5:
+        stem = base_single[2:]
+        variants.append(f"MC {stem}")
+        variants.append(f"MAC{stem}")
+    elif (
+        base_single.startswith("MAC")
+        and len(base_single) >= 6
+        and base_single[3] in "BCDFGKLMNPQRSTVWZ"
+        and not base_single.startswith("MACH")
+    ):
+        stem = base_single[3:]
+        variants.append(f"MC{stem}")
+        variants.append(f"MC {stem}")
+    elif base_single.startswith("ST") and len(base_single) >= 6 and base_single[2] in "BCDFGJKLMNPQSTVWZ":
+        stem = base_single[2:]
+        variants.append(f"ST {stem}")
+        variants.append(f"SAINT {stem}")
+
+    return tuple(dict.fromkeys(variants))
+
+
+def _is_two_letter_initialism(tok: str | None) -> bool:
+    return bool(tok and tok in _TWO_LETTER_INITIALISMS)
+
+
+def _build_person_alt_keys(
+    first_name: str | None,
+    root_first_name: str | None,
+    middle_name: str | None,
+    last_name: str | None,
+    person_root_key: str,
+) -> list[str]:
+    """Generate deterministic alternate blocking/matching keys for middle-name, initialisms, apostrophe, and compound surnames."""
+    if not first_name or not last_name:
+        return []
+    raw_alts: list[str] = []
+    rf = root_first_name or first_name
+
+    if first_name in _MULTI_ROOT_DIMINUTIVES:
+        for alt_root in _MULTI_ROOT_DIMINUTIVES[first_name]:
+            raw_alts.append(f"{last_name}|{alt_root}")
+
+    if _is_two_letter_initialism(first_name):
+        raw_alts.append(f"{last_name}|{first_name[0]}|{first_name[1]}")
+        raw_alts.append(f"{last_name}|{first_name[0]}")
+
+    if middle_name:
+        mid_tok = middle_name.split()[0]
+        if len(mid_tok) >= 2:
+            root_mid = _NICKNAME_TO_ROOT.get(mid_tok, mid_tok)
+            raw_alts.append(f"{last_name}|{first_name[0]}|{root_mid}")
+            raw_alts.append(f"{last_name}|{root_mid}")
+        elif len(first_name) == 1 and len(mid_tok) == 1:
+            raw_alts.append(f"{last_name}|{first_name}{mid_tok}")
+
+    if "'" in last_name:
+        folded_ln = last_name.replace("'", "")
+        raw_alts.append(f"{folded_ln}|{rf}")
+
+    if "-" in last_name:
+        parts = [p for p in last_name.split("-") if len(p) >= 2 and p not in _SURNAME_PARTICLES]
+        if len(parts) >= 2:
+            raw_alts.append(f"{last_name.replace('-', ' ')}|{rf}")
+            for part in parts:
+                raw_alts.append(f"{part}|{rf}")
+    elif " " in last_name:
+        parts = last_name.split()
+        if all(p not in _SURNAME_PARTICLES and len(p) >= 2 for p in parts):
+            raw_alts.append(f"{'-'.join(parts)}|{rf}")
+            for part in parts:
+                raw_alts.append(f"{part}|{rf}")
+
+    return [k for k in dict.fromkeys(raw_alts) if k != person_root_key]
 
 
 def standardize_person(raw_input: str | None) -> StandardizedPerson:
@@ -544,7 +893,11 @@ def standardize_person(raw_input: str | None) -> StandardizedPerson:
         return StandardizedPerson(raw_input=str(raw_input))
 
     actions: list[str] = []
-    working = " ".join(cleaned_raw.split())
+    working = _CURLY_APOS_RE.sub("'", " ".join(cleaned_raw.split()))
+    unescaped, did_unescape = unescape_html_entities(working)
+    if did_unescape:
+        working = " ".join(unescaped.split())
+        actions.append("HTML_ENTITIES_DECODED")
 
     # Strip leading placeholder tokens (e.g. "- Enis Hulli" or "N/A Enis Hulli")
     m_lead_ph = _LEADING_PLACEHOLDER_RE.match(working)
@@ -570,6 +923,14 @@ def standardize_person(raw_input: str | None) -> StandardizedPerson:
     nickname: str | None = None
     generational_suffix: str | None = None
     credentials: list[str] = []
+    secondary_given: str | None = None
+
+    # Extract joint salutation prefix (e.g. "Mr. & Mrs. John Smith")
+    m_joint_sal = _JOINT_SALUTATION_RE.match(working)
+    if m_joint_sal:
+        salutation = f"{m_joint_sal.group('lead').upper()}_AND_MRS"
+        working = working[m_joint_sal.end() :].strip()
+        actions.append("SALUTATION_EXTRACTED")
 
     # 1. Extract parenthetical or quoted nickname (or parenthetical credential/suffix)
     def _replace_nick(match: re.Match[str]) -> str:
@@ -591,21 +952,57 @@ def standardize_person(raw_input: str | None) -> StandardizedPerson:
 
     working = _PAREN_OR_QUOTE_NICK_RE.sub(_replace_nick, working)
 
+    # Extract dual/spousal given names ("John & Jane Smith") or slash-paired given names ("Tyler/James Miller")
+    if "," not in working:
+        pre_toks = working.split()
+        while len(pre_toks) > 1 and _clean_token(pre_toks[0]) in _SALUTATIONS:
+            salutation = _SALUTATIONS[_clean_token(pre_toks.pop(0))]
+            actions.append("SALUTATION_EXTRACTED")
+        rejoined = " ".join(pre_toks)
+        m_spouse = _SPOUSAL_GIVEN_RE.match(rejoined)
+        if m_spouse:
+            f1_c = _clean_token(m_spouse.group("f1"))
+            f2_c = _clean_token(m_spouse.group("f2"))
+            rest_str = m_spouse.group("rest")
+            rest_first = _clean_token(rest_str.split()[0])
+            if (
+                f1_c not in _CREDENTIALS
+                and f2_c not in _CREDENTIALS
+                and rest_first not in _CREDENTIALS
+                and rest_first not in _GENERATIONAL_SUFFIXES
+            ):
+                secondary_given = f2_c
+                working = f"{m_spouse.group('f1')} {rest_str}"
+                actions.append("SECONDARY_PERSON_EXTRACTED")
+        elif len(pre_toks) >= 2 and "/" in pre_toks[0]:
+            slash_g = [_clean_token(p) for p in pre_toks[0].split("/") if _clean_token(p)]
+            if len(slash_g) == 2 and all(len(p) >= 2 and p not in _CREDENTIALS for p in slash_g):
+                secondary_given = slash_g[1]
+                pre_toks[0] = slash_g[0]
+                working = " ".join(pre_toks)
+                actions.append("SECONDARY_PERSON_EXTRACTED")
+
     # 2. Split by comma and inspect segments for suffixes, credentials, and Last, First inversion
     raw_segments = [s.strip() for s in working.split(",") if s.strip()]
     if not raw_segments:
         return StandardizedPerson(raw_input=str(raw_input))
 
     core_segments: list[list[str]] = []
+    core_segment_pairs: list[list[tuple[str, str]]] = []
+    extra_raw_And_toks: list[tuple[str, list[str]]] = []
     for idx, seg in enumerate(raw_segments):
-        toks = _tokenize_segment(seg)
-        if not toks:
+        pairs = _tokenize_segment_pairs(seg)
+        if not pairs:
             continue
+        toks = [c for c, _ in pairs]
         if idx > 0 and all(
-            t in _GENERATIONAL_SUFFIXES or t in _CREDENTIALS for t in toks
+            t in _GENERATIONAL_SUFFIXES or t in _CREDENTIALS or t == "I" for t in toks
         ):
             for t in toks:
-                if t in _GENERATIONAL_SUFFIXES:
+                if t == "I":
+                    generational_suffix = "I"
+                    actions.append("GENERATIONAL_SUFFIX_EXTRACTED")
+                elif t in _GENERATIONAL_SUFFIXES:
                     generational_suffix = _GENERATIONAL_SUFFIXES[t]
                     actions.append("GENERATIONAL_SUFFIX_EXTRACTED")
                 else:
@@ -613,9 +1010,27 @@ def standardize_person(raw_input: str | None) -> StandardizedPerson:
                     actions.append("CREDENTIALS_EXTRACTED")
         else:
             core_segments.append(toks)
+            core_segment_pairs.append(pairs)
+            if idx > 0:
+                extra_raw_And_toks.append((seg, toks))
 
     if not core_segments:
         return StandardizedPerson(raw_input=str(raw_input))
+
+    # Guard against false Last, First inversion when segment 0 is already 'First [Middle] Last [CFA]' followed by unknown uppercase credentials
+    if len(core_segments) >= 2:
+        seg0 = core_segments[0]
+        non_sal_sfx = [t for t in seg0 if t not in _SALUTATIONS and t not in _GENERATIONAL_SUFFIXES]
+        all_post_upper_codes = bool(extra_raw_And_toks) and all(
+            _NON_ALPHA_ASCII_RE.sub("", rseg).isupper() and all(2 <= len(t) <= 6 for t in stoks)
+            for rseg, stoks in extra_raw_And_toks
+        )
+        if (seg0[-1] in _CREDENTIALS and len(non_sal_sfx) >= 3) or (len(non_sal_sfx) >= 2 and all_post_upper_codes):
+            for _rseg, stoks in extra_raw_And_toks:
+                credentials.extend(stoks)
+            actions.append("CREDENTIALS_EXTRACTED")
+            core_segments = [seg0]
+            core_segment_pairs = [core_segment_pairs[0]]
 
     first_name: str | None = None
     middle_name: str | None = None
@@ -660,22 +1075,51 @@ def standardize_person(raw_input: str | None) -> StandardizedPerson:
             middle_name = " ".join(given_toks[1:])
         actions.append("LAST_FIRST_UNINVERTED")
     else:
-        toks = list(core_segments[0])
-        while len(toks) > 1 and toks[0] in _SALUTATIONS:
-            salutation = _SALUTATIONS[toks.pop(0)]
+        seg0_pairs = core_segment_pairs[0]
+        toks = [c for c, _ in seg0_pairs]
+        raw_seg0_words = [r for _, r in seg0_pairs]
+        while len(toks) > 1 and (toks[0] in _SALUTATIONS or (toks[0] == "SR" and len(toks) >= 3)):
+            lead_tok = toks.pop(0)
+            raw_seg0_words.pop(0)
+            salutation = "SR" if lead_tok == "SR" else _SALUTATIONS[lead_tok]
             actions.append("SALUTATION_EXTRACTED")
+
+        # Extract leading uppercase credentials/designations (e.g., "CFM Bill Strohmeier", "CPA Gregory K Ramirez")
+        while (
+            len(toks) >= 3
+            and toks[0] in _CREDENTIALS
+            and len(toks[0]) >= 3
+            and _NON_ALPHA_ASCII_RE.sub("", raw_seg0_words[0]).isupper()
+        ):
+            lead_cred = toks.pop(0)
+            raw_seg0_words.pop(0)
+            credentials.append(_CREDENTIALS[lead_cred])
+            actions.append("CREDENTIALS_EXTRACTED")
 
         # Extract trailing credentials and generational suffixes (when >= 2 tokens precede)
         trailing_creds: list[str] = []
-        while len(toks) > 2 and (
-            toks[-1] in _CREDENTIALS or toks[-1] in _GENERATIONAL_SUFFIXES
-        ):
-            tail = toks.pop()
-            if tail in _CREDENTIALS:
-                trailing_creds.insert(0, _CREDENTIALS[tail])
-            else:
-                generational_suffix = _GENERATIONAL_SUFFIXES[tail]
+        while len(toks) > 2:
+            cand_tail = toks[-1]
+            raw_tail = raw_seg0_words[-1]
+            if cand_tail in _GENERATIONAL_SUFFIXES:
+                toks.pop()
+                raw_seg0_words.pop()
+                generational_suffix = _GENERATIONAL_SUFFIXES[cand_tail]
                 actions.append("GENERATIONAL_SUFFIX_EXTRACTED")
+            elif cand_tail == "I" and len(toks) >= 4 and raw_tail == "I":
+                toks.pop()
+                raw_seg0_words.pop()
+                generational_suffix = "I"
+                actions.append("GENERATIONAL_SUFFIX_EXTRACTED")
+            elif cand_tail in _CREDENTIALS:
+                raw_tail_alpha = _NON_ALPHA_ASCII_RE.sub("", raw_tail)
+                if cand_tail in _AMBIGUOUS_MIXED_CASE_CREDS and not trailing_creds and not raw_tail_alpha.isupper():
+                    break
+                toks.pop()
+                raw_seg0_words.pop()
+                trailing_creds.insert(0, _CREDENTIALS[cand_tail])
+            else:
+                break
         if trailing_creds:
             credentials.extend(trailing_creds)
             actions.append("CREDENTIALS_EXTRACTED")
@@ -718,6 +1162,14 @@ def standardize_person(raw_input: str | None) -> StandardizedPerson:
         f"{last_name or ''}|{first_name or ''}|{middle_name or ''}|{generational_suffix or ''}"
     )
     person_root_key = f"{last_name or ''}|{root_first_name or ''}"
+    person_alt_keys = _build_person_alt_keys(
+        first_name, root_first_name, middle_name, last_name, person_root_key
+    )
+    if secondary_given and last_name:
+        sec_root = _NICKNAME_TO_ROOT.get(secondary_given, secondary_given)
+        sec_key = f"{last_name}|{sec_root}"
+        if sec_key != person_root_key and sec_key not in person_alt_keys:
+            person_alt_keys.append(sec_key)
 
     last_snd = compute_soundex_dispatch(last_name.split()[-1]) if last_name else ""
     first_snd = compute_soundex_dispatch(root_first_name or first_name or "")
@@ -738,6 +1190,7 @@ def standardize_person(raw_input: str | None) -> StandardizedPerson:
         full_name=full_name,
         person_key=person_key,
         person_root_key=person_root_key,
+        person_alt_keys=person_alt_keys,
         phonetic_key=phonetic_key,
         is_valid=True,
         confidence=confidence,
@@ -1064,6 +1517,121 @@ def compare_persons(
         )
 
     if pa.last_name == pb.last_name and (
+        set(resolve_given_name_roots(pa.first_name)) & set(resolve_given_name_roots(pb.first_name))
+    ):
+        return PersonComparisonResult(
+            is_match=True,
+            score=0.95,
+            match_type="MULTI_ROOT_DIMINUTIVE_MATCH",
+            person_a=pa,
+            person_b=pb,
+        )
+
+    surn_vars_a = set(canonicalize_surname_variants(pa.last_name))
+    surn_vars_b = set(canonicalize_surname_variants(pb.last_name))
+    shared_surname_variant = bool(surn_vars_a & surn_vars_b)
+
+    if (
+        shared_surname_variant
+        and pa.last_name != pb.last_name
+        and (
+            pa.root_first_name == pb.root_first_name
+            or bool(set(resolve_given_name_roots(pa.first_name)) & set(resolve_given_name_roots(pb.first_name)))
+        )
+    ):
+        return PersonComparisonResult(
+            is_match=True,
+            score=0.94,
+            match_type="PARTICLE_SURNAME_MATCH",
+            person_a=pa,
+            person_b=pb,
+        )
+
+    if shared_surname_variant and (
+        (
+            _is_two_letter_initialism(pa.first_name)
+            and pb.first_name[0] == pa.first_name[0]
+            and bool(pb.middle_name and pb.middle_name[0] == pa.first_name[1])
+        )
+        or (
+            _is_two_letter_initialism(pb.first_name)
+            and pa.first_name[0] == pb.first_name[0]
+            and bool(pa.middle_name and pa.middle_name[0] == pb.first_name[1])
+        )
+        or (
+            len(pa.first_name) == 1
+            and bool(pa.middle_name and len(pa.middle_name) == 1)
+            and pb.first_name[0] == pa.first_name
+            and bool(pb.middle_name and pb.middle_name[0] == pa.middle_name)
+        )
+        or (
+            len(pb.first_name) == 1
+            and bool(pb.middle_name and len(pb.middle_name) == 1)
+            and pa.first_name[0] == pb.first_name
+            and bool(pa.middle_name and pa.middle_name[0] == pb.middle_name)
+        )
+    ):
+        return PersonComparisonResult(
+            is_match=True,
+            score=0.92,
+            match_type="TWO_LETTER_INITIALISM_MATCH",
+            person_a=pa,
+            person_b=pb,
+        )
+
+    # Unhyphenated 2-word surname vs middle+last split (e.g., "Florencia Gomez Stoppello" <-> "Marta Florencia Gomez Stoppello")
+    if (
+        (pa.middle_name and f"{pa.middle_name} {pa.last_name}" == pb.last_name and pa.root_first_name == pb.root_first_name)
+        or (pb.middle_name and f"{pb.middle_name} {pb.last_name}" == pa.last_name and pa.root_first_name == pb.root_first_name)
+        or (
+            shared_surname_variant
+            and pa.middle_name
+            and pb.middle_name
+            and (
+                pb.middle_name == f"{pa.first_name} {pa.middle_name}"
+                or pa.middle_name == f"{pb.first_name} {pb.middle_name}"
+            )
+        )
+    ):
+        return PersonComparisonResult(
+            is_match=True,
+            score=0.93,
+            match_type="ALT_NAME_KEY_MATCH",
+            person_a=pa,
+            person_b=pb,
+        )
+
+    alt_a = set(pa.person_alt_keys)
+    alt_b = set(pb.person_alt_keys)
+    three_part_overlap = {k for k in (alt_a & alt_b) if k.count("|") == 2}
+    a_matches_b_alt = (
+        pa.person_root_key in alt_b
+        and (
+            not pa.middle_name
+            or "'" in pb.last_name
+            or "-" in pb.last_name
+            or " " in pb.last_name
+        )
+    )
+    b_matches_a_alt = (
+        pb.person_root_key in alt_a
+        and (
+            not pb.middle_name
+            or "'" in pa.last_name
+            or "-" in pa.last_name
+            or " " in pa.last_name
+        )
+    )
+    if three_part_overlap or a_matches_b_alt or b_matches_a_alt:
+        return PersonComparisonResult(
+            is_match=True,
+            score=0.93,
+            match_type="ALT_NAME_KEY_MATCH",
+            person_a=pa,
+            person_b=pb,
+        )
+
+    if pa.last_name == pb.last_name and (
         (len(pa.first_name) == 1 and pb.first_name.startswith(pa.first_name))
         or (len(pb.first_name) == 1 and pa.first_name.startswith(pb.first_name))
     ):
@@ -1075,13 +1643,27 @@ def compare_persons(
             person_b=pb,
         )
 
+    if pa.last_name == pb.last_name and _is_safe_given_name_edit1(pa.first_name, pb.first_name):
+        return PersonComparisonResult(
+            is_match=True,
+            score=0.89,
+            match_type="GIVEN_NAME_EDIT1_MATCH",
+            person_a=pa,
+            person_b=pb,
+        )
+
     full_a = f"{pa.root_first_name} {pa.last_name}"
     full_b = f"{pb.root_first_name} {pb.last_name}"
     max_len = max(len(full_a), len(full_b))
     dist = damerau_levenshtein_distance_dispatch(full_a, full_b)
     sim = round(max(0.0, 1.0 - (dist / max_len)), 4)
 
-    if pa.phonetic_key and pa.phonetic_key == pb.phonetic_key and sim >= 0.82:
+    if (
+        pa.phonetic_key
+        and pa.phonetic_key == pb.phonetic_key
+        and sim >= 0.82
+        and not _is_gender_distinct_given_pair(pa.first_name, pb.first_name)
+    ):
         return PersonComparisonResult(
             is_match=True,
             score=sim,
@@ -1096,6 +1678,28 @@ def compare_persons(
         match_type="NO_MATCH",
         person_a=pa,
         person_b=pb,
+    )
+
+
+def _compatible_swapped_given(a: str, b: str) -> bool:
+    roots_a = set(resolve_given_name_roots(a))
+    roots_b = set(resolve_given_name_roots(b))
+    if roots_a & roots_b:
+        return True
+    return len(a) >= 4 and len(b) >= 4 and a[:4] == b[:4]
+
+
+def are_swapped_person_names(
+    person_a: str | StandardizedPerson | None,
+    person_b: str | StandardizedPerson | None,
+) -> bool:
+    """Return True if two unpunctuated person names represent swapped First/Last tokens ('Sciandra Julianne' <-> 'Julie Sciandra')."""
+    pa = person_a if isinstance(person_a, StandardizedPerson) else standardize_person(person_a)
+    pb = person_b if isinstance(person_b, StandardizedPerson) else standardize_person(person_b)
+    if not (pa.is_valid and pb.is_valid and pa.first_name and pa.last_name and pb.first_name and pb.last_name):
+        return False
+    return (pa.first_name == pb.last_name and _compatible_swapped_given(pa.last_name, pb.first_name)) or (
+        pb.first_name == pa.last_name and _compatible_swapped_given(pb.last_name, pa.first_name)
     )
 
 
@@ -1169,6 +1773,11 @@ def deduplicate_persons(
             f"PH:{p.phonetic_key or ''}",
             f"LNFI:{p.last_name}:{p.first_name[:1]}" if (p.last_name and p.first_name) else "",
         }
+        for ak in p.person_alt_keys:
+            keys.add(f"PRK:{ak}")
+        for sv in canonicalize_surname_variants(p.last_name):
+            for r in resolve_given_name_roots(p.first_name):
+                keys.add(f"SVAR:{sv}:{r[:1]}")
         keys.discard("")
         keys.discard("PH:")
         for k in keys:
@@ -1214,7 +1823,8 @@ def split_compound_persons(raw_input: str | None) -> list[StandardizedPerson]:
     """Split a joint/couple person string (e.g., 'John & Jane Smith') into individual StandardizedPerson records."""
     if raw_input is None:
         return []
-    cleaned = str(raw_input).strip()
+    unesc, _ = unescape_html_entities(str(raw_input))
+    cleaned = unesc.strip()
     if not cleaned:
         return []
 

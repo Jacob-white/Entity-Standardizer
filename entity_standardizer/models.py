@@ -125,6 +125,7 @@ class StandardizedPhone:
     vanity_alias: str | None = None
     region_code: str | None = None
     line_type: str = PhoneLineType.UNKNOWN
+    is_toll_free: bool = False
     is_valid: bool = False
     is_possible: bool = False
     phone_key: str | None = None
@@ -153,6 +154,7 @@ class StandardizedPhone:
             "vanity_alias": self.vanity_alias,
             "region_code": self.region_code,
             "line_type": self.line_type,
+            "is_toll_free": self.is_toll_free,
             "is_valid": self.is_valid,
             "is_possible": self.is_possible,
             "phone_key": self.phone_key,

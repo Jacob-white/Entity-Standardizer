@@ -92,11 +92,19 @@ def stream_standardize_csv(
     person_col: str | None = None,
     email_col: str | None = None,
     url_col: str | None = None,
+    include_matching_keys: bool = False,
 ) -> int:
-    """Stream-process a CSV file, appending standardized multi-pillar columns, and return row count."""
+    """Stream-process a CSV file, appending standardized multi-pillar (and optional pre-match blocking) columns."""
+    from entity_standardizer.address.models import extract_street_core_key
     from entity_standardizer.address.standardizer import standardize_address
-    from entity_standardizer.company import standardize_company
-    from entity_standardizer.person import standardize_person
+    from entity_standardizer.company import (
+        classify_company_role,
+        compact_company_key,
+        extract_company_acronym,
+        resolve_brand_lineage,
+        standardize_company,
+    )
+    from entity_standardizer.person import canonicalize_surname_variants, standardize_person
     from entity_standardizer.web import standardize_email, standardize_url
 
     in_path = Path(input_path)
@@ -115,6 +123,8 @@ def stream_standardize_csv(
         "phone_confidence",
         "phone_routing_tier",
     ]
+    if include_matching_keys:
+        extra_cols.append("phone_is_toll_free")
     if address_col:
         extra_cols.extend(
             [
@@ -125,12 +135,42 @@ def stream_standardize_csv(
                 "address_key",
             ]
         )
+        if include_matching_keys:
+            extra_cols.extend(
+                [
+                    "address_postal_city",
+                    "address_postal_building_key",
+                    "address_street_core_key",
+                ]
+            )
     if company_col:
         extra_cols.extend(["company_legal_name", "company_key"])
+        if include_matching_keys:
+            extra_cols.extend(
+                [
+                    "company_brand_key",
+                    "company_brand_lineage",
+                    "company_acronym",
+                    "company_compact_key",
+                    "company_role",
+                ]
+            )
     if person_col:
         extra_cols.extend(["person_full_name", "person_key"])
+        if include_matching_keys:
+            extra_cols.extend(
+                [
+                    "person_root_first_name",
+                    "person_middle_name",
+                    "person_root_key",
+                    "person_alt_keys",
+                    "person_surname_variants",
+                ]
+            )
     if email_col:
         extra_cols.extend(["email_canonical", "email_domain"])
+        if include_matching_keys:
+            extra_cols.extend(["email_is_role_account", "email_is_free_provider"])
     if url_col:
         extra_cols.extend(["url_canonical", "url_domain"])
 
@@ -166,6 +206,8 @@ def stream_standardize_csv(
                     "phone_routing_tier": res.routing_tier,
                 }
             )
+            if include_matching_keys:
+                out_row["phone_is_toll_free"] = str(res.is_toll_free)
             if address_col and address_col in row:
                 addr_res = standardize_address(
                     row.get(address_col, ""),
@@ -181,6 +223,16 @@ def stream_standardize_csv(
                         "address_key": _csv_safe_cell(addr_res.normalized_address_key or ""),
                     }
                 )
+                if include_matching_keys:
+                    out_row.update(
+                        {
+                            "address_postal_city": _csv_safe_cell(addr_res.postal_city or ""),
+                            "address_postal_building_key": _csv_safe_cell(addr_res.postal_building_key or ""),
+                            "address_street_core_key": _csv_safe_cell(
+                                extract_street_core_key(addr_res.street1) or ""
+                            ),
+                        }
+                    )
             if company_col and company_col in row:
                 comp_res = standardize_company(row.get(company_col, ""), country=country_hint)
                 out_row.update(
@@ -189,6 +241,16 @@ def stream_standardize_csv(
                         "company_key": _csv_safe_cell(comp_res.company_key or ""),
                     }
                 )
+                if include_matching_keys:
+                    out_row.update(
+                        {
+                            "company_brand_key": _csv_safe_cell(comp_res.brand_key or ""),
+                            "company_brand_lineage": _csv_safe_cell(resolve_brand_lineage(comp_res) or ""),
+                            "company_acronym": _csv_safe_cell(extract_company_acronym(comp_res) or ""),
+                            "company_compact_key": _csv_safe_cell(compact_company_key(comp_res) or ""),
+                            "company_role": _csv_safe_cell(classify_company_role(comp_res)),
+                        }
+                    )
             if person_col and person_col in row:
                 per_res = standardize_person(row.get(person_col, ""))
                 out_row.update(
@@ -197,6 +259,16 @@ def stream_standardize_csv(
                         "person_key": _csv_safe_cell(per_res.person_key or ""),
                     }
                 )
+                if include_matching_keys:
+                    out_row.update(
+                        {
+                            "person_root_first_name": _csv_safe_cell(per_res.root_first_name or ""),
+                            "person_middle_name": _csv_safe_cell(per_res.middle_name or ""),
+                            "person_root_key": _csv_safe_cell(per_res.person_root_key or ""),
+                            "person_alt_keys": "|".join(per_res.person_alt_keys),
+                            "person_surname_variants": "|".join(canonicalize_surname_variants(per_res.last_name)),
+                        }
+                    )
             if email_col and email_col in row:
                 em_res = standardize_email(row.get(email_col, ""))
                 out_row.update(
@@ -205,6 +277,13 @@ def stream_standardize_csv(
                         "email_domain": _csv_safe_cell(em_res.domain or ""),
                     }
                 )
+                if include_matching_keys:
+                    out_row.update(
+                        {
+                            "email_is_role_account": str(em_res.is_role_account),
+                            "email_is_free_provider": str(em_res.is_free_provider),
+                        }
+                    )
             if url_col and url_col in row:
                 url_res = standardize_url(row.get(url_col, ""))
                 out_row.update(

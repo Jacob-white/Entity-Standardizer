@@ -14,7 +14,7 @@ from entity_standardizer._native_dispatch import (
     normalize_company_tokens_dispatch,
 )
 from entity_standardizer.dedup import DisjointSet
-from entity_standardizer.normalization import fold_latin_diacritics
+from entity_standardizer.normalization import fold_latin_diacritics, unescape_html_entities
 from entity_standardizer.registry import normalize_country_iso2
 
 # Multi-token and single-token legal entity forms (ISO 20275 ELF)
@@ -142,11 +142,28 @@ _GENERIC_BRAND_TAIL_WORDS: frozenset[str] = frozenset(
         "MANAGEMENT",
         "ADVISORS",
         "ADVISERS",
+        "ADVISORY",
         "INVESTMENTS",
+        "INVESTMENT",
         "INVESTORS",
         "SECURITIES",
         "ASSOCIATES",
         "SERVICES",
+        "FINANCIAL",
+        "WEALTH",
+        "ASSET",
+        "TRUST",
+        "NETWORK",
+        "BROKERS",
+        "BROKERAGE",
+        "CONSULTING",
+        "CONSULTANTS",
+        "INSURANCE",
+        "CLEARING",
+        "PLANNING",
+        "BANCORP",
+        "BANKING",
+        "PRIVATE",
         "CORPORATION",
         "CORP",
         "COMPANY",
@@ -154,8 +171,128 @@ _GENERIC_BRAND_TAIL_WORDS: frozenset[str] = frozenset(
     }
 )
 
+_WEALTH_TOKEN_ABBREVS: dict[str, str] = {
+    "SRVS": "SERVICES",
+    "SVCS": "SERVICES",
+    "SVC": "SERVICES",
+    "SRV": "SERVICES",
+    "MGMT": "MANAGEMENT",
+    "MGT": "MANAGEMENT",
+    "FINL": "FINANCIAL",
+    "FINCL": "FINANCIAL",
+    "INVS": "INVESTMENTS",
+    "INVT": "INVESTMENTS",
+    "INV": "INVESTMENTS",
+    "ASSN": "ASSOCIATES",
+    "ASSOC": "ASSOCIATES",
+    "ASSOCS": "ASSOCIATES",
+    "ADVS": "ADVISORS",
+    "ADVR": "ADVISORS",
+    "ADVRS": "ADVISORS",
+    "SECS": "SECURITIES",
+    "BKG": "BANKING",
+    "INS": "INSURANCE",
+    "GRP": "GROUP",
+    "HLDGS": "HOLDINGS",
+    "HLDG": "HOLDING",
+    "NATL": "NATIONAL",
+    "SERVIES": "SERVICES",
+    "SVGS": "SAVINGS",
+}
+
+_ACRONYM_STOPWORDS: frozenset[str] = frozenset({"AND", "OF", "THE", "FOR", "IN", "AT", "BY"})
+
+_BRAND_LINEAGE_PREFIXES: tuple[tuple[str, str], ...] = (
+    ("OSAIC", "OSAIC"),
+    ("SECURITIES AMERICA", "OSAIC"),
+    ("ROYAL ALLIANCE", "OSAIC"),
+    ("WOODBURY", "OSAIC"),
+    ("SAGEPOINT", "OSAIC"),
+    ("FSC SECURITIES", "OSAIC"),
+    ("TRIAD ADVISORS", "OSAIC"),
+    ("LADENBURG THALMANN", "OSAIC"),
+    ("INVESTACORP", "OSAIC"),
+    ("KMS FINANCIAL", "OSAIC"),
+    ("ADVISOR GROUP", "OSAIC"),
+    ("PIPER SANDLER", "PIPER SANDLER"),
+    ("PIPER JAFFRAY", "PIPER SANDLER"),
+    ("SANDLER ONEILL", "PIPER SANDLER"),
+    ("SANDLER O NEILL", "PIPER SANDLER"),
+    ("EQUITABLE ADVISORS", "EQUITABLE"),
+    ("EQUITABLE FINANCIAL", "EQUITABLE"),
+    ("AXA ADVISORS", "EQUITABLE"),
+    ("AXA EQUITABLE", "EQUITABLE"),
+    ("COREBRIDGE", "COREBRIDGE"),
+    ("VALIC", "COREBRIDGE"),
+    ("AIG RETIREMENT", "COREBRIDGE"),
+    ("SUNAMERICA", "COREBRIDGE"),
+    ("CAPTRUST", "CAPTRUST"),
+    ("CAPFINANCIAL", "CAPTRUST"),
+    ("TRUIST", "TRUIST"),
+    ("SUNTRUST", "TRUIST"),
+    ("BB AND T", "TRUIST"),
+    ("BBT SECURITIES", "TRUIST"),
+    ("CETERA", "CETERA"),
+    ("AVANTAX", "CETERA"),
+    ("FIRST ALLIED", "CETERA"),
+    ("SUMMIT BROKERAGE", "CETERA"),
+    ("VSR FINANCIAL", "CETERA"),
+    ("GIRARD SECURITIES", "CETERA"),
+    ("HD VEST", "CETERA"),
+    ("1ST GLOBAL", "CETERA"),
+    ("CHARLES SCHWAB", "CHARLES SCHWAB"),
+    ("TD AMERITRADE", "CHARLES SCHWAB"),
+    ("MORGAN STANLEY", "MORGAN STANLEY"),
+    ("ETRADE", "MORGAN STANLEY"),
+    ("E TRADE", "MORGAN STANLEY"),
+    ("EATON VANCE", "MORGAN STANLEY"),
+    ("SMITH BARNEY", "MORGAN STANLEY"),
+    ("BANK OF AMERICA", "BANK OF AMERICA"),
+    ("BANC OF AMERICA", "BANK OF AMERICA"),
+    ("MERRILL LYNCH", "BANK OF AMERICA"),
+    ("MERRILL", "BANK OF AMERICA"),
+    ("WELLS FARGO", "WELLS FARGO"),
+    ("WACHOVIA", "WELLS FARGO"),
+    ("AG EDWARDS", "WELLS FARGO"),
+    ("VOYA", "VOYA"),
+    ("ING FINANCIAL", "VOYA"),
+    ("LPL FINANCIAL", "LPL"),
+    ("WADDELL AND REED", "LPL"),
+    ("NATIONAL PLANNING", "LPL"),
+    ("ATRIA WEALTH", "LPL"),
+    ("CADARET GRANT", "LPL"),
+    ("CUSO FINANCIAL", "LPL"),
+    ("SORRENTO PACIFIC", "LPL"),
+    ("NEXT FINANCIAL", "LPL"),
+    ("RAYMOND JAMES", "RAYMOND JAMES"),
+    ("MORGAN KEEGAN", "RAYMOND JAMES"),
+    ("ALEX BROWN", "RAYMOND JAMES"),
+    ("AMERIPRISE", "AMERIPRISE"),
+    ("AMERICAN EXPRESS FINANCIAL", "AMERIPRISE"),
+    ("TIAA", "TIAA"),
+    ("NUVEEN", "TIAA"),
+    ("EMPOWER RETIREMENT", "EMPOWER"),
+    ("GREAT WEST FINANCIAL", "EMPOWER"),
+    ("MASSMUTUAL RETIREMENT", "EMPOWER"),
+    ("FRANKLIN TEMPLETON", "FRANKLIN TEMPLETON"),
+    ("LEGG MASON", "FRANKLIN TEMPLETON"),
+    ("PUTNAM INVESTMENTS", "FRANKLIN TEMPLETON"),
+    ("INVESTORS GROUP", "IGM FINANCIAL"),
+    ("IG WEALTH", "IGM FINANCIAL"),
+    ("IGM FINANCIAL", "IGM FINANCIAL"),
+    ("MACKENZIE INVESTMENTS", "IGM FINANCIAL"),
+    ("COUNSEL PORTFOLIO", "IGM FINANCIAL"),
+    ("PRUDENTIAL", "PRUDENTIAL"),
+    ("PGIM", "PRUDENTIAL"),
+)
+
 _BRANCH_KEYWORDS_RE = re.compile(
-    r"\b(?:DIVISION|DIV|BRANCH|UNIT|DEPARTMENT|DEPT|OFFICE|REGION|STORE|PLANT|FACILITY|HEADQUARTERS|HQ|OPERATIONS|PROGRAM\s+MANAGER|PLAN\s+SPONSOR|GENERAL\s+PARTNER|MANAGING\s+MEMBER|SERIES|PORTFOLIO|TRANCHE|SUB[\-\s]?FUND)\b",
+    r"\b(?:DIVISION|DIV|BRANCH|UNIT|DEPARTMENT|DEPT|OFFICE|HOME\s+OFFICE|ULTIMATE\s+PARENT|PARENT\s+ACCOUNT|SUB[\-\s]?ADVISORY|SNL\s+LIFE\s+GROUP|REGION|STORE|PLANT|FACILITY|HEADQUARTERS|HQ|OPERATIONS|PROGRAM\s+MANAGER|PLAN\s+SPONSOR|GENERAL\s+PARTNER|MANAGING\s+MEMBER|SERIES|PORTFOLIO|TRANCHE|SUB[\-\s]?FUND)\b",
+    re.IGNORECASE,
+)
+
+_CRM_HIERARCHY_TAIL_RE = re.compile(
+    r"\s+(ULTIMATE\s+PARENT|PARENT\s+ACCOUNT|SNL\s+LIFE\s+GROUP|SUB[\-\s]+ADVISORY|HOME\s+OFFICE|PARENT)\s*$",
     re.IGNORECASE,
 )
 
@@ -436,6 +573,10 @@ def standardize_company(
 
     actions: list[str] = []
     working = " ".join(cleaned_raw.split())
+    unescaped, did_unescape = unescape_html_entities(working)
+    if did_unescape:
+        working = " ".join(unescaped.split())
+        actions.append("HTML_ENTITIES_DECODED")
 
     # 0. Strip trailing SEC /XX or /XX/ state-of-incorporation or filing suffixes
     sec_country: str | None = None
@@ -495,6 +636,15 @@ def standardize_company(
         fka_raw, branch_raw = _pop_trailing_branch(fka_raw, actions)
     if branch_raw is None:
         working, branch_raw = _pop_trailing_branch(working, actions)
+    if branch_raw is None:
+        m_crm = _CRM_HIERARCHY_TAIL_RE.search(working)
+        if m_crm:
+            head_part = working[: m_crm.start()].strip(" ,;-")
+            tag_part = m_crm.group(1).strip()
+            if head_part and (tag_part.upper() != "PARENT" or len(head_part.split()) >= 2):
+                working = head_part
+                branch_raw = tag_part
+                actions.append("CRM_HIERARCHY_SUFFIX_STRIPPED")
 
     # 3b. Extract trailing parenthesized uppercase acronym alias (e.g., "Pacific Investment Management Company (PIMCO)")
     if dba_raw is None:
@@ -525,6 +675,27 @@ def standardize_company(
     if len(base_tokens) > 1 and base_tokens[0] == "THE":
         base_tokens = base_tokens[1:]
         actions.append("LEADING_ARTICLE_STRIPPED")
+
+    if len(base_tokens) >= 3:
+        expanded_bt: list[str] = []
+        idx_b = 0
+        did_multi = False
+        while idx_b < len(base_tokens):
+            if idx_b + 3 <= len(base_tokens) and tuple(base_tokens[idx_b : idx_b + 3]) == ("B", "AND", "T"):
+                expanded_bt.extend(("BANK", "AND", "TRUST"))
+                idx_b += 3
+                did_multi = True
+            else:
+                expanded_bt.append(base_tokens[idx_b])
+                idx_b += 1
+        if did_multi:
+            base_tokens = expanded_bt
+            actions.append("TOKEN_ABBREVIATION_EXPANDED")
+
+    if len(base_tokens) >= 2 and any(t in _WEALTH_TOKEN_ABBREVS for t in base_tokens):
+        base_tokens = [_WEALTH_TOKEN_ABBREVS.get(t, t) for t in base_tokens]
+        if "TOKEN_ABBREVIATION_EXPANDED" not in actions:
+            actions.append("TOKEN_ABBREVIATION_EXPANDED")
 
     base_name = " ".join(base_tokens)
     legal_name = f"{base_name} {legal_suffix}".strip() if legal_suffix else base_name
@@ -615,6 +786,86 @@ class CompanyComparisonResult:
         }
 
 
+def _derive_acronym_info(comp: StandardizedCompany) -> tuple[str | None, bool]:
+    """Return (acronym_code, is_already_initialism) from a standardized company's brand_stem."""
+    if not comp.is_valid or not comp.brand_stem:
+        return None, False
+    core = [t for t in comp.brand_stem.split() if t and t not in _ACRONYM_STOPWORDS]
+    if not core:
+        return None, False
+    if len(core) == 1:
+        tok = core[0]
+        if 3 <= len(tok) <= 6 and tok.isalpha() and tok.isascii():
+            return tok, True
+        return None, False
+    if all(len(t) <= 2 and t.isalpha() and t.isascii() for t in core):
+        joined = "".join(core)
+        return (joined, True) if 3 <= len(joined) <= 6 else (None, False)
+    if len(core) >= 3 and all(t[0].isalpha() and t[0].isascii() for t in core):
+        acr = "".join(t[0] for t in core)
+        return (acr, False) if 3 <= len(acr) <= 6 else (None, False)
+    return None, False
+
+
+def extract_company_acronym(company: str | StandardizedCompany | None) -> str | None:
+    """Extract a 3-to-6 letter canonical acronym/initialism for an organization ('Withum Smith & Brown' -> 'WSB')."""
+    comp = company if isinstance(company, StandardizedCompany) else standardize_company(company)
+    acr, _ = _derive_acronym_info(comp)
+    return acr
+
+
+def resolve_brand_lineage(company: str | StandardizedCompany | None) -> str | None:
+    """Resolve an organization to its canonical M&A / broker-dealer corporate brand lineage family if known."""
+    comp = company if isinstance(company, StandardizedCompany) else standardize_company(company)
+    if not comp.is_valid:
+        return None
+    for candidate in (comp.base_name, comp.brand_stem, comp.dba_name, comp.fka_name):
+        if not candidate:
+            continue
+        for prefix, family in _BRAND_LINEAGE_PREFIXES:
+            if candidate == prefix or candidate.startswith(f"{prefix} "):
+                return family
+    return None
+
+
+def are_affiliated_brands(
+    company_a: str | StandardizedCompany | None,
+    company_b: str | StandardizedCompany | None,
+) -> bool:
+    """Return True if two organizations belong to the same known M&A / corporate brand lineage family."""
+    lin_a = resolve_brand_lineage(company_a)
+    lin_b = resolve_brand_lineage(company_b)
+    return bool(lin_a and lin_a == lin_b)
+
+
+def compact_company_key(company: str | StandardizedCompany | None) -> str | None:
+    """Collapse leading single-letter prefix spacing in base_name ('E TRADE SAVINGS BANK' -> 'ETRADE SAVINGS BANK')."""
+    comp = company if isinstance(company, StandardizedCompany) else standardize_company(company)
+    if not comp.is_valid or not comp.base_name:
+        return None
+    toks = comp.base_name.split()
+    if len(toks) >= 2 and len(toks[0]) == 1 and len(toks[1]) >= 3 and toks[1] not in _GENERIC_BRAND_TAIL_WORDS:
+        return " ".join([toks[0] + toks[1], *toks[2:]])
+    return comp.base_name
+
+
+def classify_company_role(company: str | StandardizedCompany | None) -> str:
+    """Classify corporate structural role ('TRUST_FIDUCIARY', 'PRIVATE_FUND', 'HOLDING_PARENT', 'OMNIBUS_OR_TERMINATED', 'OPERATING_ENTITY')."""
+    comp = company if isinstance(company, StandardizedCompany) else standardize_company(company)
+    if not comp.is_valid or not comp.base_name:
+        return "UNKNOWN"
+    tokens = set(comp.legal_name.split()) if comp.legal_name else set(comp.base_name.split())
+    if tokens & {"OMNIBUS", "TERMINATED", "DEFUNCT", "INACTIVE", "TEST", "DORMANT"}:
+        return "OMNIBUS_OR_TERMINATED"
+    if "TRUST" in tokens or "TRUSTEE" in tokens or "TRUSTEES" in tokens or "FIDUCIARY" in tokens:
+        return "TRUST_FIDUCIARY"
+    if ({"PRIVATE", "FUND"} <= tokens) or "GP" in tokens or (tokens & {"ENDOWMENT", "FOUNDATION"}):
+        return "PRIVATE_FUND"
+    if tokens & {"HOLDINGS", "HOLDING", "BANCORP"} or comp.branch_unit in ("PARENT", "ULTIMATE PARENT"):
+        return "HOLDING_PARENT"
+    return "OPERATING_ENTITY"
+
+
 def compare_companies(
     company_a: str | StandardizedCompany | None,
     company_b: str | StandardizedCompany | None,
@@ -650,6 +901,17 @@ def compare_companies(
             company_b=cb,
         )
 
+    ck_a = compact_company_key(ca)
+    ck_b = compact_company_key(cb)
+    if ck_a and ck_a == ck_b:
+        return CompanyComparisonResult(
+            is_match=True,
+            score=0.95,
+            match_type="COMPACT_SPACING_MATCH",
+            company_a=ca,
+            company_b=cb,
+        )
+
     aliases_a = {x for x in (ca.dba_name, ca.fka_name) if x}
     aliases_b = {x for x in (cb.dba_name, cb.fka_name) if x}
     names_a = {x for x in (ca.base_name, ca.legal_name, ca.brand_stem) if x} | aliases_a
@@ -668,6 +930,26 @@ def compare_companies(
             is_match=True,
             score=0.9,
             match_type="BRAND_STEM_MATCH",
+            company_a=ca,
+            company_b=cb,
+        )
+
+    if are_affiliated_brands(ca, cb):
+        return CompanyComparisonResult(
+            is_match=True,
+            score=0.88,
+            match_type="BRAND_LINEAGE_MATCH",
+            company_a=ca,
+            company_b=cb,
+        )
+
+    acr_a, init_a = _derive_acronym_info(ca)
+    acr_b, init_b = _derive_acronym_info(cb)
+    if acr_a and acr_a == acr_b and (init_a != init_b or (init_a and init_b)):
+        return CompanyComparisonResult(
+            is_match=True,
+            score=0.85,
+            match_type="ACRONYM_MATCH",
             company_a=ca,
             company_b=cb,
         )
