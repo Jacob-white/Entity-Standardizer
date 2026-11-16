@@ -33,6 +33,7 @@ from entity_standardizer import (
 from entity_standardizer.address.models import (
     canonicalize_intl_city,
     canonicalize_intl_postal_code,
+    canonicalize_intl_state,
     canonicalize_intl_street_for_postal_key,
 )
 
@@ -70,6 +71,11 @@ def test_person_luke_lucius_and_prefix_shortening() -> None:
         assert compare_persons("Kate K. Stone", "Katharine Klein Stone").is_match is True
         assert compare_persons("Kim S. Mercer", "Kimberly Shaw Mercer").is_match is True
         assert compare_persons("Brody A. Bennett", "Broderick A. Bennett").is_match is True
+        assert compare_persons("Judi Miller", "Judith Lee Miller").is_match is True
+        assert compare_persons("Vicki Bennett", "Victoria Bennett").is_match is True
+        assert resolve_brand_lineage("Northbridge UBS Advisors") is None
+        assert resolve_brand_lineage("PaineWebber Inc") == "UBS"
+        assert resolve_brand_lineage("Bear Stearns & Co") == "JPMORGAN"
 
         # Reject gender-distinct suffix pairs and unrelated names sharing surname
         assert compare_persons("Paul Bennett", "Paula Bennett").is_match is False
@@ -161,11 +167,27 @@ def test_international_postal_and_building_keys() -> None:
     assert fr.postal_city == "PARIS"
     assert canonicalize_intl_city("La Defense", "FRA") == "PARIS"
 
-    # Helper edge cases + unsupported non-US country + empty city + parse_failed
+    # Helper edge cases + ISO-3166-2 CA-ON / Ontario folding + unsupported non-US country + empty city
     assert canonicalize_intl_postal_code("m5j 2n8", "CAN") == "M5J2N8"
     assert canonicalize_intl_city("North York", "CA") == "TORONTO"
+    assert canonicalize_intl_state("CA-ON", "CAN") == "ON"
+    assert canonicalize_intl_state("Ontario", "CA") == "ON"
+    assert canonicalize_intl_state("CH-ZH", "CHE") == "ZH"
     assert canonicalize_intl_street_for_postal_key("", "CAN") == ""
     assert canonicalize_intl_street_for_postal_key("10 Friedrichstrasse", "DEU") == "10 FRIEDRICH STR"
+    ca_iso_st = StandardizedAddress(
+        street1="100 King St",
+        street2="",
+        city="Toronto",
+        state="CA-ON",
+        postal_code="M5J 2N8",
+        country="CAN",
+        normalized_address_key="100 KING ST||TORONTO|CA-ON|M5J 2N8|CAN",
+        address_status="standardized",
+        raw_street_address="100 King St",
+        is_us=False,
+    )
+    assert ca_iso_st.postal_address_key == "100 KING ST||TORONTO|ON|M5J2N8|CAN"
 
     jp = StandardizedAddress(
         street1="1-1 Chiyoda",
