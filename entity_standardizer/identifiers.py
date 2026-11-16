@@ -47,7 +47,7 @@ def is_synthetic_or_test_record(
     """Return True if standardized inputs exhibit synthetic QA/sandbox patterns (TEST prefix, test@ email, synthetic CRD)."""
     if name:
         n_toks = name.strip().upper().split()
-        if n_toks and (n_toks[0] == "TEST" or "WORKATO" in n_toks or "DUMMY" in n_toks):
+        if n_toks and (n_toks[0] in ("TEST", "DEMO", "SANDBOX") or "WORKATO" in n_toks or "DUMMY" in n_toks):
             return True
     if email:
         em = email.strip().lower()
