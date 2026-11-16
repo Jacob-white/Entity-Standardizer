@@ -62,6 +62,15 @@ def test_person_luke_lucius_and_prefix_shortening() -> None:
         res_goes_by_mid_rev = compare_persons("George Trapnell Bennett", "Trap Bennett")
         assert res_goes_by_mid_rev.is_match is True
 
+        # Dutch/Flemish surname particles ('Ver', 'Ter', 'Ten') must stay surname-bound, not middle names
+        assert compare_persons("Verna Ver Meer", "Ryan Ver Meer").is_match is False
+        assert compare_persons("Verna Ver Meer", "Verna Vermeer").is_match is True
+
+        # Additional given-name variants & diminutives
+        assert compare_persons("Kate K. Stone", "Katharine Klein Stone").is_match is True
+        assert compare_persons("Kim S. Mercer", "Kimberly Shaw Mercer").is_match is True
+        assert compare_persons("Brody A. Bennett", "Broderick A. Bennett").is_match is True
+
         # Reject gender-distinct suffix pairs and unrelated names sharing surname
         assert compare_persons("Paul Bennett", "Paula Bennett").is_match is False
         assert compare_persons("Brian Carver", "Lucas Carver").is_match is False
@@ -141,14 +150,16 @@ def test_international_postal_and_building_keys() -> None:
     assert uk_a.postal_city == "LONDON"
     assert uk_a.postal_building_key == uk_b.postal_building_key
 
-    # Switzerland, Germany (fused STRASSE), France (La Defense -> PARIS)
-    ch = standardize_address("Bahnhofstrasse 10", city="Zuerich", state="ZH", postal_code="8001", country="CHE")
+    # Switzerland, Germany (fused STRASSE + umlauts), France (La Defense + CEDEX -> PARIS)
+    ch = standardize_address("Löwenstraße 49", city="Zürich", state="ZH", postal_code="8001", country="CHE")
     assert ch.postal_city == "ZURICH"
-    de = standardize_address("Friedrichstrasse 10", city="Frankfurt am Main", state="", postal_code="60311", country="DEU")
-    assert de.postal_city == "FRANKFURT"
+    assert ch.postal_address_key is not None and "LOWEN STR" in ch.postal_address_key
+    de = standardize_address("Friedrichstrasse 10", city="München", state="", postal_code="80333", country="DEU")
+    assert de.postal_city == "MUNICH"
     assert de.postal_address_key is not None and "FRIEDRICH STR" in de.postal_address_key
-    fr = standardize_address("12 Avenue Montaigne", city="La Defense", state="", postal_code="75008", country="FRA")
+    fr = standardize_address("12 Avenue Montaigne", city="Paris La Défense Cedex", state="", postal_code="92088", country="FRA")
     assert fr.postal_city == "PARIS"
+    assert canonicalize_intl_city("La Defense", "FRA") == "PARIS"
 
     # Helper edge cases + unsupported non-US country + empty city + parse_failed
     assert canonicalize_intl_postal_code("m5j 2n8", "CAN") == "M5J2N8"

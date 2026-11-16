@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, List
 import re
 
+from entity_standardizer.normalization import fold_latin_diacritics
+
 _RE_PO_BOX_POST_INIT = re.compile(r"\b(?:P\.?\s*O\.?\s*BOX|POB|POST\s+OFFICE\s+BOX|APO|FPO|DPO)\b")
 _RE_DUAL_PHYSICAL_START = re.compile(r"^(?:\d+|PR-|CARR-|KM\b)")
 _RE_HOUSE_NUMBER_PREFIX = re.compile(r"^(\d+[A-Z]?(?:-\d+)?)\b")
@@ -98,8 +100,11 @@ _INTL_CITY_METRO_MAP = {
     "DEU": {
         "FRANKFURT AM MAIN": "FRANKFURT",
         "FRANKFURT MAIN": "FRANKFURT",
+        "FRANKFURT A M": "FRANKFURT",
         "MUENCHEN": "MUNICH",
+        "MUNCHEN": "MUNICH",
         "KOELN": "COLOGNE",
+        "KOLN": "COLOGNE",
         "DUESSELDORF": "DUSSELDORF",
     },
     "FRA": {
@@ -256,8 +261,9 @@ def extract_street_core_key(street1: str | None) -> Optional[str]:
 
 
 def canonicalize_us_city_prefix(city: str) -> str:
-    """Normalize US city punctuation/whitespace and canonicalize SAINT/FORT/MOUNT prefixes."""
-    cleaned = _RE_MULTI_WS.sub(" ", _RE_CITY_CLEAN.sub("", (city or "").upper())).strip()
+    """Normalize US/Latin city accents, punctuation, whitespace & canonicalize SAINT/FORT/MOUNT prefixes."""
+    folded = fold_latin_diacritics(city or "").upper()
+    cleaned = _RE_MULTI_WS.sub(" ", _RE_CITY_CLEAN.sub("", folded)).strip()
     for src_pref, dst_pref in _US_CITY_PREFIX_MAP:
         if cleaned.startswith(src_pref) and len(cleaned) > len(src_pref):
             return dst_pref + cleaned[len(src_pref):]
@@ -317,9 +323,11 @@ def canonicalize_intl_postal_code(postal_code: str, country_code: str) -> str:
 
 
 def canonicalize_intl_city(city: str, country_code: str) -> str:
-    """Canonicalize amalgamated metro boroughs and accented city forms for CAN/GBR/CHE/DEU/FRA."""
+    """Canonicalize amalgamated metro boroughs, CEDEX suffixes, and accented city forms."""
     cleaned = canonicalize_us_city_prefix(city)
     iso3 = _INTL_COUNTRY_ALIAS_TO_ISO3.get((country_code or "").strip().upper(), "")
+    if iso3 == "FRA" and cleaned.endswith(" CEDEX"):
+        cleaned = cleaned[:-6].strip()
     return _INTL_CITY_METRO_MAP.get(iso3, {}).get(cleaned, cleaned)
 
 
@@ -331,7 +339,10 @@ def canonicalize_intl_street_for_postal_key(
 ) -> str:
     """Canonicalize international street lines across CAN/GBR/CHE/DEU/FRA for postal key matching."""
     _ = country_code
-    base = canonicalize_us_street_for_postal_key(street1, strip_glued_unit=strip_glued_unit)
+    base = canonicalize_us_street_for_postal_key(
+        fold_latin_diacritics(street1) if street1 else "",
+        strip_glued_unit=strip_glued_unit,
+    )
     if not base:
         return ""
     out_toks: List[str] = []

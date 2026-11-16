@@ -192,7 +192,10 @@
     "MC",
     "SAINT",
     "ST",
+    "TEN",
+    "TER",
     "VAN",
+    "VER",
     "VON"
   ],
   "nickname_to_root": {
@@ -239,6 +242,10 @@
     "KATHY": "KATHERINE",
     "CATHY": "KATHERINE",
     "CATHERINE": "KATHERINE",
+    "KATHARINE": "KATHERINE",
+    "KATHRYN": "KATHERINE",
+    "KATHERYN": "KATHERINE",
+    "KATHRINE": "KATHERINE",
     "JEN": "JENNIFER",
     "JENNY": "JENNIFER",
     "JENN": "JENNIFER",
@@ -405,6 +412,8 @@
     "FRANK": ["FRANCIS", "FRANKLIN"],
     "FRAN": ["FRANCIS", "FRANCES"],
     "GENE": ["EUGENE", "EUGENIA"],
-    "LUKE": ["LUCIUS", "LUCAS"]
+    "LUKE": ["LUCIUS", "LUCAS"],
+    "KIM": ["KIMBERLY", "KIMBERLEY", "KIM"],
+    "BRODY": ["BRODERICK", "BRODY"]
   }
 }
