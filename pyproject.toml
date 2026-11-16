@@ -78,6 +78,9 @@ where = ["."]
 include = ["entity_standardizer*"]
 
 [tool.setuptools.package-data]
+"entity_standardizer" = [
+    "data/*.json",
+]
 "entity_standardizer.address" = [
     "reference/data/*.tsv.gz",
 ]

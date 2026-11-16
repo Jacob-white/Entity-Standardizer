@@ -25,6 +25,101 @@ _INTERIOR_STREET_CANON_MAP = {
     "FORT": "FT",
     "MOUNT": "MT",
 }
+_INTL_COUNTRY_ALIAS_TO_ISO3 = {
+    "CA": "CAN",
+    "CAN": "CAN",
+    "CANADA": "CAN",
+    "GB": "GBR",
+    "GBR": "GBR",
+    "UK": "GBR",
+    "UNITED KINGDOM": "GBR",
+    "CH": "CHE",
+    "CHE": "CHE",
+    "SWITZERLAND": "CHE",
+    "DE": "DEU",
+    "DEU": "DEU",
+    "GERMANY": "DEU",
+    "FR": "FRA",
+    "FRA": "FRA",
+    "FRANCE": "FRA",
+}
+_INTL_CITY_METRO_MAP = {
+    "CAN": {
+        "NORTH YORK": "TORONTO",
+        "ETOBICOKE": "TORONTO",
+        "SCARBOROUGH": "TORONTO",
+        "EAST YORK": "TORONTO",
+        "YORK": "TORONTO",
+        "ST LAURENT": "MONTREAL",
+        "STLAURENT": "MONTREAL",
+        "SAINTLAURENT": "MONTREAL",
+        "MONT ROYAL": "MONTREAL",
+        "MONTROYAL": "MONTREAL",
+        "WESTMOUNT": "MONTREAL",
+        "OUTREMONT": "MONTREAL",
+        "VERDUN": "MONTREAL",
+        "LACHINE": "MONTREAL",
+        "LASALLE": "MONTREAL",
+        "DORVAL": "MONTREAL",
+        "ANJOU": "MONTREAL",
+        "MONTREAL NORD": "MONTREAL",
+        "MONTREALNORD": "MONTREAL",
+        "KANATA": "OTTAWA",
+        "NEPEAN": "OTTAWA",
+        "GLOUCESTER": "OTTAWA",
+        "ORLEANS": "OTTAWA",
+        "SILLERY": "QUEBEC",
+        "STE FOY": "QUEBEC",
+        "STEFOY": "QUEBEC",
+        "BEAUPORT": "QUEBEC",
+        "CHARLESBOURG": "QUEBEC",
+        "DARTMOUTH": "HALIFAX",
+        "BEDFORD": "HALIFAX",
+    },
+    "GBR": {
+        "CITY OF LONDON": "LONDON",
+        "WESTMINSTER": "LONDON",
+        "CANARY WHARF": "LONDON",
+        "KENSINGTON": "LONDON",
+        "SOUTHWARK": "LONDON",
+        "ISLINGTON": "LONDON",
+        "HACKNEY": "LONDON",
+        "HOLBORN": "LONDON",
+        "MAYFAIR": "LONDON",
+        "CITY OF MANCHESTER": "MANCHESTER",
+        "CITY OF EDINBURGH": "EDINBURGH",
+    },
+    "CHE": {
+        "ZUERICH": "ZURICH",
+        "GENEVE": "GENEVA",
+        "GENF": "GENEVA",
+        "BALE": "BASEL",
+    },
+    "DEU": {
+        "FRANKFURT AM MAIN": "FRANKFURT",
+        "FRANKFURT MAIN": "FRANKFURT",
+        "MUENCHEN": "MUNICH",
+        "KOELN": "COLOGNE",
+        "DUESSELDORF": "DUSSELDORF",
+    },
+    "FRA": {
+        "LA DEFENSE": "PARIS",
+        "PARIS LA DEFENSE": "PARIS",
+        "PUTEAUX": "PARIS",
+        "COURBEVOIE": "PARIS",
+        "NEUILLY SUR SEINE": "PARIS",
+        "BOULOGNE BILLANCOURT": "PARIS",
+    },
+}
+_INTL_STREET_TOKEN_MAP = {
+    "STRASSE": "STR",
+    "STR": "STR",
+    "PLATZ": "PL",
+    "CHEMIN": "CH",
+    "ALLEE": "ALL",
+    "CRESCENT": "CRES",
+}
+_RE_INTL_POSTAL_CLEAN = re.compile(r"[^A-Z0-9]")
 _COMPASS_2LETTER = frozenset({"NE", "NW", "SE", "SW"})
 _COMPASS_ALL = frozenset({"N", "S", "E", "W", "NE", "NW", "SE", "SW", "NORTH", "SOUTH", "EAST", "WEST"})
 _WORD_HOUSE_NUMBERS = {
@@ -215,6 +310,39 @@ def canonicalize_us_street_for_postal_key(street1: str, *, strip_glued_unit: boo
     return " ".join(head + norm_mid + toks[len(toks) - tail_count :])
 
 
+def canonicalize_intl_postal_code(postal_code: str, country_code: str) -> str:
+    """Fold spacing and punctuation in international postal codes (e.g. CAN 'M5J 2N8' -> 'M5J2N8')."""
+    _ = country_code
+    return _RE_INTL_POSTAL_CLEAN.sub("", (postal_code or "").upper())
+
+
+def canonicalize_intl_city(city: str, country_code: str) -> str:
+    """Canonicalize amalgamated metro boroughs and accented city forms for CAN/GBR/CHE/DEU/FRA."""
+    cleaned = canonicalize_us_city_prefix(city)
+    iso3 = _INTL_COUNTRY_ALIAS_TO_ISO3.get((country_code or "").strip().upper(), "")
+    return _INTL_CITY_METRO_MAP.get(iso3, {}).get(cleaned, cleaned)
+
+
+def canonicalize_intl_street_for_postal_key(
+    street1: str,
+    country_code: str,
+    *,
+    strip_glued_unit: bool = False,
+) -> str:
+    """Canonicalize international street lines across CAN/GBR/CHE/DEU/FRA for postal key matching."""
+    _ = country_code
+    base = canonicalize_us_street_for_postal_key(street1, strip_glued_unit=strip_glued_unit)
+    if not base:
+        return ""
+    out_toks: List[str] = []
+    for tok in base.split():
+        if len(tok) > 7 and tok.endswith("STRASSE"):
+            out_toks.extend([tok[:-7], "STR"])
+        else:
+            out_toks.append(_INTL_STREET_TOKEN_MAP.get(tok, tok))
+    return " ".join(out_toks)
+
+
 @dataclass(slots=True)
 class SpatialResolutionResult:
     """Standardized geographic coordinate resolution result conforming to Blueprint Section 3.4."""
@@ -344,6 +472,26 @@ class StandardizedAddress:
                     self.postal_address_key = f"{p_s1}|{self.street2}|{p_city}|{self.state}|{eff_zip}|{eff_country}"
                 if self.postal_building_key is None:
                     self.postal_building_key = f"{p_bldg_s1}||{p_city}|{self.state}|{eff_zip}|{eff_country}"
+        elif not self.is_us and self.address_status != "parse_failed":
+            intl_iso3 = _INTL_COUNTRY_ALIAS_TO_ISO3.get((self.country or "").strip().upper())
+            if intl_iso3 is not None:
+                if self.postal_city is None and self.city:
+                    resolved_intl_city = canonicalize_intl_city(self.city, intl_iso3)
+                    if resolved_intl_city:
+                        self.postal_city = resolved_intl_city
+                if self.normalized_address_key:
+                    p_s1 = canonicalize_intl_street_for_postal_key(self.street1, intl_iso3) if self.street1 else ""
+                    p_bldg_s1 = (
+                        canonicalize_intl_street_for_postal_key(self.street1, intl_iso3, strip_glued_unit=True)
+                        if self.street1
+                        else ""
+                    )
+                    p_city = self.postal_city or canonicalize_intl_city(self.city, intl_iso3)
+                    eff_zip = canonicalize_intl_postal_code(self.postal_code, intl_iso3)
+                    if self.postal_address_key is None:
+                        self.postal_address_key = f"{p_s1}|{self.street2}|{p_city}|{self.state}|{eff_zip}|{intl_iso3}"
+                    if self.postal_building_key is None:
+                        self.postal_building_key = f"{p_bldg_s1}||{p_city}|{self.state}|{eff_zip}|{intl_iso3}"
         if not hasattr(self, "_confidence_score"):
             self._confidence_score: Optional[float] = None
         if not hasattr(self, "_routing_tier"):
