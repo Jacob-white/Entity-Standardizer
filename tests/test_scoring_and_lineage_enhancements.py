@@ -820,6 +820,8 @@ def test_extended_lineages_typo_possessive_intersections_and_ca_domains() -> Non
     assert standardize_company("Tri-Ad Actuaries Inc").brand_key == "TRI AD"
     assert are_affiliated_brands("MML Investors Services LLC", "MSI Financial Services Inc") is True
     assert resolve_brand_lineage("MassMutual Retirement Services") == "EMPOWER"
+    assert are_affiliated_brands("Integrity Alliance LLC", "CreativeOne Securities LLC") is True
+    assert standardize_company("Oakwood Trust Compan").brand_key == "OAKWOOD"
 
 
 
