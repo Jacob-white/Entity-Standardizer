@@ -799,6 +799,86 @@ def classify_company_role(company: str | StandardizedCompany | None) -> str:
     return "OPERATING_ENTITY"
 
 
+_GENERIC_INSTITUTION_HEADS: frozenset[str] = frozenset(
+    {
+        "BANK",
+        "BANKING",
+        "SAVINGS",
+        "TRUST",
+        "CREDIT",
+        "WEALTH",
+        "PLANNING",
+        "FINANCIAL",
+        "ADVISORS",
+        "MANAGEMENT",
+        "PARTNERS",
+        "CONSULTANTS",
+    }
+)
+_GENERIC_INSTITUTION_MODIFIERS: frozenset[str] = _GENERIC_INSTITUTION_HEADS | frozenset(
+    {
+        "FIRST",
+        "SECOND",
+        "PEOPLES",
+        "CITIZENS",
+        "FARMERS",
+        "MERCHANTS",
+        "COMMUNITY",
+        "HERITAGE",
+        "LIBERTY",
+        "AMERICAN",
+        "COLUMBIA",
+        "COUNTRYSIDE",
+        "CONTINENTAL",
+        "STERLING",
+        "CAPITAL",
+        "STATE",
+        "NATIONAL",
+        "FEDERAL",
+        "CENTRAL",
+        "UNITED",
+        "UNION",
+        "MUTUAL",
+        "SECURITY",
+        "COMMERCE",
+        "COMMERCIAL",
+        "FRONTIER",
+        "MISSION",
+        "HOME",
+        "PIONEER",
+        "SOUND",
+        "NORTHWESTERN",
+        "VISION",
+        "ZENITH",
+        "PRIVATE",
+        "ALLIANCE",
+        "PORTFOLIO",
+        "BENEFIT",
+        "LOAN",
+        "ASSURANCE",
+        "SERVICES",
+        "GROUP",
+        "HEALTH",
+        "SYSTEM",
+        "LIFE",
+        "INSURANCE",
+        "GLOBAL",
+        "AND",
+        "OF",
+        "THE",
+    }
+)
+
+
+def is_generic_institution_name(company: str | StandardizedCompany | None) -> bool:
+    """Return True if a company name consists solely of non-distinctive geographic/community institution words."""
+    comp = company if isinstance(company, StandardizedCompany) else standardize_company(company)
+    if not comp.is_valid or not comp.base_name:
+        return False
+    tokens = set(comp.base_name.split())
+    return bool(tokens & _GENERIC_INSTITUTION_HEADS) and tokens <= _GENERIC_INSTITUTION_MODIFIERS
+
+
 def compare_companies(
     company_a: str | StandardizedCompany | None,
     company_b: str | StandardizedCompany | None,
