@@ -11,6 +11,9 @@
     ["INVESTACORP", "OSAIC"],
     ["KMS FINANCIAL", "OSAIC"],
     ["SECURITIES SERVICE NETWORK", "OSAIC"],
+    ["AMERICAN PORTFOLIOS", "OSAIC"],
+    ["SIGNATOR INVESTORS", "OSAIC"],
+    ["QUESTAR CAPITAL", "OSAIC"],
     ["ADVISOR GROUP", "OSAIC"],
     ["PIPER SANDLER", "PIPER SANDLER"],
     ["PIPER JAFFRAY", "PIPER SANDLER"],
@@ -114,7 +117,8 @@
     ["CORIENT", "CI FINANCIAL"],
     ["PNC", "PNC"],
     ["BOKF", "BOKF"],
-    ["BOK FINANCIAL", "BOKF"]
+    ["BOK FINANCIAL", "BOKF"],
+    ["PEAPACK", "PEAPACK"]
   ],
   "credentials": {
     "PHD": "PHD",
@@ -432,7 +436,15 @@
     "SAML": "SAMUEL",
     "RICHD": "RICHARD",
     "DANL": "DANIEL",
-    "ANTH": "ANTHONY"
+    "ANTH": "ANTHONY",
+    "RANDY": "RANDALL",
+    "NIKI": "NICOLE",
+    "NIKKI": "NICOLE",
+    "GINGER": "VIRGINIA",
+    "SUZI": "SUSAN",
+    "SUZIE": "SUSAN",
+    "SUZY": "SUSAN",
+    "STELIO": "STELIANOS"
   },
   "multi_root_diminutives": {
     "JERRY": ["GERALD", "JEROME", "JEREMIAH"],
@@ -453,6 +465,16 @@
     "GENE": ["EUGENE", "EUGENIA"],
     "LUKE": ["LUCIUS", "LUCAS"],
     "KIM": ["KIMBERLY", "KIMBERLEY", "KIM"],
-    "BRODY": ["BRODERICK", "BRODY"]
+    "BRODY": ["BRODERICK", "BRODY"],
+    "ANDY": ["ANDREW", "ANDRES", "ANDRE"],
+    "KATIE": ["KATHERINE", "KATHLEEN", "KAITLIN"],
+    "KATE": ["KATHERINE", "KATHLEEN"],
+    "LES": ["LESTER", "LESLIE"],
+    "RANDY": ["RANDALL", "RANDOLPH"],
+    "NIKI": ["NICOLE", "NICHOLAS"],
+    "NIKKI": ["NICOLE", "NICHOLAS"],
+    "SUZI": ["SUSAN", "SUZANNE", "SUZANNA"],
+    "SUZIE": ["SUSAN", "SUZANNE", "SUZANNA"],
+    "SUZY": ["SUSAN", "SUZANNE", "SUZANNA"]
   }
 }

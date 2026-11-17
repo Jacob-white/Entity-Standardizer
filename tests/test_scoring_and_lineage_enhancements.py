@@ -19,6 +19,7 @@ from entity_standardizer import (
     explain_and_score_entities,
     extract_company_acronym,
     extract_street_core_key,
+    is_generic_institution_name,
     is_synthetic_or_test_record,
     prepare_matching_arrow,
     prepare_matching_polars,
@@ -788,5 +789,30 @@ def test_extended_lineages_typo_possessive_intersections_and_ca_domains() -> Non
     assert extract_registrable_domain("www.college.on.ca")[0] == "college.on.ca"
     assert extract_registrable_domain("portal.qc.ca")[0] == "portal.qc.ca"
     assert extract_registrable_domain("on.ca")[0] is None
+    assert extract_registrable_domain("www.banco.com.pa")[0] == "banco.com.pa"
+    assert extract_registrable_domain("com.pa")[0] is None
+
+    assert is_generic_institution_name("") is False
+    assert is_generic_institution_name(None) is False
+    assert is_generic_institution_name("State Bank") is True
+    assert is_generic_institution_name("Citizens Savings Bank") is True
+    assert is_generic_institution_name("American Bank & Trust Co.") is True
+    assert is_generic_institution_name("Oakwood Wealth Management LLC") is False
+    assert is_generic_institution_name(standardize_company("First National Bank")) is True
+
+    assert "ANDRES" in resolve_given_name_roots("Andy")
+    assert "KATHLEEN" in resolve_given_name_roots("Katie")
+    assert "LESLIE" in resolve_given_name_roots("Les")
+    assert "RANDALL" in resolve_given_name_roots("Randy")
+    assert "NICOLE" in resolve_given_name_roots("Niki")
+    assert "VIRGINIA" in resolve_given_name_roots("Ginger")
+    assert "SUZANNA" in resolve_given_name_roots("Suzi")
+    assert "STELIANOS" in resolve_given_name_roots("Stelio")
+
+    assert resolve_brand_lineage("American Portfolios Advisors Inc") == "OSAIC"
+    assert resolve_brand_lineage("Signator Investors Inc") == "OSAIC"
+    assert resolve_brand_lineage("Questar Capital Corp") == "OSAIC"
+    assert are_affiliated_brands("Peapack-Gladstone Bank", "Peapack Private Bank & Trust") is True
+
 
 
