@@ -78,7 +78,7 @@ def test_address_glued_units_word_numbers_and_street_core_keys() -> None:
 def test_person_expanded_nicknames_multi_root_diminutives_and_edit1() -> None:
     assert resolve_given_name_roots(None) == ()
     assert resolve_given_name_roots("123") == ()
-    assert resolve_given_name_roots("Jerry") == ("GERALD", "JEROME", "JEREMIAH")
+    assert resolve_given_name_roots("Jerry") == ("GERALD", "JEROME", "JEREMIAH", "GENNARO")
     assert resolve_given_name_roots("Mitch") == ("MITCHELL", "MITCH")
     assert resolve_given_name_roots("Hrach") == ("HRACH",)
 
@@ -875,6 +875,35 @@ def test_scoring_penalizes_conflicting_finra_crd_and_generational_suffix() -> No
     assert "PERSON_NAME" in gen_conflict.conflicting_signals
     assert "generational suffix differs" in gen_conflict.explanation
     assert gen_conflict.is_match is False
+
+
+def test_person_duplicate_trailing_surname_collapse_and_diminutives() -> None:
+    p1 = standardize_person("Michael Kautz Kautz")
+    assert p1.first_name == "MICHAEL"
+    assert p1.middle_name is None
+    assert p1.last_name == "KAUTZ"
+    assert "DUPLICATE_SURNAME_COLLAPSED" in p1.healing_actions
+
+    p2 = standardize_person("Nicholas Matthew Vogel Vogel")
+    assert p2.first_name == "NICHOLAS"
+    assert p2.middle_name == "MATTHEW"
+    assert p2.last_name == "VOGEL"
+
+    p3 = standardize_person("Kautz, Michael Kautz")
+    assert p3.first_name == "MICHAEL"
+    assert p3.middle_name is None
+    assert p3.last_name == "KAUTZ"
+    assert "DUPLICATE_SURNAME_COLLAPSED" in p3.healing_actions
+
+    # Exact 2-token identical first/last should not collapse to 1 token
+    p4 = standardize_person("Thomas Thomas")
+    assert p4.first_name == "THOMAS"
+    assert p4.last_name == "THOMAS"
+
+    assert "ANTON" in resolve_given_name_roots("Tony")
+    assert "ANTONIO" in resolve_given_name_roots("Tony")
+    assert "GENNARO" in resolve_given_name_roots("Jerry")
+
 
 
 
