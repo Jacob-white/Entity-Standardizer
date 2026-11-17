@@ -813,6 +813,11 @@ def test_extended_lineages_typo_possessive_intersections_and_ca_domains() -> Non
     assert resolve_brand_lineage("Signator Investors Inc") == "OSAIC"
     assert resolve_brand_lineage("Questar Capital Corp") == "OSAIC"
     assert are_affiliated_brands("Peapack-Gladstone Bank", "Peapack Private Bank & Trust") is True
+    assert are_affiliated_brands("BFC Planning Inc", "Berthel Fisher & Company") is True
+    assert are_affiliated_brands("Securities Mgmt & Research Inc", "BFC Planning Inc") is True
+    assert standardize_company("HighPoint Advisor Group LLC").brand_key == "HIGHPOINT"
+    assert standardize_company("Spearhead Administrative Services LLC").brand_key == "SPEARHEAD"
+    assert standardize_company("Tri-Ad Actuaries Inc").brand_key == "TRI AD"
 
 
 
