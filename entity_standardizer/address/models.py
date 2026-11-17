@@ -202,6 +202,10 @@ _STREET_SUFFIX_CANON = {
 _SEC_OR_BLDG_MARKERS = frozenset(
     {"STE", "SUITE", "APT", "UNIT", "FL", "FLOOR", "RM", "ROOM", "BLDG", "BUILDING", "TOWER", "TWR", "DEPT", "MAILCODE"}
 )
+_RE_LEADING_INTERSECTION_PREFIX = re.compile(
+    r"^\s*[A-Z0-9]{1,12}(?:\s+[A-Z]{1,6})?\s+(?:&|AT)\s+[A-Z0-9]{1,16}"
+    r"(?:\s+(?:ST|AVE|RD|BLVD|DR|LN|WAY|PKWY|HWY|PL|CT|N|S|E|W))?\s+(\d{1,6}[A-Z]?\s+[A-Z]{2,}.*)$"
+)
 
 
 def split_glued_house_unit(street1: str) -> tuple[str, str]:
@@ -225,7 +229,11 @@ def extract_street_core_key(street1: str | None) -> Optional[str]:
     """Extract a direction-agnostic, unit-stripped '{HOUSE_NUM}|{CORE_THOROUGHFARE}' key, rescuing inverted building-before-number strings."""
     if not street1:
         return None
-    base_s1, _ = split_glued_house_unit(re.sub(r"[^A-Z0-9\s\-]", " ", street1.upper()))
+    upper_s1 = street1.upper()
+    m_inter = _RE_LEADING_INTERSECTION_PREFIX.match(upper_s1)
+    if m_inter:
+        upper_s1 = m_inter.group(1)
+    base_s1, _ = split_glued_house_unit(re.sub(r"[^A-Z0-9\s\-]", " ", upper_s1))
     toks = [t for t in base_s1.split() if t]
     if not toks:
         return None

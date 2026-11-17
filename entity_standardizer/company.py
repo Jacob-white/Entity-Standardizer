@@ -199,6 +199,10 @@ _WEALTH_TOKEN_ABBREVS: dict[str, str] = {
     "NATL": "NATIONAL",
     "SERVIES": "SERVICES",
     "SVGS": "SAVINGS",
+    "MANGEMENT": "MANAGEMENT",
+    "MANAGMENT": "MANAGEMENT",
+    "MANAGEMNT": "MANAGEMENT",
+    "SECURITES": "SECURITIES",
 }
 
 _ACRONYM_STOPWORDS: frozenset[str] = frozenset({"AND", "OF", "THE", "FOR", "IN", "AT", "BY"})
@@ -758,14 +762,24 @@ def are_affiliated_brands(
 
 
 def compact_company_key(company: str | StandardizedCompany | None) -> str | None:
-    """Collapse leading single-letter prefix spacing in base_name ('E TRADE SAVINGS BANK' -> 'ETRADE SAVINGS BANK')."""
+    """Collapse leading single-letter prefix spacing ('E TRADE' -> 'ETRADE') and split possessive S ('LEE S' -> 'LEES')."""
     comp = company if isinstance(company, StandardizedCompany) else standardize_company(company)
     if not comp.is_valid or not comp.base_name:
         return None
     toks = comp.base_name.split()
+    out: list[str] = []
+    idx = 0
     if len(toks) >= 2 and len(toks[0]) == 1 and len(toks[1]) >= 3 and toks[1] not in _GENERIC_BRAND_TAIL_WORDS:
-        return " ".join([toks[0] + toks[1], *toks[2:]])
-    return comp.base_name
+        out.append(toks[0] + toks[1])
+        idx = 2
+    while idx < len(toks):
+        tok = toks[idx]
+        if tok == "S" and out and len(out[-1]) >= 2 and idx + 1 < len(toks):
+            out[-1] = out[-1] + "S"
+        else:
+            out.append(tok)
+        idx += 1
+    return " ".join(out)
 
 
 def classify_company_role(company: str | StandardizedCompany | None) -> str:

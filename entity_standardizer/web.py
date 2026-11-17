@@ -257,6 +257,20 @@ _MULTI_PART_PUBLIC_SUFFIXES: frozenset[str] = frozenset(
         "com.vn",
         "co.id",
         "co.th",
+        "on.ca",
+        "qc.ca",
+        "bc.ca",
+        "ab.ca",
+        "mb.ca",
+        "sk.ca",
+        "ns.ca",
+        "nb.ca",
+        "nl.ca",
+        "pe.ca",
+        "nt.ca",
+        "nu.ca",
+        "yt.ca",
+        "gc.ca",
     }
 )
 
