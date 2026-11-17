@@ -86,6 +86,7 @@ _SINGLE_TOKEN_LEGAL_SUFFIXES: dict[str, tuple[str, str | None]] = {
     "FSB": ("FSB", "US"),
     "CO": ("CO", None),
     "COMPANY": ("CO", None),
+    "COMPAN": ("CO", None),
     "GMBH": ("GMBH", "DE"),
     "AG": ("AG", None),
     "AKTIENGESELLSCHAFT": ("AG", None),
