@@ -252,7 +252,7 @@ def explain_and_score_entities(
             ev.append(
                 SignalEvidence(
                     "FINRA_CRD",
-                    0.10,
+                    0.45,
                     f"FINRA CRD differs ({scrd_a.canonical_id} vs {scrd_b.canonical_id})",
                     is_conflict=True,
                 )
@@ -268,6 +268,15 @@ def explain_and_score_entities(
                     f"PERSON_{p_cmp.match_type}",
                     w_p,
                     f"person name matches via {p_cmp.match_type} ('{ca.person.full_name}' == '{cb.person.full_name}')",
+                )
+            )
+        elif p_cmp.match_type == "GENERATIONAL_SUFFIX_CONFLICT":
+            ev.append(
+                SignalEvidence(
+                    "PERSON_NAME",
+                    0.34,
+                    f"generational suffix differs ('{ca.person.full_name}' vs '{cb.person.full_name}')",
+                    is_conflict=True,
                 )
             )
         else:
