@@ -824,4 +824,58 @@ def test_extended_lineages_typo_possessive_intersections_and_ca_domains() -> Non
     assert standardize_company("Oakwood Trust Compan").brand_key == "OAKWOOD"
 
 
+def test_scoring_penalizes_conflicting_finra_crd_and_generational_suffix() -> None:
+    crd_conflict = explain_and_score_entities(
+        {
+            "person_name": "John Carter",
+            "organization": "Oakwood Wealth LLC",
+            "street1": "100 Main St",
+            "city": "Boston",
+            "state": "MA",
+            "postal_code": "02110",
+            "phone": "617-555-0142",
+            "email": "jcarter@oakwoodwealth.com",
+        },
+        {
+            "person_name": "John Carter",
+            "organization": "Oakwood Wealth LLC",
+            "street1": "100 Main St",
+            "city": "Boston",
+            "state": "MA",
+            "postal_code": "02110",
+            "phone": "617-555-0142",
+            "email": "jcarter@oakwoodwealth.com",
+        },
+        crd_a="111222",
+        crd_b="333444",
+    )
+    assert "FINRA_CRD" in crd_conflict.conflicting_signals
+    assert crd_conflict.is_match is False
+
+    gen_conflict = explain_and_score_entities(
+        {
+            "person_name": "John Smallwood Sr",
+            "organization": "Harbor Advisory Group LLC",
+            "street1": "250 Harbor Blvd",
+            "city": "Tampa",
+            "state": "FL",
+            "postal_code": "33602",
+            "phone": "813-555-0188",
+        },
+        {
+            "person_name": "John Smallwood Jr",
+            "organization": "Harbor Advisory Group LLC",
+            "street1": "250 Harbor Blvd",
+            "city": "Tampa",
+            "state": "FL",
+            "postal_code": "33602",
+            "phone": "813-555-0188",
+        },
+    )
+    assert "PERSON_NAME" in gen_conflict.conflicting_signals
+    assert "generational suffix differs" in gen_conflict.explanation
+    assert gen_conflict.is_match is False
+
+
+
 
