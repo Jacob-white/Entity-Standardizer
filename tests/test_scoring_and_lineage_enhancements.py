@@ -759,3 +759,34 @@ def test_pre_match_upgrades_leading_creds_swaps_compact_roles_synthetics_and_bat
     assert res_pl["phone_is_toll_free"].to_list() == [False]
 
 
+def test_extended_lineages_typo_possessive_intersections_and_ca_domains() -> None:
+    from entity_standardizer.web import extract_registrable_domain
+
+    assert are_affiliated_brands("Sigma Planning Corp", "Parkland Securities LLC") is True
+    assert resolve_brand_lineage("SPC") == "SIGMA FINANCIAL"
+    assert resolve_brand_lineage("Sigma Financial Corp") == "SIGMA FINANCIAL"
+    assert resolve_brand_lineage("Securities Service Network LLC") == "OSAIC"
+    assert resolve_brand_lineage("Concourse Financial Group") == "CETERA"
+    assert are_affiliated_brands("Assante Wealth Management", "CI Assante Capital") is True
+    assert resolve_brand_lineage("Corient Partners LLC") == "CI FINANCIAL"
+    assert are_affiliated_brands("PNC Wealth Management LLC", "PNC Capital Advisors") is True
+    assert are_affiliated_brands("BOKF NA", "BOK Financial Securities") is True
+
+    typo_comp = standardize_company("Northstar Asset Mangement & Securites LLC")
+    assert typo_comp.base_name == "NORTHSTAR ASSET MANAGEMENT AND SECURITIES"
+    assert "TOKEN_ABBREVIATION_EXPANDED" in typo_comp.healing_actions
+
+    cmp_poss = compare_companies("Bank of Lee S Summit", "Bank of Lees Summit")
+    assert cmp_poss.is_match is True
+    assert cmp_poss.match_type == "COMPACT_SPACING_MATCH"
+    assert compact_company_key("Alpha Beta S") == "ALPHA BETA S"
+    assert compact_company_key("E Trade Bank") == "ETRADE BANK"
+
+    assert extract_street_core_key("10TH & OAK 500 MAPLEWOOD DR STE B") == "500|MAPLEWOOD DR"
+    assert extract_street_core_key("10TH & OAK ST") == "10TH|OAK ST"
+
+    assert extract_registrable_domain("www.college.on.ca")[0] == "college.on.ca"
+    assert extract_registrable_domain("portal.qc.ca")[0] == "portal.qc.ca"
+    assert extract_registrable_domain("on.ca")[0] is None
+
+
