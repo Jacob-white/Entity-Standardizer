@@ -458,7 +458,7 @@
     "STELIO": "STELIANOS"
   },
   "multi_root_diminutives": {
-    "JERRY": ["GERALD", "JEROME", "JEREMIAH"],
+    "JERRY": ["GERALD", "JEROME", "JEREMIAH", "GENNARO"],
     "TERRY": ["TERENCE", "THERESA"],
     "CHRIS": ["CHRISTOPHER", "CHRISTIAN", "CHRISTINA", "CHRISTINE"],
     "PAT": ["PATRICK", "PATRICIA"],
@@ -470,7 +470,7 @@
     "DAN": ["DANIEL", "DANIELLE"],
     "DANNY": ["DANIEL", "DANIELLE"],
     "JOE": ["JOSEPH", "JOSEPHINE"],
-    "TONY": ["ANTHONY", "ANTONIA"],
+    "TONY": ["ANTHONY", "ANTONIA", "ANTON", "ANTONIO"],
     "FRANK": ["FRANCIS", "FRANKLIN"],
     "FRAN": ["FRANCIS", "FRANCES"],
     "GENE": ["EUGENE", "EUGENIA"],

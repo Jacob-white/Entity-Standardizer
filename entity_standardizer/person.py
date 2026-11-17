@@ -754,6 +754,15 @@ def standardize_person(raw_input: str | None) -> StandardizedPerson:
             credentials.extend(given_trailing_creds)
             actions.append("CREDENTIALS_EXTRACTED")
 
+        if (
+            len(last_toks) == 1
+            and len(given_toks) >= 2
+            and given_toks[-1] == last_toks[0]
+            and len(last_toks[0]) >= 2
+        ):
+            given_toks.pop()
+            actions.append("DUPLICATE_SURNAME_COLLAPSED")
+
         last_name = " ".join(last_toks)
         first_name = given_toks[0]
         if len(given_toks) > 1:
@@ -808,6 +817,11 @@ def standardize_person(raw_input: str | None) -> StandardizedPerson:
         if trailing_creds:
             credentials.extend(trailing_creds)
             actions.append("CREDENTIALS_EXTRACTED")
+
+        if len(toks) >= 3 and toks[-1] == toks[-2] and len(toks[-1]) >= 2:
+            toks.pop()
+            raw_seg0_words.pop()
+            actions.append("DUPLICATE_SURNAME_COLLAPSED")
 
         if len(toks) == 1:
             first_name = toks[0]
