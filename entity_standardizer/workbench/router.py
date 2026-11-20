@@ -265,7 +265,11 @@ class WorkbenchWorkspace:
         with self._lock:
             if job_id not in self.artifacts:
                 raise HTTPException(status_code=404, detail=f"Unknown job_id '{job_id}'.")
-            return self.artifacts[job_id]
+            artifact = self.artifacts[job_id]
+            if not Path(artifact[0]).is_file():
+                self.artifacts.pop(job_id, None)
+                raise HTTPException(status_code=404, detail=f"Artifact file for job_id '{job_id}' is no longer available.")
+            return artifact
 
     def get_match_session(self, job_id: str) -> MatchSession:
         """Retrieve a cross-system match session or raise HTTP 404."""
@@ -423,7 +427,7 @@ def create_workbench_router(workspace: WorkbenchWorkspace | None = None) -> APIR
     def workbench_save_preset(req: PresetSaveRequest) -> dict[str, Any]:
         try:
             saved = _preset_store().save_preset(req.name, req.model_dump())
-        except ValueError as exc:
+        except (ValueError, OSError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         return saved
 
@@ -431,16 +435,16 @@ def create_workbench_router(workspace: WorkbenchWorkspace | None = None) -> APIR
     def workbench_get_preset(name: str) -> dict[str, Any]:
         try:
             return _preset_store().get_preset(name)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
         except FileNotFoundError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except (ValueError, OSError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @router.delete("/ui/api/presets/{name}")
     def workbench_delete_preset(name: str) -> dict[str, Any]:
         try:
             deleted = _preset_store().delete_preset(name)
-        except ValueError as exc:
+        except (ValueError, OSError) as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         if not deleted:
             raise HTTPException(status_code=404, detail=f"Preset '{name}' not found.")

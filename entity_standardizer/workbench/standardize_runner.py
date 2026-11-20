@@ -670,6 +670,7 @@ def standardize_row_with_config(
             ("PHONE_RESCUED_FROM_ADDRESS_FIELD" in actions and FieldRole.PHONE.value in role_to_col)
             or ("URL_RESCUED_FROM_FIELD" in actions and FieldRole.WEBSITE.value in role_to_col)
         )
+        country_only_iso3: str | None = None
         for role in _ADDRESS_ROLES:
             if role not in role_to_col:
                 continue
@@ -697,11 +698,11 @@ def standardize_row_with_config(
                     )
             elif role == FieldRole.COUNTRY.value:
                 c_plan = get_dial_plan(raw_v) if (raw_v and not _is_placeholder_text(raw_v)) else None
-                std_v = (
-                    format_country_value(c_plan.iso3, raw_v, options.country_format, options.address_case)
-                    if c_plan is not None
-                    else None
-                )
+                if c_plan is not None:
+                    country_only_iso3 = c_plan.iso3
+                    std_v = format_country_value(c_plan.iso3, raw_v, options.country_format, options.address_case)
+                else:
+                    std_v = None
             cell_rescued = False
             if role == FieldRole.STREET2.value and addr_valid and std_v is None and not _is_placeholder_text(raw_v):
                 final_v = ""
@@ -988,6 +989,7 @@ def standardize_row_with_config(
             ]
             unit_valid = (
                 addr_valid
+                or (country_only_iso3 is not None)
                 or (phone_obj is not None and phone_obj.is_valid)
                 or (fax_obj is not None and fax_obj.is_valid)
                 or bool(pillar_objs)
@@ -995,14 +997,19 @@ def standardize_row_with_config(
             confs = [float(p.confidence) for p in pillar_objs]
             if addr_valid and addr_obj is not None and addr_obj.confidence_score:
                 confs.append(float(addr_obj.confidence_score))
+            if country_only_iso3 is not None:
+                confs.append(1.0)
             if phone_obj is not None and phone_obj.is_valid:
                 confs.append(float(phone_obj.confidence))
+            if fax_obj is not None and fax_obj.is_valid:
+                confs.append(float(fax_obj.confidence))
             unit_conf = round(sum(confs) / len(confs), 4) if confs else 0.0
             before_p_keys = [
                 k
                 for k in (
-                    addr_obj.normalized_address_key if addr_valid and addr_obj is not None else None,
+                    addr_obj.normalized_address_key if (addr_valid and addr_obj is not None) else country_only_iso3,
                     phone_obj.e164 if phone_obj is not None and phone_obj.is_valid else None,
+                    fax_obj.e164 if fax_obj is not None and fax_obj.is_valid else None,
                     org_obj.company_key if org_obj is not None and org_obj.is_valid else None,
                 )
                 if k

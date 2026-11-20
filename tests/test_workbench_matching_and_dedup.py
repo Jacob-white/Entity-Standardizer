@@ -708,3 +708,146 @@ def test_single_file_dedup_and_overrides(tmp_path: Path) -> None:
     assert wb_md_chk.active.max_row == 2
     assert list(wb_md_chk.active.merged_cells.ranges) == []
     wb_md_chk.close()
+
+    # Pass-8 regressions:
+    # 1) Explicit N:1 (2 Left -> 1 Right) vs 1:N (1 Left -> 2 Right) cardinality orientation
+    l_n1 = tmp_path / "l_n1.csv"
+    r_n1 = tmp_path / "r_n1.csv"
+    l_n1.write_text(
+        "id,org,crd,phone\nL1,Acme Corp,1234567,212-555-2368\nL2,Acme Corp,1234567,212-555-2368\nL3,Solo One,7654321,617-555-0100\n",
+        encoding="utf-8",
+    )
+    r_n1.write_text(
+        "id,org,crd,phone\nR1,Acme Corp,1234567,212-555-2368\nR2,Solo One,7654321,617-555-0100\nR3,Solo One,7654321,617-555-0100\n",
+        encoding="utf-8",
+    )
+    n1_map = MappingConfig(
+        [
+            ColumnMapping("id", FieldRole.RECORD_ID.value),
+            ColumnMapping("org", FieldRole.ORGANIZATION.value),
+            ColumnMapping("crd", FieldRole.CRD.value),
+            ColumnMapping("phone", FieldRole.PHONE.value),
+        ]
+    )
+    ms_card = run_cross_system_match(l_n1, r_n1, n1_map, n1_map, MatchingOptions(profile="FIRM"))
+    card_by_lr = {(p.left_id, p.right_id): p.cardinality for p in ms_card.pairs}
+    assert card_by_lr[("L1", "R1")] == "N:1" and card_by_lr[("L2", "R1")] == "N:1"
+    assert card_by_lr[("L3", "R2")] == "1:N" and card_by_lr[("L3", "R3")] == "1:N"
+
+    # 2) auto_standardize=False computes overall_confidence from non-address/non-phone pillars & 0.0 when empty
+    from entity_standardizer.workbench.match_runner import prepare_records_for_matching
+
+    direct_recs, _ = prepare_records_for_matching(
+        [{"id": "1", "org": "Acme LLC", "email": "ir@acme.com"}, {"id": "2", "org": "", "email": ""}],
+        MappingConfig([ColumnMapping("id", FieldRole.RECORD_ID.value), ColumnMapping("org", FieldRole.ORGANIZATION.value), ColumnMapping("email", FieldRole.EMAIL.value)]),
+        MatchingOptions(auto_standardize=False),
+    )
+    assert direct_recs[0].contact.overall_confidence > 0.0
+    assert direct_recs[1].contact.overall_confidence == 0.0
+
+    # Pass-9 regressions:
+    # 1) High match_threshold (> 0.85) is honored by scoring & MatchSession.recompute
+    l_ht = tmp_path / "l_ht.csv"
+    r_ht = tmp_path / "r_ht.csv"
+    l_ht.write_text(
+        "id,org,phone,email,s1,city,st,zip\nL1,Verger Capital Management LLC,336-934-4101,jdoe@verger.com,751 W 4th St,Winston Salem,NC,27101\n",
+        encoding="utf-8",
+    )
+    r_ht.write_text(
+        "id,org,phone,email,s1,city,st,zip\nR1,VERGER CAPITAL MANAGEMENT,336-934-4101,jdoe@verger.com,751 W 4th St,Winston Salem,NC,27101\n",
+        encoding="utf-8",
+    )
+    ht_map = MappingConfig(
+        [
+            ColumnMapping("id", FieldRole.RECORD_ID.value),
+            ColumnMapping("org", FieldRole.ORGANIZATION.value),
+            ColumnMapping("phone", FieldRole.PHONE.value),
+            ColumnMapping("email", FieldRole.EMAIL.value),
+            ColumnMapping("s1", FieldRole.STREET1.value),
+            ColumnMapping("city", FieldRole.CITY.value),
+            ColumnMapping("st", FieldRole.STATE.value),
+            ColumnMapping("zip", FieldRole.POSTAL_CODE.value),
+        ]
+    )
+    ms_ht = run_cross_system_match(
+        l_ht,
+        r_ht,
+        ht_map,
+        ht_map,
+        MatchingOptions(profile="CUSTOM", match_threshold=0.99, potential_threshold=0.50),
+    )
+    assert len(ms_ht.pairs) == 1
+    assert 0.85 <= ms_ht.pairs[0].score < 0.99
+    assert ms_ht.pairs[0].engine_disposition == "POTENTIAL_MATCH"
+    assert ms_ht.pairs[0].effective_status == "POTENTIAL_MATCH"
+    assert ms_ht.apply_decision("PAIR-000001", "approve")["pair"]["effective_status"] == "MATCHED"
+    assert ms_ht.apply_decision("PAIR-000001", "reset")["pair"]["effective_status"] == "POTENTIAL_MATCH"
+
+    # 2) Duplicate-role columns fall back to valid candidates & aggregate multiple MEMBER_ROSTER columns
+    dup_role_map = MappingConfig(
+        [
+            ColumnMapping("id", FieldRole.RECORD_ID.value),
+            ColumnMapping("org1", FieldRole.ORGANIZATION.value),
+            ColumnMapping("org2", FieldRole.ORGANIZATION.value),
+            ColumnMapping("ph1", FieldRole.PHONE.value),
+            ColumnMapping("ph2", FieldRole.PHONE.value),
+            ColumnMapping("em1", FieldRole.EMAIL.value),
+            ColumnMapping("em2", FieldRole.EMAIL.value),
+            ColumnMapping("web1", FieldRole.WEBSITE.value),
+            ColumnMapping("web2", FieldRole.WEBSITE.value),
+            ColumnMapping("crd1", FieldRole.CRD.value),
+            ColumnMapping("crd2", FieldRole.CRD.value),
+            ColumnMapping("ext1", FieldRole.EXTERNAL_ID.value),
+            ColumnMapping("ext2", FieldRole.EXTERNAL_ID.value),
+            ColumnMapping("ros1", FieldRole.MEMBER_ROSTER.value),
+            ColumnMapping("ros2", FieldRole.MEMBER_ROSTER.value),
+        ]
+    )
+    dup_recs, _ = prepare_records_for_matching(
+        [
+            {
+                "id": "1",
+                "org1": "Acme Corp",
+                "org2": "Acme Secondary",
+                "ph1": "555-0000",
+                "ph2": "212-555-2368",
+                "em1": "bad",
+                "em2": "bob@acme.com",
+                "web1": "not_a_url",
+                "web2": "https://acme.com",
+                "crd1": "bad",
+                "crd2": "1234567",
+                "ext1": "UNASSIGNED",
+                "ext2": "EXT-9",
+                "ros1": "111",
+                "ros2": "222",
+            },
+            {
+                "id": "2",
+                "org1": "Beta",
+                "org2": "",
+                "ph1": "555-0000",
+                "ph2": "not-a-phone",
+                "em1": "",
+                "em2": "",
+                "web1": "",
+                "web2": "",
+                "crd1": "",
+                "crd2": "",
+                "ext1": "",
+                "ext2": "",
+                "ros1": "",
+                "ros2": "",
+            },
+        ],
+        dup_role_map,
+        MatchingOptions(),
+    )
+    d_dup = dup_recs[0].flat_display()
+    assert d_dup["phone"] == "+12125552368"
+    assert d_dup["email"] == "bob@acme.com"
+    assert d_dup["website"] == "acme.com"
+    assert d_dup["crd"] == "1234567"
+    assert d_dup["external_id"] == "EXT-9"
+    assert d_dup["roster_count"] == 2
+    assert dup_recs[1].flat_display()["phone"] == ""
