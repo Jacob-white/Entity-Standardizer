@@ -246,9 +246,9 @@ Calling `register_duckdb_udfs(con, default_country="US")` registers **15 SQL sca
 
 ---
 
-## 6. Command Line Interface (`entity-standardizer` — 23 Subcommands)
+## 6. Command Line Interface (`entity-standardizer` — 24 Subcommands)
 
-The unified `entity-standardizer` CLI exposes **23 subcommands**:
+The unified `entity-standardizer` CLI exposes **24 subcommands**:
 
 | Subcommand | Description |
 | :--- | :--- |
@@ -275,5 +275,6 @@ The unified `entity-standardizer` CLI exposes **23 subcommands**:
 | `dedup` | Cluster and deduplicate telephone numbers into Golden Phone Records |
 | `country` | Look up a `CountryDialPlan` by ISO-2, ISO-3, calling code, or name |
 | `batch` | Stream-standardize a CSV file across phone, address, company, person, email, and URL columns |
+| `ui` | Launch the interactive Web Workbench UI (`/ui`) for multi-format File Standardization, Cross-System Matching, Single-File Deduplication, and Live Inspection |
 
 

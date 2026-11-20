@@ -245,9 +245,11 @@ class ContactBatchRequest(BaseModel):
 
 
 def _verify_api_key(request: Request) -> None:
-    """Enforce optional API key authentication on /v1/* endpoints when ENTITY_STANDARDIZER_API_KEYS is set."""
+    """Enforce optional API key authentication on /v1/* and /ui/api/* endpoints when ENTITY_STANDARDIZER_API_KEYS is set."""
     raw_keys = os.environ.get("ENTITY_STANDARDIZER_API_KEYS", "").strip()
-    if not raw_keys or not request.url.path.startswith("/v1/"):
+    if not raw_keys or not (
+        request.url.path.startswith("/v1/") or request.url.path.startswith("/ui/api/")
+    ):
         return
     valid_keys = {k.strip() for k in raw_keys.split(",") if k.strip()}
     api_key = request.headers.get("X-API-Key", "").strip()
@@ -506,6 +508,9 @@ def create_app() -> FastAPI:
             "results": [r.to_dict() for r in results],
         }
 
+    from entity_standardizer.workbench.router import create_workbench_router
+
+    app.include_router(create_workbench_router())
     return app
 
 

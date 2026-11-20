@@ -23,7 +23,11 @@ All operational features are **opt-in** through environment variables. With none
 
 | Variable | Meaning | Default |
 | :--- | :--- | :--- |
-| `ENTITY_STANDARDIZER_API_KEYS` | Comma-separated list of valid API keys required on `/v1/*` routes via `X-API-Key` or `Authorization: Bearer <key>`. | unset (auth disabled) |
+| `ENTITY_STANDARDIZER_API_KEYS` | Comma-separated list of valid API keys required on `/v1/*` and `/ui/api/*` routes via `X-API-Key` or `Authorization: Bearer <key>`. | unset (auth disabled) |
+| `ENTITY_STANDARDIZER_ALLOW_LOCAL_PATHS` | Set to `1`, `true`, `yes`, or `on` to enable zero-copy local disk file path inspection and export in `/ui/api/*` (auto-enabled by `entity-standardizer ui` on loopback hosts). | unset (`0`, disabled) |
+| `ENTITY_STANDARDIZER_WORKBENCH_DIR` | Directory used by the `/ui` workbench for temporary uploads and export jobs. | `<tempdir>/entity_standardizer_workbench` |
+| `ENTITY_STANDARDIZER_MAX_UPLOAD_MB` | Maximum allowed file upload size (MiB) on `/ui/api/upload` before returning `413 Payload Too Large`. | `512` |
+| `ENTITY_STANDARDIZER_PRESETS_DIR` | Directory where saved field-mapping and option presets JSON files are stored. | `~/.entity_standardizer/presets` |
 | `ENTITY_STANDARDIZER_FORCE_PURE` | When set to `1`, `true`, `yes`, or `on`, forces the pure-Python engine even if `_entity_standardizer_rs` is compiled (legacy fallback: `ADDRESS_STANDARDIZER_FORCE_PURE`). | unset (auto-detects Rust PyO3) |
 | `ENTITY_STANDARDIZER_CACHE_URL` | Optional Redis connection URL (`redis://host:6379/0`, `rediss://...`, or `unix://...`) for shared L2 address result caching across workers (legacy fallback: `ADDRESS_STANDARDIZER_CACHE_URL`). | unset (in-process LRU + SQLite L2) |
 | `ENTITY_STANDARDIZER_AUDIT_ENABLED` | Set to `1`, `true`, `yes`, or `on` to automatically record low-confidence (`MANUAL_STEWARDSHIP`), registered-agent hub, and `parse_failed` address standardizations into the stewardship ledger (legacy fallback: `ADDRESS_STANDARDIZER_AUDIT_ENABLED`). | `0` (off unless ledger initialized) |

@@ -1325,7 +1325,7 @@ def test_joint_cross_healing_and_phase7_upgrades() -> None:
             "-c",
             (
                 "import sys, entity_standardizer, entity_standardizer.address; "
-                "heavy = ('pyarrow', 'polars', 'duckdb', 'fastapi', 'pydantic'); "
+                "heavy = ('pyarrow', 'polars', 'duckdb', 'fastapi', 'pydantic', 'openpyxl'); "
                 "loaded = [m for m in heavy if m in sys.modules]; "
                 "assert not loaded, f'Unexpectedly loaded: {loaded}'; "
                 "assert 'standardize_arrow' in dir(entity_standardizer)"
