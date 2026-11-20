@@ -13,7 +13,7 @@ Owned and maintained by **HobbyHabbit LLC** under the **MIT License**.
 - **`_entity_standardizer_rs` / `entity_standardizer._native_dispatch`**: Optional native Rust PyO3 extension (`src/lib.rs`) accelerating phone digit extraction, Unicode digit folding, vanity translation, Damerau-Levenshtein distance, company token normalization, and batch E.164 standardization with 100% pure-Python fallback parity.
 
 ### CLI Entry Points (`pyproject.toml`)
-- `entity-standardizer` — Unified CLI with 23 subcommands (`parse`, `country`, `batch`, `compare`, `dedup`, `address`, `compare-addresses`, `dedup-addresses`, `autocomplete`, `company`, `person`, `compare-companies`, `dedup-companies`, `compare-persons`, `dedup-persons`, `title`, `email`, `compare-emails`, `url`, `compare-urls`, `social`, `contact`, `cluster-contacts`).
+- `entity-standardizer` — Unified CLI with 24 subcommands (`parse`, `country`, `batch`, `compare`, `dedup`, `address`, `compare-addresses`, `dedup-addresses`, `autocomplete`, `company`, `person`, `compare-companies`, `dedup-companies`, `compare-persons`, `dedup-persons`, `title`, `email`, `compare-emails`, `url`, `compare-urls`, `social`, `contact`, `cluster-contacts`, `ui`).
 - `entity-standardizer-mcp` — Model Context Protocol (MCP) stdio JSON-RPC 2.0 server exposing 25 tools.
 
 ---

@@ -515,7 +515,7 @@ def test_version_and_openapi_docs_sync() -> None:
     parser = build_parser()
     subparsers = [a for a in parser._actions if hasattr(a, "choices") and isinstance(a.choices, dict)][0]
     live_cli_cmds = list(subparsers.choices.keys())
-    assert len(live_cli_cmds) == 23
+    assert len(live_cli_cmds) == 24
 
     arrow_funcs = [
         name

@@ -223,7 +223,7 @@ print(con.execute("SELECT standardize_company_name('KKR Opportunities III S.à r
 
 ---
 
-## 8. Command Line Interface (23 Subcommands), FastAPI Server (29 Routes) & MCP Server (25 Tools)
+## 8. Command Line Interface (24 Subcommands), FastAPI Server (29 `/v1/*` + Probe Routes), Web Workbench (`/ui`) & MCP Server (25 Tools)
 
 ```bash
 # Joint contact standardization & clustering
@@ -249,8 +249,11 @@ entity-standardizer dedup-addresses "100 Main St, Boston, MA 02110" "100 Main St
 entity-standardizer autocomplete "100 WALL"
 entity-standardizer parse "+44 (0) 20 7946 0912 ext 15"
 
-# Start FastAPI HTTP Microservice (29 routes: 27 /v1/* endpoints + GET /health + GET /ready)
+# Start FastAPI HTTP Microservice & Web Workbench (/ui)
 uvicorn entity_standardizer.server:app --host 0.0.0.0 --port 8000
+
+# Or launch the local File Standardization & Cross-System Matching Web UI directly
+entity-standardizer ui --open
 
 # Start Model Context Protocol (MCP) Server (25 tools)
 entity-standardizer-mcp

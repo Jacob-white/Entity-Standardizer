@@ -199,7 +199,42 @@ def build_parser() -> argparse.ArgumentParser:
     cluster_cmd.add_argument("records_json", help="JSON array string of contact records.")
     cluster_cmd.add_argument("-d", "--default-country", default="US", help="Fallback ISO country (default: US).")
 
+    # ui command
+    ui_cmd = sub.add_parser("ui", help="Launch the interactive Entity Standardizer Web Workbench UI.")
+    ui_cmd.add_argument("--host", default="127.0.0.1", help="Host address to bind (default: 127.0.0.1).")
+    ui_cmd.add_argument("--port", type=int, default=8000, help="Port number to bind (default: 8000).")
+    ui_cmd.add_argument("--open", action="store_true", help="Open the Web Workbench in the default browser.")
+    ui_cmd.add_argument(
+        "--allow-local-paths",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Allow zero-copy local disk file paths (auto-enabled on loopback hosts).",
+    )
+
     return parser
+
+
+def _run_ui_command(args: argparse.Namespace) -> int:
+    """Launch the Entity Standardizer Web Workbench server with local-path safety defaults."""
+    import os
+    import webbrowser
+
+    try:
+        import uvicorn
+    except ImportError:
+        sys.stderr.write(
+            'Error: Web Workbench requires optional UI dependencies. Install with: pip install "entity-standardizer[ui]"\n'
+        )
+        return 1
+
+    is_loopback = args.host in ("127.0.0.1", "localhost", "::1")
+    allow_local = is_loopback if args.allow_local_paths is None else bool(args.allow_local_paths)
+    os.environ["ENTITY_STANDARDIZER_ALLOW_LOCAL_PATHS"] = "1" if allow_local else "0"
+    if args.open:
+        browser_host = "127.0.0.1" if args.host in ("0.0.0.0", "::") else args.host
+        webbrowser.open(f"http://{browser_host}:{args.port}/ui")
+    uvicorn.run("entity_standardizer.server:app", host=args.host, port=args.port)
+    return 0
 
 
 def main(argv: Sequence[str] | None = None) -> int:
@@ -381,6 +416,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         ent_clusters = cluster_contact_records(records, default_country=args.default_country)
         sys.stdout.write(json.dumps([c.to_dict() for c in ent_clusters], indent=2) + "\n")
         return 0
+
+    if args.command == "ui":
+        return _run_ui_command(args)
 
     # args.command == "batch"
     rows = stream_standardize_csv(

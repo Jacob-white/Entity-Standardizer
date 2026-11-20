@@ -14,7 +14,7 @@ A unified, high-performance multi-national **Entity, Organization, Person, Web, 
 ## 📚 Documentation & Quickstarts
 
 - **[5-Minute Quickstart Guide](docs/quickstart.md)** — Step-by-step onboarding for joint contact cross-healing, company/person/web standardization, address & phone parsing, multi-pillar comparison & deduplication, Arrow/Polars/DuckDB SQL UDFs, CLI, and HTTP service.
-- **[Complete API Reference](docs/api_reference.md)** — Full reference for all Python dataclasses, functions, cross-healing enums, 23 CLI commands, 29 HTTP routes (27 `/v1/*` endpoints + `GET /health` + `GET /ready`), 25 MCP tools, 16 Arrow/Polars functions, and 15 DuckDB SQL UDFs.
+- **[Complete API Reference](docs/api_reference.md)** — Full reference for all Python dataclasses, functions, cross-healing enums, 24 CLI commands (including `ui` Web Workbench), 29 stateless `/v1/*` + `/health` + `/ready` HTTP routes plus `/ui` workbench endpoints, 25 MCP tools, 16 Arrow/Polars functions, and 15 DuckDB SQL UDFs.
 - **[HTTP Endpoints & OpenAPI 3.1 Spec](docs/api_endpoints.md)** — Detailed HTTP endpoint reference and [`docs/openapi.json`](docs/openapi.json).
 - **[AI Agent & MCP Integration Guide](docs/ai_agent_guide.md)** & **[`llms.txt`](llms.txt)** — Model Context Protocol (MCP) setup, 25-tool catalog, autonomous agent decision tree, and token-efficient LLM context index.
 - **[Developer Cookbook & Production Recipes](docs/developer_cookbook.md)** — Copy-pasteable recipes for SEC/Form ADV hygiene, couple splitting, multi-pillar deduplication, Polars/Arrow/DuckDB ETL, and TCPA/IRSF anti-fraud guardrails.
@@ -152,8 +152,11 @@ entity-standardizer dedup "(415) 555-2671" "+14155552671"
 entity-standardizer country JP
 entity-standardizer batch input.csv output.csv --phone-col phone --country-col country
 
-# Run the FastAPI HTTP service (29 HTTP routes: 27 /v1/* endpoints + GET /health + GET /ready)
+# Run the FastAPI HTTP service & interactive Web Workbench (/ui)
 uvicorn entity_standardizer.server:app --host 0.0.0.0 --port 8000
+
+# Or launch the local File Standardization & Cross-System Matching Web UI directly
+entity-standardizer ui --open
 
 # Run the Model Context Protocol (MCP) server (25 tools across all entity standardization, comparison, and clustering pillars)
 entity-standardizer-mcp

@@ -186,3 +186,9 @@ Clusters and deduplicates a list of raw phone numbers into Golden Phone Records.
 Batch-standardizes a list of phone numbers in a single request.
 - **Request body**: `PhoneBatchRequest` (`phones: list[string]`, `default_country: string = "US"`)
 - **Response (`200 OK`)**: `{"count": int, "results": list[StandardizedPhone]}`.
+
+---
+
+## 2. Interactive Web Workbench (`/ui` and `/ui/api/*`)
+
+The FastAPI application also serves the built-in **Entity Standardizer Web Workbench** at `GET /ui` (and static assets at `/ui/assets/styles.css`, `/ui/assets/app.js`), backed by stateful `/ui/api/*` endpoints for multi-format file import/export (`.csv`, `.tsv`, `.psv`, `.txt`, `.xlsx`, `.json`, `.jsonl`, `.parquet`), grouped field mapping & presets, two-file Cross-System Matching with steward review overrides, single-file Deduplication, and live inspection. When `ENTITY_STANDARDIZER_API_KEYS` is configured, all `/ui/api/*` endpoints require `X-API-Key` or `Authorization: Bearer <key>` just like `/v1/*`. Local disk path streaming (`/ui/api/inspect-path` and `output_path`) is gated behind `ENTITY_STANDARDIZER_ALLOW_LOCAL_PATHS=1` (enabled automatically by `entity-standardizer ui` when bound to loopback hosts).

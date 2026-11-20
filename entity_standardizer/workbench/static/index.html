@@ -1,0 +1,434 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Entity Standardizer Workbench</title>
+  <link rel="stylesheet" href="/ui/assets/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <h1>Entity Standardizer</h1>
+      <span id="runtime-badge" class="pill">Loading...</span>
+    </div>
+    <div class="topbar-controls">
+      <div class="preset-bar">
+        <select id="preset-select" aria-label="Saved presets">
+          <option value="">-- Presets --</option>
+        </select>
+        <button id="preset-load-btn" type="button" class="btn-secondary">Load</button>
+        <button id="preset-save-btn" type="button" class="btn-secondary">Save Preset</button>
+        <button id="preset-del-btn" type="button" class="btn-danger-outline">Delete</button>
+      </div>
+      <div class="apikey-bar">
+        <label for="api-key-input" class="muted">API Key</label>
+        <input id="api-key-input" type="password" autocomplete="off" placeholder="Optional X-API-Key">
+      </div>
+    </div>
+  </header>
+
+  <nav class="tabbar" role="tablist">
+    <button type="button" class="tab active" data-tab="standardize">1. File Standardizer</button>
+    <button type="button" class="tab" data-tab="match">2. Cross-System Match</button>
+    <button type="button" class="tab" data-tab="dedup">3. Deduplicate (1 File)</button>
+    <button type="button" class="tab" data-tab="live">4. Live Inspector</button>
+    <span id="global-status" class="status-msg" role="status"></span>
+  </nav>
+
+  <datalist id="group-suggestions">
+    <option value="primary">
+    <option value="billing">
+    <option value="shipping">
+    <option value="mailing">
+    <option value="other">
+    <option value="mmd">
+    <option value="inst_contact">
+    <option value="assistant">
+  </datalist>
+
+  <main class="workspace">
+    <!-- TAB 1: FILE STANDARDIZER -->
+    <section id="tab-standardize" class="tab-panel active">
+      <div class="card">
+        <div class="card-head">
+          <h2>1. Import Source File (CSV, TSV, PSV, TXT, XLSX, JSON, JSONL, Parquet)</h2>
+        </div>
+        <div id="std-source-slot"></div>
+      </div>
+
+      <div class="card" id="std-mapper-card" hidden>
+        <div class="card-head">
+          <h2>2. Grouped Field Mapper</h2>
+          <span class="muted">Assign roles and isolated healing groups (e.g. billing vs shipping)</span>
+        </div>
+        <div id="std-mapper-slot"></div>
+      </div>
+
+      <div class="card" id="std-options-card" hidden>
+        <details open>
+          <summary class="card-head-summary">3. Standardization &amp; Output Options</summary>
+          <div class="options-grid">
+            <fieldset>
+              <legend>Output Mode &amp; Invalid Policy</legend>
+              <label>Column Output Mode
+                <select id="opt-column_mode">
+                  <option value="overwrite">Overwrite In-Place (Keep Exact Schema)</option>
+                  <option value="append_std">Append _std Columns</option>
+                  <option value="overwrite_keep_raw">Overwrite + Keep _raw Backup</option>
+                </select>
+              </label>
+              <label>Invalid &amp; Placeholder Policy
+                <select id="opt-invalid_policy">
+                  <option value="clear_placeholders_keep_raw">Clear Placeholders / Keep Non-Placeholder Raw</option>
+                  <option value="clear_all_invalid">Clear All Invalid Values to Blank</option>
+                  <option value="keep_all_raw">Always Keep Original Raw Value</option>
+                </select>
+              </label>
+              <label class="check"><input type="checkbox" id="opt-include_audit_cols"> Include Audit Columns (_valid, _confidence, _key, _healing_actions)</label>
+              <label class="check"><input type="checkbox" id="opt-include_matching_keys"> Include Matching Blocking Keys</label>
+            </fieldset>
+
+            <fieldset>
+              <legend>Cross-Healing &amp; Rescue</legend>
+              <label class="check"><input type="checkbox" id="opt-enable_cross_healing" checked> Enable Multi-Pillar Cross-Healing</label>
+              <label class="check"><input type="checkbox" id="opt-rescue_misplaced_fields" checked> Rescue Misplaced Phones / Emails / URLs / Orgs</label>
+              <label class="check"><input type="checkbox" id="opt-infer_blank_fields"> Infer Blank Org from Domain / Blank Person from Email or C/O</label>
+              <label>Couple / Joint Person Splitting
+                <select id="opt-couple_split_mode">
+                  <option value="keep_primary">Keep Primary Person</option>
+                  <option value="append_secondary_col">Append Secondary Column</option>
+                  <option value="split_rows">Split Into Multiple Rows</option>
+                </select>
+              </label>
+            </fieldset>
+
+            <fieldset>
+              <legend>Telephone &amp; Fax</legend>
+              <label>Phone Output Format
+                <select id="opt-phone_format">
+                  <option value="e164">E.164 (+12125552368)</option>
+                  <option value="national">National ((212) 555-2368)</option>
+                  <option value="international">International (+1 212-555-2368)</option>
+                  <option value="rfc3966">RFC 3966 URI (tel:+1-212-555-2368)</option>
+                  <option value="masked_partial">Masked Partial (+1******2368)</option>
+                  <option value="masked_full">Masked Redacted ([REDACTED PHONE])</option>
+                </select>
+              </label>
+              <label>Extension Handling
+                <select id="opt-extension_mode">
+                  <option value="preserve">Preserve Extension</option>
+                  <option value="strip">Strip Extension</option>
+                </select>
+              </label>
+              <label>Default Fallback Country (ISO-2)
+                <input type="text" id="opt-default_country" value="US" maxlength="3">
+              </label>
+            </fieldset>
+
+            <fieldset>
+              <legend>Physical Address</legend>
+              <label>Address Casing
+                <select id="opt-address_case">
+                  <option value="upper">UPPERCASE</option>
+                  <option value="title">Title Case</option>
+                </select>
+              </label>
+              <label>Country Format
+                <select id="opt-country_format">
+                  <option value="auto">Auto (Preserve Input Style: ISO2 vs Full Name)</option>
+                  <option value="iso2">ISO-2 (US, GB, DE)</option>
+                  <option value="iso3">ISO-3 (USA, GBR, DEU)</option>
+                  <option value="name">Full Country Name</option>
+                </select>
+              </label>
+              <label class="check"><input type="checkbox" id="opt-split_secondary_unit" checked> Keep Secondary Unit Split (Street 2)</label>
+              <label class="check"><input type="checkbox" id="opt-enable_geocoding"> Offline Geocoding (Latitude / Longitude / Precision)</label>
+            </fieldset>
+
+            <fieldset>
+              <legend>Company, Person, Web &amp; IDs</legend>
+              <label>Company Casing
+                <select id="opt-company_case">
+                  <option value="upper">UPPERCASE</option>
+                  <option value="title">Title Case</option>
+                </select>
+              </label>
+              <label>Company Name Style
+                <select id="opt-company_style">
+                  <option value="legal_name">Canonical Legal Name</option>
+                  <option value="brand_stem">Core Brand Stem</option>
+                </select>
+              </label>
+              <label>Person Casing
+                <select id="opt-person_case">
+                  <option value="upper">UPPERCASE</option>
+                  <option value="title">Title Case</option>
+                </select>
+              </label>
+              <label>Person Format
+                <select id="opt-person_format">
+                  <option value="first_last">First Middle Last Suffix</option>
+                  <option value="last_comma_first">Last, First Middle, Suffix</option>
+                </select>
+              </label>
+              <label class="check"><input type="checkbox" id="opt-use_nickname_root"> Canonicalize Given Name to Root (Bob -&gt; ROBERT)</label>
+              <label class="check"><input type="checkbox" id="opt-email_strip_subaddress" checked> Strip Email +Subaddress Tag</label>
+              <label class="check"><input type="checkbox" id="opt-email_canonicalize_gmail_dots" checked> Canonicalize Gmail Dots</label>
+              <label class="check"><input type="checkbox" id="opt-email_heal_typos" checked> Heal Common Email Domain Typos</label>
+              <label>External ID Zero-Pad Width (optional)
+                <input type="number" id="opt-id_pad_width" min="1" max="32" placeholder="Leave blank for unpadded">
+              </label>
+              <label class="check"><input type="checkbox" id="opt-csv_formula_guard"> CSV Spreadsheet Formula Guard (prefix '+' cells with ')</label>
+            </fieldset>
+          </div>
+        </details>
+
+        <div class="action-bar">
+          <button id="std-preview-btn" type="button" class="btn-secondary">Preview Changes (Dry Run)</button>
+          <div id="std-local-out-wrap" class="inline-field" hidden>
+            <label for="std-output-path">Optional Local Output Path</label>
+            <input id="std-output-path" type="text" placeholder="Leave blank to download via browser">
+          </div>
+          <button id="std-run-btn" type="button" class="btn-primary">Standardize &amp; Export Same Format</button>
+        </div>
+      </div>
+
+      <div class="card" id="std-results-card" hidden>
+        <div class="card-head">
+          <h2>4. Preview Diff &amp; Execution Summary</h2>
+          <div id="std-download-slot"></div>
+        </div>
+        <div id="std-kpi-strip" class="kpi-strip"></div>
+        <div class="table-wrap" id="std-preview-wrap"></div>
+      </div>
+    </section>
+
+    <!-- TAB 2: CROSS-SYSTEM MATCH -->
+    <section id="tab-match" class="tab-panel">
+      <div class="two-col">
+        <div class="card">
+          <div class="card-head"><h2>Left Dataset (Source A)</h2></div>
+          <div id="match-left-source"></div>
+          <details class="sub-box">
+            <summary>Optional Child Member Roster File (for Partnership / Team)</summary>
+            <div id="match-left-roster-source"></div>
+            <div class="inline-row">
+              <label>Parent ID Column <select id="left-roster-parent"></select></label>
+              <label>Member Column(s) <input id="left-roster-cols" type="text" placeholder="e.g. CRD__c, Member_Name__c"></label>
+            </div>
+          </details>
+          <div id="match-left-mapper" hidden></div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>Right Dataset (Source B)</h2></div>
+          <div id="match-right-source"></div>
+          <details class="sub-box">
+            <summary>Optional Child Member Roster File (for Partnership / Team)</summary>
+            <div id="match-right-roster-source"></div>
+            <div class="inline-row">
+              <label>Parent ID Column <select id="right-roster-parent"></select></label>
+              <label>Member Column(s) <input id="right-roster-cols" type="text" placeholder="e.g. REP_CRD, REP_NAME"></label>
+            </div>
+          </details>
+          <div id="match-right-mapper" hidden></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><h2>Matching Engine Configuration</h2></div>
+        <div class="match-opts-grid">
+          <label>Domain Profile
+            <select id="match-profile">
+              <option value="CONTACT">CONTACT</option>
+              <option value="FIRM">FIRM</option>
+              <option value="OFFICE">OFFICE</option>
+              <option value="PARTNERSHIP">PARTNERSHIP</option>
+              <option value="TEAM">TEAM</option>
+              <option value="CUSTOM">CUSTOM</option>
+            </select>
+          </label>
+          <label>Match Threshold
+            <input id="match-threshold" type="number" step="0.01" min="0" max="1" value="0.70">
+          </label>
+          <label>Potential Threshold
+            <input id="match-potential-threshold" type="number" step="0.01" min="0" max="1" value="0.50">
+          </label>
+          <label>Switchboard Phone Min Shared
+            <input id="match-switchboard" type="number" min="2" max="100" value="4">
+          </label>
+          <label>Synthetic Test Guard
+            <select id="match-synthetic">
+              <option value="flag">Flag Synthetic Records</option>
+              <option value="exclude">Exclude Synthetic Records</option>
+              <option value="ignore">Ignore Synthetic Guard</option>
+            </select>
+          </label>
+          <label>Default Country
+            <input id="match-country" type="text" value="US" maxlength="3">
+          </label>
+          <label class="check"><input type="checkbox" id="match-auto-std" checked> Auto-Standardize &amp; Cross-Heal Before Matching</label>
+        </div>
+        <div class="signal-pills" id="match-signals-box"></div>
+        <div class="action-bar">
+          <button id="match-run-btn" type="button" class="btn-primary">Run Cross-System Match</button>
+        </div>
+      </div>
+
+      <div class="card" id="match-results-card" hidden>
+        <div class="card-head">
+          <h2>Scorecard, Steward Review Queue &amp; Deliverables</h2>
+          <div class="export-bar">
+            <select id="match-export-fmt" aria-label="Comparison export format">
+              <option value="csv">Comparison/Scorecard: CSV</option>
+              <option value="xlsx">Comparison/Scorecard: XLSX</option>
+              <option value="json">Comparison/Scorecard: JSON</option>
+              <option value="parquet">Comparison/Scorecard: Parquet</option>
+            </select>
+            <button type="button" class="btn-secondary match-exp-btn" data-art="comparison">Comparison Report</button>
+            <button type="button" class="btn-secondary match-exp-btn" data-art="enriched_left">Enriched Left (Same Format)</button>
+            <button type="button" class="btn-secondary match-exp-btn" data-art="unmatched_left">Unmatched Left</button>
+            <button type="button" class="btn-secondary match-exp-btn" data-art="unmatched_right">Unmatched Right</button>
+            <button type="button" class="btn-secondary match-exp-btn" data-art="scorecard">Scorecard</button>
+            <button type="button" class="btn-primary match-exp-btn" data-art="xlsx_bundle">Full Excel Bundle (.xlsx)</button>
+          </div>
+        </div>
+
+        <div id="match-kpi-strip" class="kpi-strip"></div>
+
+        <div class="filter-bar">
+          <select id="match-view">
+            <option value="all_pairs">All Pairs (Matched + Potential + Rejected)</option>
+            <option value="matched">Matched Only</option>
+            <option value="potential">Potential Review Queue</option>
+            <option value="rejected">Rejected Pairs</option>
+            <option value="unmatched_left">Unmatched Left Records</option>
+            <option value="unmatched_right">Unmatched Right Records</option>
+          </select>
+          <select id="match-card-filter">
+            <option value="">All Cardinalities</option>
+            <option value="1:1">1:1</option>
+            <option value="N:1">N:1</option>
+            <option value="1:N">1:N</option>
+            <option value="M:N">M:N</option>
+          </select>
+          <label class="check"><input type="checkbox" id="match-disc-only"> Discrepancies Only</label>
+          <input id="match-search" type="search" placeholder="Filter by ID, CRD, org, person, phone, email, city, note...">
+          <button id="match-refresh-btn" type="button" class="btn-secondary">Filter</button>
+        </div>
+
+        <div class="split-pane">
+          <div class="table-wrap" id="match-pairs-wrap"></div>
+          <aside class="inspector-drawer" id="match-detail-drawer" hidden>
+            <h3 id="drawer-title">Pair Inspector</h3>
+            <p id="drawer-expl" class="expl-box"></p>
+            <div class="table-wrap" id="drawer-compare-table"></div>
+            <label>Steward Note
+              <input id="steward-note-input" type="text" placeholder="Optional audit commentary">
+            </label>
+            <div class="action-bar">
+              <button id="steward-approve-btn" type="button" class="btn-ok">Approve</button>
+              <button id="steward-reject-btn" type="button" class="btn-danger">Reject</button>
+              <button id="steward-reset-btn" type="button" class="btn-secondary">Reset</button>
+            </div>
+          </aside>
+        </div>
+        <div id="match-pager" class="action-bar"></div>
+      </div>
+    </section>
+
+    <!-- TAB 3: SINGLE-FILE DEDUPLICATION -->
+    <section id="tab-dedup" class="tab-panel">
+      <div class="card">
+        <div class="card-head"><h2>1. Import Dataset to Deduplicate</h2></div>
+        <div id="dedup-source-slot"></div>
+      </div>
+
+      <div class="card" id="dedup-mapper-card" hidden>
+        <div class="card-head"><h2>2. Field Mapping &amp; Clustering Controls</h2></div>
+        <div id="dedup-mapper-slot"></div>
+        <div class="match-opts-grid">
+          <label>Domain Profile
+            <select id="dedup-profile">
+              <option value="CONTACT">CONTACT</option>
+              <option value="FIRM">FIRM</option>
+              <option value="OFFICE">OFFICE</option>
+              <option value="PARTNERSHIP">PARTNERSHIP</option>
+              <option value="TEAM">TEAM</option>
+              <option value="CUSTOM">CUSTOM</option>
+            </select>
+          </label>
+          <label>Match Threshold
+            <input id="dedup-threshold" type="number" step="0.01" min="0" max="1" value="0.70">
+          </label>
+          <label>Synthetic Test Guard
+            <select id="dedup-synthetic">
+              <option value="flag">Flag Synthetic Records</option>
+              <option value="exclude">Exclude Synthetic Records</option>
+              <option value="ignore">Ignore Synthetic Guard</option>
+            </select>
+          </label>
+          <label>Default Country
+            <input id="dedup-country" type="text" value="US" maxlength="3">
+          </label>
+          <label>Export Mode (Same Format)
+            <select id="dedup-export-mode">
+              <option value="tagged_all_rows">Tag All Rows (cluster_id, cluster_size, is_golden_record)</option>
+              <option value="golden_only">Golden Records Only (Collapse Duplicates)</option>
+            </select>
+          </label>
+          <label class="check"><input type="checkbox" id="dedup-auto-std" checked> Auto-Standardize &amp; Cross-Heal</label>
+        </div>
+        <div class="action-bar">
+          <button id="dedup-run-btn" type="button" class="btn-primary">Run Deduplication &amp; Clustering</button>
+          <button id="dedup-export-btn" type="button" class="btn-secondary" disabled>Export Same Format</button>
+        </div>
+      </div>
+
+      <div class="card" id="dedup-results-card" hidden>
+        <div class="card-head">
+          <h2>3. Golden Record Clusters</h2>
+          <label class="check"><input type="checkbox" id="dedup-multi-only"> Multi-Record Clusters Only</label>
+        </div>
+        <div id="dedup-kpi-strip" class="kpi-strip"></div>
+        <div class="split-pane">
+          <ul id="dedup-cluster-list" class="cluster-list"></ul>
+          <div class="inspector-drawer" id="dedup-cluster-detail">
+            <p class="muted">Select a cluster to inspect golden record survivorship and member rows.</p>
+          </div>
+        </div>
+        <div id="dedup-pager" class="action-bar"></div>
+      </div>
+    </section>
+
+    <!-- TAB 4: LIVE INSPECTOR -->
+    <section id="tab-live" class="tab-panel">
+      <div class="card">
+        <div class="card-head">
+          <h2>Interactive Multi-Pillar Cross-Healing &amp; Comparison Sandbox</h2>
+          <select id="live-mode">
+            <option value="single">Single Entity Cross-Healing Inspector</option>
+            <option value="compare">Two-Entity Pairwise Scorer</option>
+          </select>
+        </div>
+        <div class="two-col">
+          <div class="live-form" id="live-form-a">
+            <h3>Entity A</h3>
+          </div>
+          <div class="live-form" id="live-form-b" hidden>
+            <h3>Entity B</h3>
+          </div>
+        </div>
+        <div class="action-bar">
+          <button id="live-run-btn" type="button" class="btn-primary">Run Standardization / Score</button>
+          <button id="live-sample-btn" type="button" class="btn-secondary">Load Sample Data</button>
+        </div>
+        <pre id="live-output" class="json-pre"></pre>
+      </div>
+    </section>
+  </main>
+
+  <script src="/ui/assets/app.js"></script>
+</body>
+</html>

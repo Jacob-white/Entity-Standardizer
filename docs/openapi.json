@@ -1108,6 +1108,917 @@
           }
         }
       }
+    },
+    "/ui/api/capabilities": {
+      "get": {
+        "summary": "Workbench Capabilities",
+        "operationId": "workbench_capabilities_ui_api_capabilities_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Workbench Capabilities Ui Api Capabilities Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ui/api/upload": {
+      "post": {
+        "summary": "Workbench Upload",
+        "operationId": "workbench_upload_ui_api_upload_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_workbench_upload_ui_api_upload_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Workbench Upload Ui Api Upload Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ui/api/inspect-path": {
+      "post": {
+        "summary": "Workbench Inspect Path",
+        "operationId": "workbench_inspect_path_ui_api_inspect_path_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InspectPathRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Workbench Inspect Path Ui Api Inspect Path Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ui/api/reinspect": {
+      "post": {
+        "summary": "Workbench Reinspect",
+        "operationId": "workbench_reinspect_ui_api_reinspect_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReinspectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Workbench Reinspect Ui Api Reinspect Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ui/api/presets": {
+      "get": {
+        "summary": "Workbench List Presets",
+        "operationId": "workbench_list_presets_ui_api_presets_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Workbench List Presets Ui Api Presets Get"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Workbench Save Preset",
+        "operationId": "workbench_save_preset_ui_api_presets_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PresetSaveRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Workbench Save Preset Ui Api Presets Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ui/api/presets/{name}": {
+      "get": {
+        "summary": "Workbench Get Preset",
+        "operationId": "workbench_get_preset_ui_api_presets__name__get",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Workbench Get Preset Ui Api Presets  Name  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Workbench Delete Preset",
+        "operationId": "workbench_delete_preset_ui_api_presets__name__delete",
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Name"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Workbench Delete Preset Ui Api Presets  Name  Delete"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ui/api/standardize/preview": {
+      "post": {
+        "summary": "Workbench Standardize Preview",
+        "operationId": "workbench_standardize_preview_ui_api_standardize_preview_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StandardizePreviewRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Workbench Standardize Preview Ui Api Standardize Preview Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ui/api/standardize/run": {
+      "post": {
+        "summary": "Workbench Standardize Run",
+        "operationId": "workbench_standardize_run_ui_api_standardize_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StandardizeRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Workbench Standardize Run Ui Api Standardize Run Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ui/api/jobs/{job_id}/download": {
+      "get": {
+        "summary": "Workbench Download Job",
+        "operationId": "workbench_download_job_ui_api_jobs__job_id__download_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ui/api/match/run": {
+      "post": {
+        "summary": "Workbench Match Run",
+        "operationId": "workbench_match_run_ui_api_match_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MatchRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Workbench Match Run Ui Api Match Run Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ui/api/match/{job_id}/pairs": {
+      "get": {
+        "summary": "Workbench Match Pairs",
+        "operationId": "workbench_match_pairs_ui_api_match__job_id__pairs_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "view",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "all_pairs",
+              "title": "View"
+            }
+          },
+          {
+            "name": "cardinality",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cardinality"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "",
+              "title": "Search"
+            }
+          },
+          {
+            "name": "discrepancy_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Discrepancy Only"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Workbench Match Pairs Ui Api Match  Job Id  Pairs Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ui/api/match/{job_id}/decision": {
+      "post": {
+        "summary": "Workbench Match Decision",
+        "operationId": "workbench_match_decision_ui_api_match__job_id__decision_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MatchDecisionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Workbench Match Decision Ui Api Match  Job Id  Decision Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ui/api/match/{job_id}/export": {
+      "get": {
+        "summary": "Workbench Match Export",
+        "operationId": "workbench_match_export_ui_api_match__job_id__export_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "artifact",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "comparison",
+              "title": "Artifact"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Format"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ui/api/dedup/run": {
+      "post": {
+        "summary": "Workbench Dedup Run",
+        "operationId": "workbench_dedup_run_ui_api_dedup_run_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DedupRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Workbench Dedup Run Ui Api Dedup Run Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ui/api/dedup/{job_id}/clusters": {
+      "get": {
+        "summary": "Workbench Dedup Clusters",
+        "operationId": "workbench_dedup_clusters_ui_api_dedup__job_id__clusters_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "multi_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Multi Only"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 500,
+              "minimum": 1,
+              "default": 100,
+              "title": "Limit"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Workbench Dedup Clusters Ui Api Dedup  Job Id  Clusters Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ui/api/dedup/{job_id}/override": {
+      "post": {
+        "summary": "Workbench Dedup Override",
+        "operationId": "workbench_dedup_override_ui_api_dedup__job_id__override_post",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DedupOverrideRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Workbench Dedup Override Ui Api Dedup  Job Id  Override Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ui/api/dedup/{job_id}/export": {
+      "get": {
+        "summary": "Workbench Dedup Export",
+        "operationId": "workbench_dedup_export_ui_api_dedup__job_id__export_get",
+        "parameters": [
+          {
+            "name": "job_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Job Id"
+            }
+          },
+          {
+            "name": "mode",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "tagged_all_rows",
+              "title": "Mode"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/ui/api/live/inspect": {
+      "post": {
+        "summary": "Workbench Live Inspect",
+        "operationId": "workbench_live_inspect_ui_api_live_inspect_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LiveInspectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Workbench Live Inspect Ui Api Live Inspect Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1343,6 +2254,42 @@
         "type": "object",
         "title": "AddressStandardizeRequest",
         "description": "Request payload for /v1/address."
+      },
+      "Body_workbench_upload_ui_api_upload_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "contentMediaType": "application/octet-stream",
+            "title": "File"
+          },
+          "delimiter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delimiter"
+          },
+          "sheet_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sheet Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_workbench_upload_ui_api_upload_post"
       },
       "CompanyCompareRequest": {
         "properties": {
@@ -1691,6 +2638,49 @@
         "title": "ContactStandardizeRequest",
         "description": "Request payload for /v1/contact (joint multi-pillar entity cross-healing)."
       },
+      "DedupOverrideRequest": {
+        "properties": {
+          "row_index": {
+            "type": "integer",
+            "title": "Row Index"
+          },
+          "excluded": {
+            "type": "boolean",
+            "title": "Excluded"
+          }
+        },
+        "type": "object",
+        "required": [
+          "row_index",
+          "excluded"
+        ],
+        "title": "DedupOverrideRequest",
+        "description": "Request payload for excluding or restoring a row from single-file deduplication clusters."
+      },
+      "DedupRunRequest": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "title": "Source Id"
+          },
+          "mapping_config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Mapping Config"
+          },
+          "options": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Options"
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_id"
+        ],
+        "title": "DedupRunRequest",
+        "description": "Request payload for running single-file deduplication."
+      },
       "EmailCompareRequest": {
         "properties": {
           "email_a": {
@@ -1740,6 +2730,45 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "InspectPathRequest": {
+        "properties": {
+          "path": {
+            "type": "string",
+            "title": "Path",
+            "description": "Absolute or workspace-relative file path on local disk."
+          },
+          "delimiter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delimiter",
+            "description": "Optional delimiter override for text files."
+          },
+          "sheet_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sheet Name",
+            "description": "Optional Excel worksheet name."
+          }
+        },
+        "type": "object",
+        "required": [
+          "path"
+        ],
+        "title": "InspectPathRequest",
+        "description": "Request payload for /ui/api/inspect-path."
+      },
       "JobTitleStandardizeRequest": {
         "properties": {
           "title": {
@@ -1754,6 +2783,120 @@
         ],
         "title": "JobTitleStandardizeRequest",
         "description": "Request payload for /v1/job-title."
+      },
+      "LiveInspectRequest": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "title": "Mode",
+            "description": "'single' or 'compare'.",
+            "default": "single"
+          },
+          "entity_a": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Entity A"
+          },
+          "entity_b": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Entity B"
+          },
+          "default_country": {
+            "type": "string",
+            "title": "Default Country",
+            "default": "US"
+          }
+        },
+        "type": "object",
+        "title": "LiveInspectRequest",
+        "description": "Request payload for Live Inspector single-entity or pairwise comparison sandbox."
+      },
+      "MatchDecisionRequest": {
+        "properties": {
+          "pair_id": {
+            "type": "string",
+            "title": "Pair Id"
+          },
+          "decision": {
+            "type": "string",
+            "title": "Decision",
+            "description": "One of 'approve', 'reject', or 'reset'."
+          },
+          "note": {
+            "type": "string",
+            "title": "Note",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "pair_id",
+          "decision"
+        ],
+        "title": "MatchDecisionRequest",
+        "description": "Request payload for steward match pair approve/reject/reset override."
+      },
+      "MatchRunRequest": {
+        "properties": {
+          "left_source_id": {
+            "type": "string",
+            "title": "Left Source Id"
+          },
+          "right_source_id": {
+            "type": "string",
+            "title": "Right Source Id"
+          },
+          "left_mapping": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Left Mapping"
+          },
+          "right_mapping": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Right Mapping"
+          },
+          "options": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Options"
+          },
+          "left_roster": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RosterAttachPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "right_roster": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RosterAttachPayload"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "left_source_id",
+          "right_source_id"
+        ],
+        "title": "MatchRunRequest",
+        "description": "Request payload for running a two-file cross-system match."
       },
       "PersonCompareRequest": {
         "properties": {
@@ -1950,6 +3093,112 @@
         "title": "PhoneStandardizeRequest",
         "description": "Request payload for /v1/standardize."
       },
+      "PresetSaveRequest": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name",
+            "description": "Preset name."
+          },
+          "description": {
+            "type": "string",
+            "title": "Description",
+            "description": "Optional preset description.",
+            "default": ""
+          },
+          "mapping_config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Mapping Config"
+          },
+          "standardize_options": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Standardize Options"
+          },
+          "matching_options": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Matching Options"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "PresetSaveRequest",
+        "description": "Request payload for saving a field mapping and options preset."
+      },
+      "ReinspectRequest": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "title": "Source Id",
+            "description": "Registered uploaded or local source identifier."
+          },
+          "delimiter": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delimiter",
+            "description": "Updated delimiter override."
+          },
+          "sheet_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sheet Name",
+            "description": "Updated Excel worksheet name."
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_id"
+        ],
+        "title": "ReinspectRequest",
+        "description": "Request payload for /ui/api/reinspect."
+      },
+      "RosterAttachPayload": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "title": "Source Id",
+            "description": "Uploaded or local source_id of child member table."
+          },
+          "parent_id_col": {
+            "type": "string",
+            "title": "Parent Id Col",
+            "description": "Column holding parent entity ID."
+          },
+          "member_cols": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "minItems": 1,
+            "title": "Member Cols",
+            "description": "Column(s) holding member CRDs/names/emails."
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_id",
+          "parent_id_col",
+          "member_cols"
+        ],
+        "title": "RosterAttachPayload",
+        "description": "Configuration for attaching a child member roster file to Left or Right records."
+      },
       "SocialStandardizeRequest": {
         "properties": {
           "profile": {
@@ -1976,6 +3225,75 @@
         ],
         "title": "SocialStandardizeRequest",
         "description": "Request payload for /v1/social."
+      },
+      "StandardizePreviewRequest": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "title": "Source Id",
+            "description": "Source identifier."
+          },
+          "mapping_config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Mapping Config"
+          },
+          "options": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Options"
+          },
+          "limit": {
+            "type": "integer",
+            "maximum": 200.0,
+            "minimum": 1.0,
+            "title": "Limit",
+            "default": 50
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_id"
+        ],
+        "title": "StandardizePreviewRequest",
+        "description": "Request payload for dry-run file standardization preview."
+      },
+      "StandardizeRunRequest": {
+        "properties": {
+          "source_id": {
+            "type": "string",
+            "title": "Source Id",
+            "description": "Source identifier."
+          },
+          "mapping_config": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Mapping Config"
+          },
+          "options": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Options"
+          },
+          "output_path": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Path",
+            "description": "Optional local disk destination path."
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_id"
+        ],
+        "title": "StandardizeRunRequest",
+        "description": "Request payload for running full file standardization."
       },
       "UrlCompareRequest": {
         "properties": {
