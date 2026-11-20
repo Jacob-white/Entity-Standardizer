@@ -509,6 +509,7 @@
 
   function renderStdPreview(data) {
     $("std-results-card").hidden = false;
+    clear($("std-download-slot"));
     renderKpis($("std-kpi-strip"), [
       ["Previewed Rows", data.preview_count],
       ["Cells Modified", data.cells_changed],
@@ -648,10 +649,16 @@
         clear(wrap);
         if (!data.items.length) {
           wrap.appendChild(el("p", "No records match the active filter.", "muted"));
+          $("match-detail-drawer").hidden = true;
+          state.selectedPair = null;
           renderPager("match-pager", 0, 0, 0, limit, function () {});
           return;
         }
         var isUnmatched = params.get("view").indexOf("unmatched_") === 0;
+        if (isUnmatched) {
+          $("match-detail-drawer").hidden = true;
+          state.selectedPair = null;
+        }
         var table = el("table");
         var thead = el("thead");
         var hr = el("tr");
@@ -939,6 +946,7 @@
       }).then(function (data) {
         state.matchJobId = data.job_id;
         state.matchOffset = 0;
+        state.selectedPair = null;
         $("match-results-card").hidden = false;
         $("match-detail-drawer").hidden = true;
         renderMatchScorecard(data.scorecard);
@@ -1088,9 +1096,13 @@
   function populateRosterCols(selId, cols) {
     var sel = $(selId);
     clear(sel);
-    cols.forEach(function (c) {
+    var noneOpt = el("option", "-- Disable Roster --");
+    noneOpt.value = "";
+    sel.appendChild(noneOpt);
+    cols.forEach(function (c, idx) {
       var o = el("option", c);
       o.value = c;
+      if (idx === 0) { o.selected = true; }
       sel.appendChild(o);
     });
   }

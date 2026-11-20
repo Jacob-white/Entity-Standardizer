@@ -489,6 +489,36 @@ def test_delimited_json_jsonl_xlsx_and_parquet_round_trips(tmp_path: Path, monke
     assert [wb_mg_out.active.cell(1, c).value for c in (1, 2, 3)] == ["Banner", "col_2", "col_3"]
     wb_mg_out.close()
 
+    # Pass-8: Skip blank/whitespace delimited lines and styled/whitespace empty trailing Excel rows
+    blank_csv = tmp_path / "with_blanks.csv"
+    blank_csv.write_text("id,val\n\n   ,  \n1,0\n\n2,ok\n", encoding="utf-8")
+    b_info = inspect_tabular_source(blank_csv)
+    assert b_info["total_rows"] == 2 and b_info["sample_rows"] == [{"id": "1", "val": "0"}, {"id": "2", "val": "ok"}]
+
+    from openpyxl.styles import Font
+
+    styled_xlsx = tmp_path / "styled_trailing.xlsx"
+    wb_st = openpyxl.Workbook()
+    ws_st = wb_st.active
+    ws_st.append(["id", "val"])
+    ws_st.append([0, "keep"])
+    ws_st.append(["   ", None])
+    ws_st.cell(4, 1).font = Font(bold=True)
+    wb_st.save(styled_xlsx)
+    wb_st.close()
+    st_info = inspect_tabular_source(styled_xlsx)
+    assert st_info["total_rows"] == 1 and st_info["sample_rows"] == [{"id": 0, "val": "keep"}]
+
+    # Pass-9: Sanitize illegal Excel worksheet title characters & empty titles
+    bad_title_xlsx = tmp_path / "safe_titles.xlsx"
+    write_xlsx_sheets(
+        bad_title_xlsx,
+        {"A/B:C*D?[E]": (["x"], [{"x": 1}]), "   ": (["y"], [{"y": 2}])},
+    )
+    wb_titles = openpyxl.load_workbook(bad_title_xlsx)
+    assert wb_titles.sheetnames == ["A_B_C_D__E_", "Sheet1"]
+    wb_titles.close()
+
 
 def test_mapping_auto_detect_300_cols_and_preset_store(tmp_path: Path) -> None:
     sf_cols = [

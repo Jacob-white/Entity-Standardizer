@@ -262,7 +262,25 @@ def _assign_atomic_group(
             return
 
 
-def _extract_primary_role_values(row: Mapping[str, Any], mapping_config: MappingConfig) -> dict[str, str]:
+def _is_valid_duplicate_candidate(role: str, raw: str, default_country: str) -> bool:
+    if role in (FieldRole.PHONE.value, FieldRole.FAX.value):
+        return standardize_phone(raw, default_country=default_country).is_valid
+    if role == FieldRole.EMAIL.value:
+        return standardize_email(raw).is_valid
+    if role == FieldRole.WEBSITE.value:
+        return standardize_url(raw).is_valid
+    if role == FieldRole.CRD.value:
+        return standardize_crd(raw).is_valid
+    if role == FieldRole.EXTERNAL_ID.value:
+        return standardize_external_id(raw).is_valid
+    return True
+
+
+def _extract_primary_role_values(
+    row: Mapping[str, Any],
+    mapping_config: MappingConfig,
+    default_country: str = "US",
+) -> dict[str, str]:
     by_group: dict[str, list[tuple[str, str]]] = {}
     for m in mapping_config.mappings:
         raw = cell_to_input_text(row.get(m.column))
@@ -276,10 +294,21 @@ def _extract_primary_role_values(row: Mapping[str, Any], mapping_config: Mapping
     _assign_atomic_group(values, ordered_gids, by_group, _ADDRESS_ROLES)
     _assign_atomic_group(values, ordered_gids, by_group, _PERSON_GROUP_ROLES)
     atomic_roles = _ADDRESS_ROLES | _PERSON_GROUP_ROLES
+    cands_by_role: dict[str, list[str]] = {}
     for gid in ordered_gids:
         for role, raw in by_group[gid]:
-            if role not in atomic_roles and role not in values:
-                values[role] = raw
+            if role not in atomic_roles:
+                cands_by_role.setdefault(role, []).append(raw)
+    for role, cands in cands_by_role.items():
+        if role == FieldRole.MEMBER_ROSTER.value:
+            values[role] = "; ".join(cands)
+        elif len(cands) == 1:
+            values[role] = cands[0]
+        else:
+            values[role] = next(
+                (c for c in cands if _is_valid_duplicate_candidate(role, c, default_country)),
+                cands[0],
+            )
     return values
 
 
@@ -397,6 +426,16 @@ def _build_direct_contact(vals: Mapping[str, str], default_country: str) -> Stan
         if vals.get(FieldRole.SOCIAL.value)
         else None
     )
+    pillar_confs = [
+        float(p.confidence)
+        for p in (fax, org, per, title, email, url, social)
+        if p is not None and p.is_valid
+    ]
+    if addr.address_status != "parse_failed" and addr.confidence_score:
+        pillar_confs.append(float(addr.confidence_score))
+    if phone.is_valid:
+        pillar_confs.append(float(phone.confidence))
+    overall_conf = round(sum(pillar_confs) / len(pillar_confs), 4) if pillar_confs else 0.0
     return StandardizedContact(
         address=addr,
         phone=phone,
@@ -407,7 +446,7 @@ def _build_direct_contact(vals: Mapping[str, str], default_country: str) -> Stan
         email=email,
         website=url,
         social=social,
-        overall_confidence=round(float(addr.confidence_score or phone.confidence or 0.0), 4),
+        overall_confidence=overall_conf,
     )
 
 
@@ -423,7 +462,7 @@ def prepare_records_for_matching(
     excluded_synthetic = 0
 
     for idx, row in enumerate(rows):
-        vals = _extract_primary_role_values(row, mapping_config)
+        vals = _extract_primary_role_values(row, mapping_config, options.default_country)
         raw_rec_id = vals.get(FieldRole.RECORD_ID.value, "")
         record_id = raw_rec_id or f"ROW-{idx + 1}"
 
@@ -889,6 +928,7 @@ class MatchSession:
     def recompute(self) -> dict[str, Any]:
         """Recompute active/potential/rejected statuses, cardinality, unmatched sets, and scorecard."""
         with self._lock:
+            m_thr, _ = self.options.effective_thresholds()
             active_pairs: list[MatchPairView] = []
             potential_pairs: list[MatchPairView] = []
             rejected_pairs: list[MatchPairView] = []
@@ -902,7 +942,7 @@ class MatchSession:
                     p.cardinality = "NONE"
                     p.is_primary_match = False
                     rejected_pairs.append(p)
-                elif p.engine_disposition in ("EXACT_MATCH", "STRONG_MATCH", "PROBABLE_MATCH"):
+                elif p.score >= m_thr:
                     p.effective_status = "MATCHED"
                     active_pairs.append(p)
                 else:
@@ -926,9 +966,9 @@ class MatchSession:
                 if ld == 1 and rd == 1:
                     p.cardinality = "1:1"
                 elif ld > 1 and rd == 1:
-                    p.cardinality = "N:1"
-                elif ld == 1 and rd > 1:
                     p.cardinality = "1:N"
+                elif ld == 1 and rd > 1:
+                    p.cardinality = "N:1"
                 else:
                     p.cardinality = "M:N"
                 card_counts[p.cardinality] += 1

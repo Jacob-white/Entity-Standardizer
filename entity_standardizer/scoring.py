@@ -157,9 +157,9 @@ def synthesize_scored_match(
     is_match = final_score >= match_threshold
     is_potential = (not is_match) and (final_score >= potential_threshold)
 
-    if final_score >= 0.95:
+    if is_match and final_score >= 0.95:
         disp = MatchDisposition.EXACT_MATCH.value
-    elif final_score >= 0.85:
+    elif is_match and final_score >= 0.85:
         disp = MatchDisposition.STRONG_MATCH.value
     elif is_match:
         disp = MatchDisposition.PROBABLE_MATCH.value

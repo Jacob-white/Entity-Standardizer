@@ -413,6 +413,37 @@ def test_workbench_ui_api_workflows_and_security(tmp_path: Path, monkeypatch) ->
     )
     assert r_live_num.status_code == 200 and r_live_num.json()["is_match"] is True
 
+    # 14. Pass-8 API & asset hardening: [hidden] CSS rule, deleted artifact -> 404, read-only presets -> 400
+    assert "[hidden] { display: none !important; }" in client.get("/ui/assets/styles.css").text
+
+    r_run_del = client.post(
+        "/ui/api/standardize/run",
+        json={"source_id": up_sid, "mapping_config": r_up.json()["suggested_mapping"], "options": {}},
+    )
+    assert r_run_del.status_code == 200
+    del_jid = r_run_del.json()["job_id"]
+    ws_art_path = (
+        Path(os.environ["ENTITY_STANDARDIZER_WORKBENCH_DIR"]) / "jobs"
+    )
+    for f in ws_art_path.glob(f"{del_jid}*"):
+        f.unlink()
+    assert client.get(f"/ui/api/jobs/{del_jid}/download").status_code == 404
+
+    not_a_dir = tmp_path / "preset_blocker_file"
+    not_a_dir.write_text("x", encoding="utf-8")
+    monkeypatch.setenv("ENTITY_STANDARDIZER_PRESETS_DIR", str(not_a_dir))
+    assert client.post("/ui/api/presets", json={"name": "RO_Test", "mapping_config": {}}).status_code == 400
+    assert client.get("/ui/api/presets/RO_Test").status_code == 404
+
+    def _raise_os(_name: str) -> bool:
+        raise OSError("Read-only file system")
+
+    with monkeypatch.context() as mp:
+        mp.setattr("entity_standardizer.workbench.mapping.PresetStore.get_preset", lambda _s, _n: (_ for _ in ()).throw(OSError("Read-only")))
+        mp.setattr("entity_standardizer.workbench.mapping.PresetStore.delete_preset", lambda _s, _n: _raise_os(_n))
+        assert client.get("/ui/api/presets/AnyName").status_code == 400
+        assert client.delete("/ui/api/presets/AnyName").status_code == 400
+
 
 def test_cli_ui_command(monkeypatch) -> None:
     import uvicorn

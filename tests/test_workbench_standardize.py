@@ -765,3 +765,23 @@ def test_cross_healing_rescue_infer_and_couple_split_modes(tmp_path: Path) -> No
     )
     assert r_comp_em[0]["email"] == "info@acme.com" and r_comp_em[0]["fn"] == ""
     assert a_comp_em.cell_changes["fn"] == "rescued"
+
+    # Pass-8 regressions: Fax-only & standalone Country populate audit _valid, _confidence, and _key
+    r_fax_aud, _ = standardize_row_with_config(
+        {"fax": "212-555-9999"},
+        MappingConfig([ColumnMapping("fax", FieldRole.FAX.value)]),
+        StandardizationOptions(include_audit_cols=True),
+    )
+    assert r_fax_aud[0]["primary_valid"] == "True"
+    assert float(r_fax_aud[0]["primary_confidence"]) > 0.0
+    assert r_fax_aud[0]["primary_key"] == "+12125559999"
+
+    r_cnt_aud, _ = standardize_row_with_config(
+        {"cntry": "United Kingdom"},
+        MappingConfig([ColumnMapping("cntry", FieldRole.COUNTRY.value)]),
+        StandardizationOptions(include_audit_cols=True, country_format="iso2"),
+    )
+    assert r_cnt_aud[0]["cntry"] == "GB"
+    assert r_cnt_aud[0]["primary_valid"] == "True"
+    assert r_cnt_aud[0]["primary_confidence"] == "1.0000"
+    assert r_cnt_aud[0]["primary_key"] == "GBR"

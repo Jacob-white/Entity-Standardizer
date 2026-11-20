@@ -80,6 +80,11 @@ _SUFFIX_TO_DELIM_FORMAT: dict[str, tuple[str, str]] = {
 
 
 _XLSX_ILLEGAL_CTRL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+_XLSX_SHEET_INVALID_RE = re.compile(r"[:\\/?*\[\]]")
+
+
+def _safe_xlsx_sheet_title(title: str | None) -> str:
+    return _XLSX_SHEET_INVALID_RE.sub("_", (title or "").strip())[:31] or "Sheet1"
 
 
 def _normalize_delimiter(raw_delim: str) -> str:
@@ -374,6 +379,8 @@ def _iter_delimited_rows(path: Path, spec: FileFormatSpec) -> tuple[list[str], I
 
     def _gen() -> Iterator[dict[str, Any]]:
         for row in reader:
+            if not any(cell.strip() for cell in row):
+                continue
             yield {col: (row[idx] if idx < len(row) else "") for idx, col in enumerate(columns)}
 
     return columns, _ClosableRowIter(_gen(), fin.close)
@@ -434,6 +441,11 @@ def _iter_xlsx_rows(path: Path, spec: FileFormatSpec) -> tuple[list[str], Iterat
 
     def _gen() -> Iterator[dict[str, Any]]:
         for values in row_iter:
+            if not any(
+                v is not None and (not isinstance(v, str) or v.strip() != "")
+                for v in values[: len(columns)]
+            ):
+                continue
             yield {
                 col: ("" if (idx >= len(values) or values[idx] is None) else values[idx])
                 for idx, col in enumerate(columns)
@@ -576,7 +588,7 @@ def _write_xlsx_output(
 
     wb = _ensure_openpyxl().Workbook(write_only=True)
     try:
-        ws = wb.create_sheet(title=(spec.sheet_name or "Sheet1")[:31])
+        ws = wb.create_sheet(title=_safe_xlsx_sheet_title(spec.sheet_name))
         ws.append(col_list)
         for vals in row_vals:
             ws.append(vals)
@@ -700,7 +712,7 @@ def write_xlsx_sheets(
     try:
         materialized = [
             (
-                title[:31],
+                _safe_xlsx_sheet_title(title),
                 col_list,
                 [[_cell_for_xlsx(row, c) for c in col_list] for row in row_iter],
             )
