@@ -324,10 +324,10 @@ def test_cross_system_matching_steward_overrides_and_all_exports(tmp_path: Path,
     assert wb.sheetnames == ["Scorecard", "Comparison", "Unmatched_Left", "Unmatched_Right"]
     wb.close()
 
-    # Also exercise auto_standardize=False, custom signal filter, and Tier 3 > _MAX_TIER3_BUCKET_SIZE guard
+    # Also exercise auto_standardize=False, custom signal filter, and bucket > _MAX_BUCKET_SIZE guard
     import entity_standardizer.workbench.match_runner as match_runner_mod
 
-    monkeypatch.setattr(match_runner_mod, "_MAX_TIER3_BUCKET_SIZE", 1)
+    monkeypatch.setattr(match_runner_mod, "_MAX_BUCKET_SIZE", 1)
     res_nostd = run_cross_system_match(
         left_csv,
         right_json,

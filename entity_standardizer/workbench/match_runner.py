@@ -21,7 +21,7 @@ from entity_standardizer.company import (
     resolve_brand_lineage,
     standardize_company,
 )
-from entity_standardizer.dedup import DisjointSet, compare_addresses, compare_phones
+from entity_standardizer.dedup import DisjointSet, compare_addresses, compare_phones, iter_bucket_pairs
 from entity_standardizer.group import (
     StandardizedAdvisorGroup,
     compare_advisor_groups,
@@ -95,7 +95,9 @@ ALL_MATCH_SIGNALS: tuple[str, ...] = (
 _ALL_SIGNALS_SET: frozenset[str] = frozenset(ALL_MATCH_SIGNALS)
 _VALID_PROFILES: frozenset[str] = frozenset({p.value for p in EntityScoringProfile} | {"CUSTOM"})
 _VALID_SYNTHETIC_POLICIES: frozenset[str] = frozenset({"flag", "exclude", "ignore"})
-_MAX_TIER3_BUCKET_SIZE = 500
+# Blocking keys are shared by few records, except when one key covers a whole franchise or a common name. Pair
+# scoring is quadratic in bucket size, so buckets above this (any tier) are skipped and counted instead.
+_MAX_BUCKET_SIZE = 250
 
 
 def _normalize_roster_tokens(raw_val: Any) -> set[str]:
@@ -902,6 +904,7 @@ class MatchSession:
         excluded_synthetic_left: int,
         excluded_synthetic_right: int,
         elapsed_ms: float,
+        skipped_buckets: int = 0,
         left_source_path: str | Path | None = None,
         right_source_path: str | Path | None = None,
     ) -> None:
@@ -917,6 +920,7 @@ class MatchSession:
         self.excluded_synthetic_left = excluded_synthetic_left
         self.excluded_synthetic_right = excluded_synthetic_right
         self.elapsed_ms = elapsed_ms
+        self.skipped_buckets = skipped_buckets
         self.left_source_path = Path(left_source_path) if left_source_path is not None else None
         self.right_source_path = Path(right_source_path) if right_source_path is not None else None
         self.scorecard: dict[str, Any] = {}
@@ -1032,6 +1036,7 @@ class MatchSession:
                 "excluded_synthetic_left": self.excluded_synthetic_left,
                 "excluded_synthetic_right": self.excluded_synthetic_right,
                 "elapsed_ms": self.elapsed_ms,
+                "skipped_oversized_buckets": self.skipped_buckets,
             }
             return self.scorecard
 
@@ -1073,12 +1078,13 @@ class MatchSession:
                     if view == "unmatched_left"
                     else (self.right_records, self.matched_right_set)
                 )
-                items = [
-                    {**disp, "raw_row": sanitize_row_for_json(r.raw_row)}
-                    for idx, r in enumerate(recs)
-                    if idx not in matched_set
-                    for disp in (r.flat_display(),)
-                    if not q or _display_matches_query(disp, q)
+                unmatched = [r for idx, r in enumerate(recs) if idx not in matched_set]
+                if q:
+                    unmatched = [r for r in unmatched if _display_matches_query(r.flat_display(), q)]
+                total = len(unmatched)
+                page = [
+                    {**r.flat_display(), "raw_row": sanitize_row_for_json(r.raw_row)}
+                    for r in unmatched[offset : offset + limit]
                 ]
             else:
                 status_map = {
@@ -1104,10 +1110,9 @@ class MatchSession:
                         ):
                             continue
                     filtered.append(p)
-                items = [p.to_dict() for p in filtered]
+                total = len(filtered)
+                page = [p.to_dict() for p in filtered[offset : offset + limit]]
 
-            total = len(items)
-            page = items[offset : offset + limit]
             return {"total": total, "offset": offset, "limit": limit, "items": page, "scorecard": self.scorecard}
 
     def _comparison_columns_and_rows(self) -> tuple[list[str], list[dict[str, Any]]]:
@@ -1432,6 +1437,7 @@ def run_cross_system_match(
                 tier_index[(tier_num, key)].append(r_idx)
 
     seen_pairs: set[tuple[int, int]] = set()
+    skipped_buckets: set[tuple[int, str]] = set()
     scored_pairs: list[tuple[float, int, int, int, Any]] = []
     _, pot_thr = options.effective_thresholds()
 
@@ -1440,7 +1446,8 @@ def run_cross_system_match(
         for tier_num in (1, 2, 3):
             for key in l_keys[tier_num]:
                 bucket = tier_index.get((tier_num, key), ())
-                if tier_num == 3 and len(bucket) > _MAX_TIER3_BUCKET_SIZE:
+                if len(bucket) > _MAX_BUCKET_SIZE:
+                    skipped_buckets.add((tier_num, key))
                     continue
                 for r_idx in bucket:
                     pair = (l_idx, r_idx)
@@ -1507,6 +1514,7 @@ def run_cross_system_match(
         excluded_synthetic_left=excl_l,
         excluded_synthetic_right=excl_r,
         elapsed_ms=elapsed_ms,
+        skipped_buckets=len(skipped_buckets),
         left_source_path=left_path,
         right_source_path=right_path,
     )
@@ -1536,6 +1544,7 @@ class DedupSession:
         linked_pairs: list[tuple[int, int, str]],
         excluded_synthetic: int,
         elapsed_ms: float,
+        skipped_buckets: int = 0,
         source_path: str | Path | None = None,
     ) -> None:
         self.records = records
@@ -1547,6 +1556,7 @@ class DedupSession:
         self.excluded_rows: set[int] = set()
         self.excluded_synthetic = excluded_synthetic
         self.elapsed_ms = elapsed_ms
+        self.skipped_buckets = skipped_buckets
         self.source_path = Path(source_path) if source_path is not None else None
         self.clusters: list[dict[str, Any]] = []
         self.row_cluster_map: dict[int, dict[str, Any]] = {}
@@ -1615,6 +1625,7 @@ class DedupSession:
                 "multi_record_clusters": sum(1 for c in new_clusters if c["cluster_size"] > 1),
                 "excluded_synthetic": self.excluded_synthetic,
                 "elapsed_ms": self.elapsed_ms,
+                "skipped_oversized_buckets": self.skipped_buckets,
             }
             return self.summary
 
@@ -1715,21 +1726,14 @@ def run_single_file_dedup(
             for k in klist:
                 buckets[(tier_num, k)].append(pos)
 
-    seen_pairs: set[tuple[int, int]] = set()
+    usable = [idxs for idxs in buckets.values() if 2 <= len(idxs) <= _MAX_BUCKET_SIZE]
+    skipped_buckets = sum(1 for idxs in buckets.values() if len(idxs) > _MAX_BUCKET_SIZE)
     linked_pairs: list[tuple[int, int, str]] = []
-    for (tier_num, _), idxs in buckets.items():
-        if len(idxs) < 2 or (tier_num == 3 and len(idxs) > _MAX_TIER3_BUCKET_SIZE):
-            continue
-        for p1 in range(len(idxs)):
-            for p2 in range(p1 + 1, len(idxs)):
-                a, b = min(idxs[p1], idxs[p2]), max(idxs[p1], idxs[p2])
-                if (a, b) in seen_pairs:
-                    continue
-                seen_pairs.add((a, b))
-                scored = _score_entity_pair(recs[a], recs[b], options, switchboard_phones)
-                if scored.is_match:
-                    reason = "+".join(scored.matched_signals) or "MULTI_SIGNAL"
-                    linked_pairs.append((a, b, reason))
+    for a, b in iter_bucket_pairs(usable):
+        scored = _score_entity_pair(recs[a], recs[b], options, switchboard_phones)
+        if scored.is_match:
+            reason = "+".join(scored.matched_signals) or "MULTI_SIGNAL"
+            linked_pairs.append((a, b, reason))
 
     elapsed_ms = round((time.perf_counter() - t0) * 1000.0, 2)
     return DedupSession(
@@ -1741,5 +1745,6 @@ def run_single_file_dedup(
         linked_pairs=linked_pairs,
         excluded_synthetic=excl_syn,
         elapsed_ms=elapsed_ms,
+        skipped_buckets=skipped_buckets,
         source_path=source_path,
     )

@@ -21,8 +21,9 @@ FROM python:3.12-slim
 WORKDIR /app
 COPY --from=builder /dist/native/*.whl /tmp/native/
 COPY --from=builder /dist/py/*.whl /tmp/py/
+COPY requirements-lock.txt /tmp/requirements-lock.txt
 
-RUN pip install --no-cache-dir "$(ls /tmp/py/entity_standardizer-*.whl | head -n 1)[server,mcp]" && \
+RUN pip install --no-cache-dir -c /tmp/requirements-lock.txt "$(ls /tmp/py/entity_standardizer-*.whl | head -n 1)[server,mcp]" && \
     python -m zipfile -e "$(ls /tmp/native/*.whl | head -n 1)" /tmp/native_x && \
     cp -r /tmp/native_x/_entity_standardizer_rs "$(python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')/" && \
     rm -rf /tmp/native /tmp/native_x /tmp/py && \
@@ -32,4 +33,5 @@ RUN pip install --no-cache-dir "$(ls /tmp/py/entity_standardizer-*.whl | head -n
 USER appuser
 EXPOSE 8000
 
+# Single worker on purpose: the /ui workbench keeps uploads and sessions in process memory.
 CMD ["uvicorn", "entity_standardizer.server:app", "--host", "0.0.0.0", "--port", "8000"]

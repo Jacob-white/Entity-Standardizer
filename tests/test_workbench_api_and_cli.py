@@ -26,7 +26,7 @@ def test_workbench_ui_api_workflows_and_security(tmp_path: Path, monkeypatch) ->
     monkeypatch.delenv("ENTITY_STANDARDIZER_API_KEYS", raising=False)
 
     app = create_app()
-    client = TestClient(app)
+    client = TestClient(app, base_url="http://localhost")  # local paths on => name-based hosts are refused
 
     # 1. Static UI HTML, CSS, JS, and 404 on unknown asset
     r_idx = client.get("/ui")
@@ -294,7 +294,8 @@ def test_workbench_ui_api_workflows_and_security(tmp_path: Path, monkeypatch) ->
 
     # 11. Workspace bounded eviction (upload deleted on eviction, local disk file untouched, unlink_path=False for sessions)
     ws = WorkbenchWorkspace(root_dir=tmp_path / "bounded", max_items=1)
-    u1 = tmp_path / "u1.csv"
+    ws.uploads_dir.mkdir(parents=True)
+    u1 = ws.uploads_dir / "u1.csv"
     u1.write_text("a\n1\n", encoding="utf-8")
     keep_local = tmp_path / "keep.csv"
     keep_local.write_text("a\n2\n", encoding="utf-8")

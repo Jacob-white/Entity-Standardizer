@@ -6,6 +6,7 @@ import json
 import sys
 from typing import Any
 
+from entity_standardizer import __version__
 from entity_standardizer.address.autocomplete import autocomplete_address
 from entity_standardizer.address.standardizer import standardize_address
 from entity_standardizer.company import (
@@ -384,7 +385,7 @@ def handle_mcp_request(request: dict[str, Any]) -> dict[str, Any]:
             "id": req_id,
             "result": {
                 "protocolVersion": "2024-11-05",
-                "serverInfo": {"name": "entity-standardizer-mcp", "version": "2.1.0"},
+                "serverInfo": {"name": "entity-standardizer-mcp", "version": __version__},
                 "capabilities": {"tools": {}},
             },
         }

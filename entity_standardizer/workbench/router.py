@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections import OrderedDict
+import ipaddress
 import os
 from pathlib import Path
 import re
@@ -11,10 +12,11 @@ import threading
 from typing import Any
 import uuid
 
-from fastapi import APIRouter, File, Form, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, Response
 from pydantic import BaseModel, Field
 
+from entity_standardizer import __version__
 from entity_standardizer._native_dispatch import is_native_available
 from entity_standardizer.identifiers import standardize_crd, standardize_external_id
 from entity_standardizer.joint import standardize_contact
@@ -80,6 +82,27 @@ def is_local_paths_enabled() -> bool:
         "yes",
         "on",
     )
+
+
+def max_upload_bytes() -> int:
+    """Return the per-file upload limit in bytes (ENTITY_STANDARDIZER_MAX_UPLOAD_MB, default 512)."""
+    return int(float(os.environ.get("ENTITY_STANDARDIZER_MAX_UPLOAD_MB", "512")) * 1024 * 1024)
+
+
+def _require_safe_host(request: Request) -> None:
+    """Reject name-based Host headers (DNS rebinding) while local disk paths are enabled.
+
+    A rebinding page reaches this server under its own hostname; IP literals and ``localhost`` cannot be rebound.
+    """
+    if not is_local_paths_enabled():
+        return
+    host = request.url.hostname or ""
+    if host == "localhost":
+        return
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Host header not allowed while local disk paths are enabled.") from None
 
 
 class InspectPathRequest(BaseModel):
@@ -214,22 +237,36 @@ class WorkbenchWorkspace:
         self.uploads_dir = base / "uploads"
         self.jobs_dir = base / "jobs"
         self.max_items = max_items
+        # Sessions hold every pair and display row of a run, so keep far fewer of them than file handles.
+        # State is per process: run the workbench with a single uvicorn worker.
+        self.max_sessions = min(max_items, 8)
         self.sources: OrderedDict[str, _RegisteredSource] = OrderedDict()
         self.artifacts: OrderedDict[str, tuple[Path, FileFormatSpec, str]] = OrderedDict()
         self.match_sessions: OrderedDict[str, MatchSession] = OrderedDict()
         self.dedup_sessions: OrderedDict[str, DedupSession] = OrderedDict()
         self._lock = threading.RLock()
 
-    def _put_bounded(self, store: OrderedDict[str, Any], key: str, value: Any, unlink_path: bool = False) -> None:
+    def _put_bounded(
+        self,
+        store: OrderedDict[str, Any],
+        key: str,
+        value: Any,
+        unlink_path: bool = False,
+        limit: int | None = None,
+    ) -> None:
+        """Insert into a bounded store; with unlink_path, evicted entries' files are deleted if the workbench owns them.
+
+        Files outside ``root_dir`` (a user's own source or ``output_path`` target) are never deleted.
+        """
         with self._lock:
             store[key] = value
             store.move_to_end(key)
-            while len(store) > self.max_items:
+            while len(store) > (limit or self.max_items):
                 _, evicted = store.popitem(last=False)
                 if unlink_path:
-                    cand_path = evicted.path if isinstance(evicted, _RegisteredSource) else evicted[0]
-                    if (not isinstance(evicted, _RegisteredSource) or evicted.is_upload) and Path(cand_path).is_file():
-                        Path(cand_path).unlink()
+                    cand = Path(evicted.path if isinstance(evicted, _RegisteredSource) else evicted[0])
+                    if cand.is_file() and cand.resolve().is_relative_to(self.root_dir.resolve()):
+                        cand.unlink()
 
     def register_source(
         self,
@@ -331,7 +368,7 @@ def _run_checked(fn: Any, *args: Any, **kwargs: Any) -> Any:
 def create_workbench_router(workspace: WorkbenchWorkspace | None = None) -> APIRouter:
     """Create the FastAPI APIRouter serving the Entity Standardizer Web Workbench UI and /ui/api/*."""
     ws = workspace or WorkbenchWorkspace()
-    router = APIRouter()
+    router = APIRouter(dependencies=[Depends(_require_safe_host)])
 
     def _preset_store() -> PresetStore:
         return PresetStore()
@@ -352,7 +389,7 @@ def create_workbench_router(workspace: WorkbenchWorkspace | None = None) -> APIR
     @router.get("/ui/api/capabilities")
     def workbench_capabilities() -> dict[str, Any]:
         return {
-            "version": "2.1.0",
+            "version": __version__,
             "native_available": is_native_available(),
             "local_paths_enabled": is_local_paths_enabled(),
             "roles": [r.value for r in FieldRole],
@@ -374,7 +411,7 @@ def create_workbench_router(workspace: WorkbenchWorkspace | None = None) -> APIR
         raw_sfx = Path(raw_name).suffix
         suffix = raw_sfx if re.match(r"^\.[A-Za-z0-9]{1,12}$", raw_sfx) else ".csv"
         dest = ws.uploads_dir / f"{uuid.uuid4().hex[:12]}{suffix}"
-        max_bytes = int(float(os.environ.get("ENTITY_STANDARDIZER_MAX_UPLOAD_MB", "512")) * 1024 * 1024)
+        max_bytes = max_upload_bytes()
         written = 0
         with dest.open("wb") as fout:
             while chunk := await file.read(1024 * 1024):
@@ -493,7 +530,7 @@ def create_workbench_router(workspace: WorkbenchWorkspace | None = None) -> APIR
         )
         spec = FileFormatSpec.from_dict(summary["format_spec"])
         out_name = f"{Path(src.original_name).stem}_standardized{spec.extension_for_export()}"
-        ws._put_bounded(ws.artifacts, job_id, (dest, spec, out_name), unlink_path=not bool(req.output_path))
+        ws._put_bounded(ws.artifacts, job_id, (dest, spec, out_name), unlink_path=True)
         return {
             **summary,
             "job_id": job_id,
@@ -540,7 +577,7 @@ def create_workbench_router(workspace: WorkbenchWorkspace | None = None) -> APIR
             right_roster_source=_build_roster_src(req.right_roster),
         )
         job_id = uuid.uuid4().hex[:12]
-        ws._put_bounded(ws.match_sessions, job_id, session)
+        ws._put_bounded(ws.match_sessions, job_id, session, limit=ws.max_sessions)
         return {"job_id": job_id, "scorecard": session.scorecard}
 
     @router.get("/ui/api/match/{job_id}/pairs")
@@ -641,7 +678,7 @@ def create_workbench_router(workspace: WorkbenchWorkspace | None = None) -> APIR
             sheet_name=src.sheet_name,
         )
         job_id = uuid.uuid4().hex[:12]
-        ws._put_bounded(ws.dedup_sessions, job_id, session)
+        ws._put_bounded(ws.dedup_sessions, job_id, session, limit=ws.max_sessions)
         return {"job_id": job_id, "summary": session.summary, "clusters": session.clusters[:100]}
 
     @router.get("/ui/api/dedup/{job_id}/clusters")

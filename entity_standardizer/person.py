@@ -13,7 +13,7 @@ from entity_standardizer._native_dispatch import (
     damerau_levenshtein_distance_dispatch,
 )
 from entity_standardizer.company import _DOTTED_INITIALISM_RE
-from entity_standardizer.dedup import DisjointSet
+from entity_standardizer.dedup import DisjointSet, iter_bucket_pairs
 from entity_standardizer.normalization import fold_latin_diacritics, unescape_html_entities
 from entity_standardizer.registries import (
     CREDENTIALS as _CREDENTIALS,
@@ -1505,13 +1505,7 @@ def deduplicate_persons(
         for k in keys:
             buckets.setdefault(k, []).append(idx)
 
-    candidate_pairs: set[tuple[int, int]] = set()
-    for indices in buckets.values():
-        for i_pos in range(len(indices)):
-            for j_pos in range(i_pos + 1, len(indices)):
-                candidate_pairs.add((indices[i_pos], indices[j_pos]))
-
-    for i, j in sorted(candidate_pairs):
+    for i, j in sorted(iter_bucket_pairs(buckets.values())):
         cmp = compare_persons(parsed[i], parsed[j])
         if cmp.is_match and cmp.score >= threshold:
             dsu.union(i, j, cmp.match_type)
