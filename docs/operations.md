@@ -23,8 +23,8 @@ All operational features are **opt-in** through environment variables. With none
 
 | Variable | Meaning | Default |
 | :--- | :--- | :--- |
-| `ENTITY_STANDARDIZER_API_KEYS` | Comma-separated list of valid API keys required on `/v1/*` and `/ui/api/*` routes via `X-API-Key` or `Authorization: Bearer <key>`. | unset (auth disabled) |
-| `ENTITY_STANDARDIZER_ALLOW_LOCAL_PATHS` | Set to `1`, `true`, `yes`, or `on` to enable zero-copy local disk file path inspection and export in `/ui/api/*` (auto-enabled by `entity-standardizer ui` on loopback hosts). | unset (`0`, disabled) |
+| `ENTITY_STANDARDIZER_API_KEYS` | Comma-separated list of valid API keys required on `/v1/*` and `/ui/api/*` routes via `X-API-Key` or `Authorization: Bearer <key>`. | unset (auth disabled; the bundled `docker-compose.service.yml` refuses to start without it) |
+| `ENTITY_STANDARDIZER_ALLOW_LOCAL_PATHS` | Set to `1`, `true`, `yes`, or `on` to enable zero-copy local disk file path inspection and export in `/ui/api/*` (auto-enabled by `entity-standardizer ui` on loopback hosts). While enabled, `/ui` requests whose `Host` header is a name other than `localhost` (IP literals are allowed) get `403`, which blocks DNS-rebinding pages. | unset (`0`, disabled) |
 | `ENTITY_STANDARDIZER_WORKBENCH_DIR` | Directory used by the `/ui` workbench for temporary uploads and export jobs. | `<tempdir>/entity_standardizer_workbench` |
 | `ENTITY_STANDARDIZER_MAX_UPLOAD_MB` | Maximum allowed file upload size (MiB) on `/ui/api/upload` before returning `413 Payload Too Large`. | `512` |
 | `ENTITY_STANDARDIZER_PRESETS_DIR` | Directory where saved field-mapping and option presets JSON files are stored. | `~/.entity_standardizer/presets` |
@@ -94,6 +94,7 @@ services:
 
 ## 5. Reverse Proxy, Sizing & Scaling
 
-- **Process scaling**: Standardization is CPU-bound and zero-network. Run `uvicorn entity_standardizer.server:app --workers N` (typically 1 worker per vCPU core) or scale container replicas horizontally.
+- **Process scaling**: Standardization is CPU-bound and zero-network. Run `uvicorn entity_standardizer.server:app --workers N` (typically 1 worker per vCPU core) or scale container replicas horizontally. The `/ui` workbench is the exception: uploads, match/dedup sessions (the 8 most recent are kept) and exports live in one process's memory, so serve `/ui` from a single worker.
 - **Lazy initialization**: Both the multi-tier SQLite cache and the stewardship audit ledger initialize lazily on first use, and SQLite connections automatically re-initialize across `os.fork()` boundaries when running under multi-worker Gunicorn/Uvicorn pre-fork servers.
+- **Workbench limits**: de-duplication and matching skip any blocking-key group larger than 250 records because pair scoring is quadratic; the count is reported as `skipped_oversized_buckets` in the match scorecard and de-dup summary. `.xlsx` exports store source cells that start with `=` as text, but CSV exports copy cell text verbatim, so open untrusted CSVs in a spreadsheet app with formulas disabled.
 - **Gateway termination**: Terminate TLS, enforce global rate limits, and configure request size/timeout bounds at your edge reverse proxy (Nginx, Envoy, AWS ALB, or Cloudflare).

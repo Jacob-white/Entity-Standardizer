@@ -6,8 +6,10 @@ import os
 from typing import Any
 
 from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from entity_standardizer import __version__
 from entity_standardizer._native_dispatch import is_native_available
 from entity_standardizer.address.autocomplete import autocomplete_address
 from entity_standardizer.address.standardizer import standardize_address
@@ -45,6 +47,7 @@ from entity_standardizer.joint import (
 )
 from entity_standardizer.registry import CountryDialRegistry, get_dial_plan
 from entity_standardizer.standardizer import standardize_phone
+from entity_standardizer.workbench.router import create_workbench_router, max_upload_bytes
 
 
 class PhoneStandardizeRequest(BaseModel):
@@ -265,20 +268,28 @@ def create_app() -> FastAPI:
     """Create and configure the FastAPI application instance."""
     app = FastAPI(
         title="Entity Standardizer API",
-        version="2.1.0",
+        version=__version__,
         description="Universal multi-national entity, address, phone, company, person, and web standardization service.",
         dependencies=[Depends(_verify_api_key)],
     )
 
+    @app.middleware("http")
+    async def _reject_oversized_upload(request: Request, call_next: Any) -> Any:
+        # Starlette spools a multipart body to disk before the handler runs, so the handler's own limit is too late.
+        declared = request.headers.get("content-length", "")
+        if request.url.path == "/ui/api/upload" and declared.isdigit() and int(declared) > max_upload_bytes() + 1_048_576:
+            return JSONResponse({"detail": "Uploaded file exceeds maximum allowed size."}, status_code=413)
+        return await call_next(request)
+
     @app.get("/health")
     def health() -> dict[str, str]:
-        return {"status": "ok", "version": "2.1.0"}
+        return {"status": "ok", "version": __version__}
 
     @app.get("/ready")
     def ready() -> dict[str, Any]:
         return {
             "status": "ready",
-            "version": "2.1.0",
+            "version": __version__,
             "native_available": is_native_available(),
         }
 
@@ -507,8 +518,6 @@ def create_app() -> FastAPI:
             "count": len(results),
             "results": [r.to_dict() for r in results],
         }
-
-    from entity_standardizer.workbench.router import create_workbench_router
 
     app.include_router(create_workbench_router())
     return app

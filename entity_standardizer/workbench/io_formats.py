@@ -190,11 +190,17 @@ def _dedupe_columns(raw_headers: Sequence[Any]) -> list[str]:
     return cols
 
 
+_MAX_XLSX_UNPACKED_BYTES = 2 * 1024**3
+
+
 def _open_xlsx_workbook(path: Path, *, read_only: bool) -> Any:
     ox = _ensure_openpyxl()
     from openpyxl.utils.exceptions import InvalidFileException
 
     try:
+        with zipfile.ZipFile(path) as zf:
+            if sum(i.file_size for i in zf.infolist()) > _MAX_XLSX_UNPACKED_BYTES:
+                raise ValueError("Invalid Excel (.xlsx) file: contents expand to more than 2 GiB.")
         return ox.load_workbook(path, read_only=read_only, data_only=read_only)
     except (zipfile.BadZipFile, InvalidFileException, OSError, KeyError, EOFError) as exc:
         raise ValueError(f"Invalid Excel (.xlsx) file: {exc}") from exc
@@ -553,6 +559,17 @@ def _cell_for_xlsx(row: Mapping[str, Any], col: str) -> Any:
     return val
 
 
+def _text_not_formula(ws: Any, val: Any) -> Any:
+    """openpyxl stores any string starting with '=' as a live formula; keep source text as text."""
+    if isinstance(val, str) and val.startswith("="):
+        from openpyxl.cell import WriteOnlyCell
+
+        cell = WriteOnlyCell(ws, value=val)
+        cell.data_type = "s"
+        return cell
+    return val
+
+
 def _json_export_value(value: Any) -> Any:
     return None if (isinstance(value, float) and not math.isfinite(value)) else value
 
@@ -580,7 +597,7 @@ def _write_xlsx_output(
             ws.delete_rows(1, max(ws.max_row, 1))
             ws.append(col_list)
             for vals in row_vals:
-                ws.append(vals)
+                ws.append([_text_not_formula(ws, v) for v in vals])
             wb.save(tmp_path)
             return len(row_vals)
         finally:
@@ -591,7 +608,7 @@ def _write_xlsx_output(
         ws = wb.create_sheet(title=_safe_xlsx_sheet_title(spec.sheet_name))
         ws.append(col_list)
         for vals in row_vals:
-            ws.append(vals)
+            ws.append([_text_not_formula(ws, v) for v in vals])
         wb.save(tmp_path)
         return len(row_vals)
     finally:
@@ -725,7 +742,7 @@ def write_xlsx_sheets(
                 ws = wb.create_sheet(title=title)
                 ws.append(col_list)
                 for vals in row_vals:
-                    ws.append(vals)
+                    ws.append([_text_not_formula(ws, v) for v in vals])
             wb.save(tmp_out)
         finally:
             wb.close()

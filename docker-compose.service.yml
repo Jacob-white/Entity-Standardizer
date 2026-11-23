@@ -2,7 +2,11 @@ services:
   entity-standardizer:
     build: .
     ports:
-      - "8000:8000"
+      # Loopback only: the API has no login unless keys are set. Publish wider only behind a TLS proxy.
+      - "127.0.0.1:8000:8000"
+    environment:
+      # Required. Comma-separated; callers send X-API-Key or "Authorization: Bearer <key>".
+      ENTITY_STANDARDIZER_API_KEYS: ${ENTITY_STANDARDIZER_API_KEYS:?set ENTITY_STANDARDIZER_API_KEYS to one or more secret keys}
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]

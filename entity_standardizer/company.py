@@ -13,7 +13,7 @@ from entity_standardizer._native_dispatch import (
     normalize_batch_company_tokens_dispatch,
     normalize_company_tokens_dispatch,
 )
-from entity_standardizer.dedup import DisjointSet
+from entity_standardizer.dedup import DisjointSet, iter_bucket_pairs
 from entity_standardizer.normalization import fold_latin_diacritics, unescape_html_entities
 from entity_standardizer.registries import BRAND_LINEAGE_PREFIXES
 from entity_standardizer.registry import normalize_country_iso2
@@ -1090,13 +1090,7 @@ def deduplicate_companies(
         for k in keys:
             buckets.setdefault(k, []).append(idx)
 
-    candidate_pairs: set[tuple[int, int]] = set()
-    for indices in buckets.values():
-        for i_pos in range(len(indices)):
-            for j_pos in range(i_pos + 1, len(indices)):
-                candidate_pairs.add((indices[i_pos], indices[j_pos]))
-
-    for i, j in sorted(candidate_pairs):
+    for i, j in sorted(iter_bucket_pairs(buckets.values())):
         cmp = compare_companies(parsed[i], parsed[j])
         if cmp.is_match and cmp.score >= threshold:
             dsu.union(i, j, cmp.match_type)

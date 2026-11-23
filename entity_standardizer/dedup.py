@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable, Sequence
+from collections.abc import Iterable, Iterator, Sequence
 from dataclasses import asdict, dataclass
 import re
 from typing import Any
@@ -385,6 +385,23 @@ class DisjointSet:
         return out
 
 
+def iter_bucket_pairs(buckets: Iterable[Sequence[int]]) -> Iterator[tuple[int, int]]:
+    """Yield every index pair (low, high) that shares a bucket, once, however many buckets they share.
+
+    Cost is the sum of size^2 over the buckets: callers that cannot trust bucket sizes must drop oversized
+    buckets before calling (see the workbench match runner).
+    """
+    seen: set[tuple[int, int]] = set()
+    for indices in buckets:
+        for i_pos in range(len(indices)):
+            for j_pos in range(i_pos + 1, len(indices)):
+                a_idx, b_idx = indices[i_pos], indices[j_pos]
+                pair = (a_idx, b_idx) if a_idx <= b_idx else (b_idx, a_idx)
+                if pair not in seen:
+                    seen.add(pair)
+                    yield pair
+
+
 def deduplicate_phones(
     phones: Sequence[str | StandardizedPhone],
     country: str | None = None,
@@ -438,23 +455,14 @@ def deduplicate_phones(
     for rep_idx, r_set in initial_reasons.items():
         dsu.reasons[rep_idx].update(r_set)
 
-    compared_pairs: set[tuple[int, int]] = set()
-    for candidate_indices in buckets.values():
-        for i_pos in range(len(candidate_indices)):
-            for j_pos in range(i_pos + 1, len(candidate_indices)):
-                a_idx = candidate_indices[i_pos]
-                b_idx = candidate_indices[j_pos]
-                pair = (min(a_idx, b_idx), max(a_idx, b_idx))
-                if pair in compared_pairs:
-                    continue
-                compared_pairs.add(pair)
-                cmp_res = compare_phones(
-                    parsed_list[a_idx],
-                    parsed_list[b_idx],
-                    fuzzy_threshold=fuzzy_threshold,
-                )
-                if cmp_res.is_fuzzy_match:
-                    dsu.union(a_idx, b_idx, cmp_res.match_type)
+    for a_idx, b_idx in iter_bucket_pairs(buckets.values()):
+        cmp_res = compare_phones(
+            parsed_list[a_idx],
+            parsed_list[b_idx],
+            fuzzy_threshold=fuzzy_threshold,
+        )
+        if cmp_res.is_fuzzy_match:
+            dsu.union(a_idx, b_idx, cmp_res.match_type)
 
     groups: dict[int, list[int]] = {}
     group_candidates: dict[int, list[StandardizedPhone]] = {}
@@ -616,24 +624,16 @@ def cluster_contact_records(
         for key in generate_phone_blocking_keys(p):
             phone_buckets.setdefault(key, []).append(idx)
 
-    compared: set[tuple[int, int]] = set()
-    for indices in phone_buckets.values():
-        for i_pos in range(len(indices)):
-            for j_pos in range(i_pos + 1, len(indices)):
-                a_idx, b_idx = indices[i_pos], indices[j_pos]
-                pair = (min(a_idx, b_idx), max(a_idx, b_idx))
-                if pair in compared:
-                    continue
-                compared.add(pair)
-                if not _can_link_by_phone(a_idx, b_idx):
-                    continue
-                cmp_res = compare_phones(
-                    parsed_phones[a_idx],
-                    parsed_phones[b_idx],
-                    fuzzy_threshold=fuzzy_threshold,
-                )
-                if cmp_res.is_fuzzy_match:
-                    dsu.union(a_idx, b_idx, f"PHONE_{cmp_res.match_type}")
+    for a_idx, b_idx in iter_bucket_pairs(phone_buckets.values()):
+        if not _can_link_by_phone(a_idx, b_idx):
+            continue
+        cmp_res = compare_phones(
+            parsed_phones[a_idx],
+            parsed_phones[b_idx],
+            fuzzy_threshold=fuzzy_threshold,
+        )
+        if cmp_res.is_fuzzy_match:
+            dsu.union(a_idx, b_idx, f"PHONE_{cmp_res.match_type}")
 
     # 2. Link by shared Address-Standardizer normalized_address_key (excluding CMRA & Registered Agent hubs)
     addr_buckets: dict[str, list[int]] = {}
@@ -827,14 +827,7 @@ def deduplicate_addresses(
         if addr.house_number:
             buckets.setdefault(("hn_zip", addr.house_number, (addr.postal_code or "")[:5]), []).append(idx)
 
-    candidate_pairs: set[tuple[int, int]] = set()
-    for indices in buckets.values():
-        for i_pos in range(len(indices)):
-            for j_pos in range(i_pos + 1, len(indices)):
-                a_idx, b_idx = indices[i_pos], indices[j_pos]
-                candidate_pairs.add((min(a_idx, b_idx), max(a_idx, b_idx)))
-
-    for i, j in sorted(candidate_pairs):
+    for i, j in sorted(iter_bucket_pairs(buckets.values())):
         cmp = compare_addresses(parsed[i], parsed[j], country=country, fuzzy_threshold=fuzzy_threshold)
         if cmp.is_match:
             dsu.union(i, j, cmp.match_type)
